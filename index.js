@@ -960,7 +960,12 @@ function readFormToSettings() {
     settings.api.enabled = root.querySelector('[name="api.enabled"]').checked;
     settings.api.url = root.querySelector('[name="api.url"]').value.trim();
     settings.api.key = root.querySelector('[name="api.key"]').value.trim();
-    settings.api.model = root.querySelector('[name="api.model"]').value.trim();
+    const modelSelect = root.querySelector('[name="api.modelSelect"]');
+    const modelInput = root.querySelector('[name="api.model"]');
+    const selectedModel = modelSelect?.value || '';
+    settings.api.model = selectedModel && selectedModel !== '__manual__'
+        ? selectedModel
+        : (modelInput?.value || '').trim();
     settings.api.timeoutMs = Number(root.querySelector('[name="api.timeoutMs"]').value || 12000);
     settings.api.temperature = Number(root.querySelector('[name="api.temperature"]').value || 0.1);
     settings.behavior.autoMemory = root.querySelector('[name="behavior.autoMemory"]').checked;
@@ -1034,10 +1039,23 @@ function setValue(root, name, value) {
 }
 
 function renderModelOptions() {
-    const list = document.querySelector(SETTINGS_SELECTOR + ' #csid-api-models');
-    if (!list) return;
-    const models = ensureSettings().api.models || [];
-    list.innerHTML = models.map(model => '<option value="' + escapeHtml(model) + '"></option>').join('');
+    const root = document.querySelector(SETTINGS_SELECTOR);
+    if (!root) return;
+    const settings = ensureSettings();
+    const select = root.querySelector('[name="api.modelSelect"]');
+    if (!select) return;
+    const models = settings.api.models || [];
+    const current = settings.api.model || '';
+    const hasCurrent = current && models.includes(current);
+    const options = [
+        '<option value="__manual__">手动填写模型</option>',
+        ...models.map(model => '<option value="' + escapeHtml(model) + '">' + escapeHtml(model) + '</option>'),
+    ];
+    if (current && !hasCurrent) {
+        options.splice(1, 0, '<option value="' + escapeHtml(current) + '">' + escapeHtml(current) + '（当前）</option>');
+    }
+    select.innerHTML = options.join('');
+    select.value = hasCurrent || current ? current : '__manual__';
 }
 
 function renderRecentMessages() {
@@ -1083,6 +1101,11 @@ function fillFormFromSettings() {
     root.querySelector('[name="api.url"]').value = settings.api.url;
     root.querySelector('[name="api.key"]').value = settings.api.key;
     root.querySelector('[name="api.model"]').value = settings.api.model;
+    const modelSelect = root.querySelector('[name="api.modelSelect"]');
+    if (modelSelect) {
+        const models = settings.api.models || [];
+        modelSelect.value = settings.api.model && models.includes(settings.api.model) ? settings.api.model : '__manual__';
+    }
     root.querySelector('[name="api.timeoutMs"]').value = settings.api.timeoutMs;
     root.querySelector('[name="api.temperature"]').value = settings.api.temperature;
     root.querySelector('[name="behavior.autoMemory"]').checked = settings.behavior.autoMemory;
@@ -1122,7 +1145,13 @@ function buildSettingsHtml() {
                     </div>
 
                     <section class="csid-panel is-active" data-panel="compose">
-                        <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="复制剧情后直接点一键出图；也可选中文本或使用最新回复"></textarea>
+                        <div class="csid-workflow">
+                            <div><b>取材</b><span>剪贴板 / 选中 / 勾选 / 最新回复</span></div>
+                            <div><b>导演</b><span>英文提示词 + 镜头卡</span></div>
+                            <div><b>触发</b><span>方括号发给智绘姬</span></div>
+                            <div><b>记忆</b><span>地点服装自动更新</span></div>
+                        </div>
+                        <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="复制想出图的剧情段落后点一键出图；也可以先在聊天里选中文字，或用最新回复/勾选消息。"></textarea>
                         <div class="csid-actions csid-primary-actions">
                             <button class="menu_button result-control" data-action="auto-image">一键出图</button>
                             <button class="menu_button" data-action="compose">只生成提示词</button>
@@ -1132,14 +1161,24 @@ function buildSettingsHtml() {
                             <button class="menu_button" data-action="use-recent">使用勾选</button>
                         </div>
                         <div class="csid-recent" data-role="recent-messages"></div>
-                        <label class="csid-label">智绘姬触发文本</label>
-                        <textarea class="text_pole csid-output" data-role="chatu8-trigger" readonly></textarea>
-                        <label class="csid-label">镜头卡</label>
-                        <textarea class="text_pole csid-output" data-role="shot-card" readonly></textarea>
-                        <label class="csid-label">正向提示词</label>
-                        <textarea class="text_pole csid-output" data-role="positive" readonly></textarea>
-                        <label class="csid-label">反向提示词</label>
-                        <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
+                        <div class="csid-result-grid">
+                            <div class="csid-result-block is-trigger">
+                                <label class="csid-label">智绘姬触发文本</label>
+                                <textarea class="text_pole csid-output" data-role="chatu8-trigger" readonly></textarea>
+                            </div>
+                            <div class="csid-result-block">
+                                <label class="csid-label">镜头卡</label>
+                                <textarea class="text_pole csid-output" data-role="shot-card" readonly></textarea>
+                            </div>
+                            <div class="csid-result-block">
+                                <label class="csid-label">正向提示词</label>
+                                <textarea class="text_pole csid-output" data-role="positive" readonly></textarea>
+                            </div>
+                            <div class="csid-result-block">
+                                <label class="csid-label">反向提示词</label>
+                                <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
+                            </div>
+                        </div>
                         <div class="csid-actions">
                             <button class="menu_button" data-action="copy-trigger">复制触发文本</button>
                             <button class="menu_button" data-action="insert-trigger">填入聊天框</button>
@@ -1151,6 +1190,7 @@ function buildSettingsHtml() {
                     </section>
 
                     <section class="csid-panel" data-panel="memory">
+                        <div class="csid-memory-note">自动记忆会在新回复结束和一键出图时更新；这里用于检查或手动修正固定外观、服装、地点。</div>
                         <div class="csid-grid two">
                             <label>当前角色<input class="text_pole" name="char.name" readonly></label>
                             <label>当前地点<input class="text_pole" name="scene.location"></label>
@@ -1230,7 +1270,8 @@ function buildSettingsHtml() {
                         </div>
                         <div class="csid-grid two">
                             <label>API 地址<input class="text_pole" name="api.url" placeholder="http://127.0.0.1:8000/v1"></label>
-                            <label>模型<input class="text_pole" name="api.model" list="csid-api-models"><datalist id="csid-api-models"></datalist></label>
+                            <label>模型选择<select class="text_pole" name="api.modelSelect"></select></label>
+                            <label>手动模型<input class="text_pole" name="api.model" placeholder="刷新失败时手填，例如 gpt-4.1-mini"></label>
                             <label>开始标记<input class="text_pole" name="chatu8.startTag" placeholder="["></label>
                             <label>结束标记<input class="text_pole" name="chatu8.endTag" placeholder="]"></label>
                             <label>超时 ms<input class="text_pole" type="number" name="api.timeoutMs" min="3000" step="500"></label>
@@ -1299,12 +1340,23 @@ function bindEvents() {
             readImportFile(event.target.files?.[0]);
             event.target.value = '';
         }
+        if (event.target.matches('[name="api.modelSelect"]')) {
+            const selected = event.target.value;
+            const input = root.querySelector('[name="api.model"]');
+            if (selected && selected !== '__manual__' && input) input.value = selected;
+            readFormToSettings();
+            setStatus(selected && selected !== '__manual__' ? '已选择模型: ' + selected : '使用手动模型');
+        }
         if (event.target.matches('[name="api.url"], [name="api.key"]')) {
             refreshApiModels().catch(error => setStatus('模型自动读取失败: ' + error.message));
         }
     });
     root.addEventListener('input', event => {
         if (event.target.closest('[name]')) {
+            if (event.target.matches('[name="api.model"]')) {
+                const select = root.querySelector('[name="api.modelSelect"]');
+                if (select) select.value = '__manual__';
+            }
             readFormToSettings();
             readFormToMemory();
         }
