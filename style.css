@@ -447,3 +447,16 @@
     border-color: rgba(255, 179, 64, 0.68);
     background: rgba(49, 91, 149, 0.94);
 }
+
+.csid-visible-trigger-wrap {
+    display: block;
+    margin-top: 0.7em;
+    margin-bottom: 0.7em;
+    white-space: pre-wrap;
+}
+
+.csid-visible-trigger {
+    display: block;
+    color: inherit;
+    white-space: pre-wrap;
+}
