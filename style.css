@@ -379,3 +379,71 @@
     font-family: var(--monoFontFamily, monospace);
     font-size: 0.92em;
 }
+
+/* Selection popup: compact Chatu8-style route, forced horizontal labels. */
+.csid-message-menu {
+    position: fixed;
+    z-index: 10050;
+    width: min(286px, calc(100vw - 18px));
+    padding: 10px;
+    border: 1px solid rgba(114, 170, 255, 0.38);
+    border-radius: 10px;
+    background: rgba(10, 28, 55, 0.96);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    writing-mode: horizontal-tb;
+}
+
+.csid-message-menu-hint {
+    padding: 2px 6px 7px;
+    border-bottom: 1px solid rgba(181, 203, 235, 0.18);
+    color: rgba(224, 235, 255, 0.74);
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    writing-mode: horizontal-tb;
+}
+
+.csid-message-menu button {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 16px;
+    border: 1px solid rgba(123, 174, 255, 0.3);
+    border-radius: 8px;
+    background: rgba(42, 75, 122, 0.78);
+    color: #ffad31;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 13px;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-align: left;
+    white-space: nowrap;
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+}
+
+.csid-message-menu button span {
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+}
+
+.csid-message-menu button .fa-solid {
+    width: 20px;
+    color: #ff9800;
+    text-align: center;
+    flex: 0 0 20px;
+}
+
+.csid-message-menu button:hover {
+    border-color: rgba(255, 179, 64, 0.68);
+    background: rgba(49, 91, 149, 0.94);
+}

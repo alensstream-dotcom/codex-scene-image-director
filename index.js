@@ -5,6 +5,7 @@ import {
     eventSource,
     event_types,
     getCurrentChatId,
+    messageFormatting,
     saveChatConditional,
     saveSettingsDebounced,
     this_chid,
@@ -1505,25 +1506,82 @@ function closeMessageMenu() {
     document.querySelectorAll('.csid-message-menu').forEach(menu => menu.remove());
 }
 
-function showMessageMenu(event, messageId) {
+function nodeToElement(node) {
+    if (!node) return null;
+    return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+}
+
+function getSelectionContext(event) {
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount < 1 || selection.isCollapsed) return null;
+    const selectedText = normalizeMultiline(selection.toString()).trim();
+    if (!selectedText) return null;
+    const range = selection.getRangeAt(0);
+    const common = nodeToElement(range.commonAncestorContainer)
+        || nodeToElement(selection.anchorNode)
+        || nodeToElement(selection.focusNode);
+    const mes = common?.closest?.('.mes');
+    if (!mes) return null;
+    if (event?.target && !mes.contains(event.target.closest?.('.mes') || event.target)) return null;
+    const messageId = getMessageIdFromElement(mes);
+    if (!Number.isInteger(messageId) || messageId < 0 || !chat?.[messageId]) return null;
+    const rect = range.getBoundingClientRect();
+    const x = rect.left || rect.right ? rect.left + rect.width / 2 : event?.clientX || window.innerWidth / 2;
+    const y = rect.bottom || event?.clientY || window.innerHeight / 2;
+    return { messageId, text: selectedText, x, y };
+}
+
+function showMessageMenu(eventOrPoint, messageId, selectedText = '') {
     closeMessageMenu();
     state.activeMessageId = messageId;
+    state.activeSelectionText = normalizeMultiline(selectedText || '').trim();
+    state.messageMenuOpenedAt = Date.now();
     const menu = document.createElement('div');
     menu.className = 'csid-message-menu';
-    menu.innerHTML = '<button type="button" data-csid-message-action="image"><span class="fa-solid fa-image"></span>图片生成</button>'
-        + '<button type="button" data-csid-message-action="copy"><span class="fa-solid fa-copy"></span>复制生成文本</button>'
-        + '<button type="button" data-csid-message-action="close"><span class="fa-solid fa-xmark"></span>取消</button>';
+    if (state.activeSelectionText) {
+        const hint = document.createElement('div');
+        hint.className = 'csid-message-menu-hint';
+        hint.textContent = '已选中 ' + state.activeSelectionText.length + ' 字';
+        menu.appendChild(hint);
+    }
+    const imageButton = document.createElement('button');
+    imageButton.type = 'button';
+    imageButton.dataset.csidMessageAction = 'image';
+    imageButton.innerHTML = '<span class="fa-solid fa-image"></span><span>图片生成</span>';
+    const copyButton = document.createElement('button');
+    copyButton.type = 'button';
+    copyButton.dataset.csidMessageAction = 'copy';
+    copyButton.innerHTML = '<span class="fa-solid fa-copy"></span><span>复制生成文本</span>';
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.dataset.csidMessageAction = 'close';
+    closeButton.innerHTML = '<span class="fa-solid fa-xmark"></span><span>取消</span>';
+    menu.append(imageButton, copyButton, closeButton);
     document.body.appendChild(menu);
     const rect = menu.getBoundingClientRect();
-    const left = Math.min(Math.max(8, event.clientX), window.innerWidth - rect.width - 8);
-    const top = Math.min(Math.max(8, event.clientY), window.innerHeight - rect.height - 8);
+    const clientX = eventOrPoint?.clientX ?? eventOrPoint?.x ?? window.innerWidth / 2;
+    const clientY = eventOrPoint?.clientY ?? eventOrPoint?.y ?? window.innerHeight / 2;
+    const left = Math.min(Math.max(8, clientX - rect.width / 2), window.innerWidth - rect.width - 8);
+    const top = Math.min(Math.max(8, clientY + 8), window.innerHeight - rect.height - 8);
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
+}
+
+function openMenuFromSelection(event, delay = 0) {
+    if (event.target.closest?.(SETTINGS_SELECTOR)) return;
+    if (event.target.closest?.('textarea,input,button,select,a,.csid-message-menu')) return;
+    setTimeout(() => {
+        const context = getSelectionContext(event);
+        if (!context) return;
+        showMessageMenu({ clientX: context.x, clientY: context.y }, context.messageId, context.text);
+    }, delay);
 }
 
 function bindMessageMenu() {
     if (state.messageMenuBound) return;
     state.messageMenuBound = true;
+    document.addEventListener('mouseup', event => openMenuFromSelection(event, 0), true);
+    document.addEventListener('touchend', event => openMenuFromSelection(event, 120), true);
     document.addEventListener('dblclick', event => {
         if (event.target.closest(SETTINGS_SELECTOR)) return;
         if (event.target.closest('textarea,input,button,select,a')) return;
@@ -1533,29 +1591,86 @@ function bindMessageMenu() {
         if (!Number.isInteger(messageId) || messageId < 0 || !chat?.[messageId]) return;
         event.preventDefault();
         event.stopPropagation();
-        showMessageMenu(event, messageId);
+        const context = getSelectionContext(event);
+        showMessageMenu(event, messageId, context?.messageId === messageId ? context.text : '');
     }, true);
     document.addEventListener('click', event => {
         const actionButton = event.target.closest('[data-csid-message-action]');
         if (actionButton) {
             const action = actionButton.dataset.csidMessageAction;
             const messageId = Number(state.activeMessageId);
+            const selectedText = state.activeSelectionText || '';
             closeMessageMenu();
-            if (action === 'image') generatePromptUnderMessage(messageId);
-            if (action === 'copy') copyMessageTrigger(messageId);
+            if (action === 'image') generatePromptUnderMessage(messageId, selectedText);
+            if (action === 'copy') copyMessageTrigger(messageId, selectedText);
             return;
         }
+        if (Date.now() - (state.messageMenuOpenedAt || 0) < 250) return;
         if (!event.target.closest('.csid-message-menu')) closeMessageMenu();
     }, true);
 }
 
+function escapeRegExp(text) {
+    return String(text || '').replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+}
+
 function stripLastInlinePrompt(text, message) {
-    let output = String(text || '').trimEnd();
+    let output = normalizeMultiline(text || '').trimEnd();
     const lastTrigger = message?.extra?.[EXT_ID]?.lastTrigger;
-    if (lastTrigger && output.endsWith(lastTrigger)) {
-        output = output.slice(0, -lastTrigger.length).trimEnd();
+    if (lastTrigger) {
+        const trigger = normalizeMultiline(lastTrigger).trim();
+        output = output.replace(new RegExp('\\n{0,2}' + escapeRegExp(trigger) + '(?=\\n|$)', 'g'), '').trimEnd();
     }
     return output;
+}
+
+function buildCollapsedSearchIndex(text) {
+    const source = normalizeMultiline(text || '');
+    let value = '';
+    const map = [];
+    let inWhitespace = false;
+    for (let i = 0; i < source.length; i++) {
+        const char = source[i];
+        if (/\s/.test(char)) {
+            if (!inWhitespace) {
+                value += ' ';
+                map.push(i);
+                inWhitespace = true;
+            }
+        } else {
+            value += char;
+            map.push(i);
+            inWhitespace = false;
+        }
+    }
+    return { value, map, source };
+}
+
+function findSelectedTextRange(sourceText, selectedText) {
+    const source = normalizeMultiline(sourceText || '');
+    const selected = normalizeMultiline(selectedText || '').trim();
+    if (!source || !selected) return null;
+    const exactStart = source.indexOf(selected);
+    if (exactStart >= 0) return { start: exactStart, end: exactStart + selected.length, exact: true };
+    const sourceIndex = buildCollapsedSearchIndex(source);
+    const selectedIndex = buildCollapsedSearchIndex(selected);
+    const collapsedStart = sourceIndex.value.indexOf(selectedIndex.value);
+    if (collapsedStart < 0) return null;
+    const collapsedEnd = collapsedStart + selectedIndex.value.length - 1;
+    const start = sourceIndex.map[collapsedStart];
+    const end = sourceIndex.map[collapsedEnd] + 1;
+    if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) return null;
+    return { start, end, exact: false };
+}
+
+function insertTriggerAfterSelectedText(fullText, selectedText, trigger) {
+    const base = normalizeMultiline(fullText || '').trimEnd();
+    const selected = normalizeMultiline(selectedText || '').trim();
+    const range = selected ? findSelectedTextRange(base, selected) : null;
+    if (!range) return base + '\n\n' + trigger;
+    const head = base.slice(0, range.end).trimEnd();
+    const tail = base.slice(range.end).trimStart();
+    return head + '\n\n' + trigger + (tail ? '\n\n' + tail : '');
 }
 
 function setMessageRawText(messageId, text, trigger) {
@@ -1571,15 +1686,24 @@ function setMessageRawText(messageId, text, trigger) {
     }
 }
 
-function renderInlinePrompt(messageId, trigger) {
+function renderMessageText(messageId) {
+    const message = chat?.[Number(messageId)];
     const mes = getMessageElementById(messageId);
     const textNode = mes?.querySelector('.mes_text');
-    if (!textNode) return;
-    textNode.querySelectorAll('.csid-inline-prompt').forEach(node => node.remove());
-    const block = document.createElement('div');
-    block.className = 'csid-inline-prompt';
-    block.textContent = trigger;
-    textNode.appendChild(block);
+    if (!message || !textNode) return false;
+    try {
+        textNode.innerHTML = messageFormatting(message.mes, message.name, message.is_system, message.is_user, Number(messageId), {}, false);
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] messageFormatting failed', error);
+        textNode.textContent = message.mes || '';
+    }
+    return true;
+}
+
+function renderInlinePrompt(messageId, trigger) {
+    const message = chat?.[Number(messageId)];
+    if (!message) return;
+    renderMessageText(messageId);
 }
 
 async function clickChatu8ImageButton(messageId) {
@@ -1602,13 +1726,15 @@ async function emitMessagePromptEvents(messageId) {
     try { await eventSource.emit(event_types.GENERATION_ENDED, Number(messageId)); } catch {}
 }
 
-async function writePromptToMessage(messageId, sourceText) {
+async function writePromptToMessage(messageId, sourceText, options = {}) {
     const message = chat?.[Number(messageId)];
     if (!message) throw new Error('没有找到这条消息');
-    const baseText = stripLastInlinePrompt(sourceText || getMessageText(message), message);
-    if (!baseText) throw new Error('这条消息没有可用于生图的正文');
-    setStatus('正在为原文生成智绘姬提示词');
-    const result = await buildSmartPrompt(baseText);
+    const fullText = stripLastInlinePrompt(getMessageText(message), message);
+    const selectedText = normalizeMultiline(options.selectedText || sourceText || '').trim();
+    const sceneText = selectedText || fullText;
+    if (!sceneText) throw new Error('这条消息没有可用于生图的正文');
+    setStatus(selectedText ? '正在为选中剧情生成智绘姬提示词' : '正在为原文生成智绘姬提示词');
+    const result = await buildSmartPrompt(sceneText);
     state.lastPositive = normalizePromptText(result.positive);
     state.lastNegative = normalizePromptText(result.negative);
     state.lastShotCard = result.shotCard;
@@ -1621,37 +1747,44 @@ async function writePromptToMessage(messageId, sourceText) {
     if (negativeArea) negativeArea.value = state.lastNegative;
     if (shotArea) shotArea.value = state.lastShotCard;
     if (triggerArea) triggerArea.value = state.lastTrigger;
-    if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, baseText, result.source || 'api');
-    else updateMemoryFromSelectedScene(baseText, result.localScene);
+    if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, sceneText, result.source || 'api');
+    else updateMemoryFromSelectedScene(sceneText, result.localScene);
     chat_metadata.variables ||= {};
     chat_metadata.variables.zhihuiji = true;
     syncTavernHelperMemory();
     renderMemoryFields();
     saveAll();
-    const nextText = baseText.trimEnd() + '\n\n' + state.lastTrigger;
+    const nextText = insertTriggerAfterSelectedText(fullText, selectedText, state.lastTrigger);
     setMessageRawText(messageId, nextText, state.lastTrigger);
-    renderInlinePrompt(messageId, state.lastTrigger);
+    renderMessageText(messageId);
     await emitMessagePromptEvents(messageId);
     const clicked = await clickChatu8ImageButton(messageId);
-    setStatus(clicked ? '已写入原文下方，并点击智绘姬图片按钮' : '已写入原文下方，等待智绘姬识别图片按钮');
-    return { ...result, trigger: state.lastTrigger };
+    setStatus(clicked ? '已写到选中剧情下方，并点击智绘姬图片按钮' : '已写到选中剧情下方，等待智绘姬识别图片按钮');
+    return { ...result, trigger: state.lastTrigger, insertedAtSelection: Boolean(selectedText && findSelectedTextRange(fullText, selectedText)) };
 }
 
-async function generatePromptUnderMessage(messageId) {
+async function generatePromptUnderMessage(messageId, selectedText = '') {
     try {
-        await writePromptToMessage(messageId);
+        await writePromptToMessage(messageId, selectedText, { selectedText });
     } catch (error) {
         console.error('[' + EXT_NAME + '] write prompt under message failed', error);
         setStatus('图片生成入口失败: ' + error.message);
     }
 }
 
-async function copyMessageTrigger(messageId) {
+async function copyMessageTrigger(messageId, selectedText = '') {
     try {
         const message = chat?.[Number(messageId)];
-        const text = stripLastInlinePrompt(getMessageText(message), message);
+        const fullText = stripLastInlinePrompt(getMessageText(message), message);
+        const text = normalizeMultiline(selectedText || '').trim() || fullText;
+        if (!text) throw new Error('没有可复制的剧情正文');
+        setStatus(selectedText ? '正在生成选中剧情的触发文本' : '正在生成这条消息的触发文本');
         const result = await buildSmartPrompt(text);
-        await copyText(buildChatu8Trigger(result.positive), '已复制这条消息的智绘姬触发文本');
+        state.lastPositive = normalizePromptText(result.positive);
+        state.lastNegative = normalizePromptText(result.negative);
+        state.lastShotCard = result.shotCard;
+        state.lastTrigger = buildChatu8Trigger(state.lastPositive);
+        await copyText(state.lastTrigger, '已复制选中剧情的智绘姬触发文本');
     } catch (error) {
         setStatus('复制失败: ' + error.message);
     }
@@ -1662,12 +1795,12 @@ async function writePromptUnderLatestFromInput() {
     const input = await resolveSourceText(inputArea?.value || '');
     const latest = getLatestAssistantMessage();
     if (!latest || latest.index === undefined || latest.index === null || latest.index < 0) {
-        setStatus('没有找到可写入的最新回复，请直接双击原文消息');
+        setStatus('没有找到可写入的最新回复，请在原文中选中一段剧情');
         return;
     }
     if (inputArea) inputArea.value = input || latest.text;
     try {
-        await writePromptToMessage(latest.index, input || latest.text);
+        await writePromptToMessage(latest.index, input || latest.text, { selectedText: input || '' });
     } catch (error) {
         setStatus('写入最新回复失败: ' + error.message);
     }
@@ -1802,7 +1935,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.1.2',
+        version: '0.1.3',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
