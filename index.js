@@ -88,6 +88,8 @@ const DEFAULT_CHAT_MEMORY = {
         facts: [],
         relationships: {},
         visualNotes: [],
+        visualEvents: [],
+        summaryTree: { l1: [], l2: [], l3: [] },
     },
     history: [],
     runtime: {
@@ -348,7 +350,8 @@ function buildVisualMemoryContext(selectedText = '') {
         scene: memory.scene,
         world: settings.memory.world,
         characters: getAllCharacterMemories(),
-        longTerm: memory.longTerm || {},
+        longTerm: ensureLongTermMemory(),
+        retrieved: retrieveRelevantMemories(selectedText, 10),
         recentHistory: (memory.history || []).slice(0, 10).map(item => ({ type: item.type, preview: item.preview })),
         selectedTextPreview: compactPreview(selectedText, 260),
     };
@@ -356,7 +359,7 @@ function buildVisualMemoryContext(selectedText = '') {
 
 function mergeLongTermMemory(patch, sourceText = '') {
     const memory = ensureChatMemory();
-    memory.longTerm ||= { summary: '', facts: [], relationships: {}, visualNotes: [] };
+    memory.longTerm = ensureLongTermMemory();
     const longTerm = patch.longTerm || patch.long_term || {};
     const summary = longTerm.summary || patch.summary;
     if (isUsefulText(summary)) memory.longTerm.summary = normalizeLine(summary);
@@ -365,6 +368,138 @@ function mergeLongTermMemory(patch, sourceText = '') {
     memory.longTerm.relationships ||= {};
     mergeRelationshipMemory(memory.longTerm.relationships, longTerm.relationships || patch.relationships || {});
     if (!memory.longTerm.summary && sourceText) memory.longTerm.summary = compactPreview(sourceText, 220);
+}
+
+function ensureLongTermMemory() {
+    const memory = ensureChatMemory();
+    memory.longTerm ||= {};
+    memory.longTerm.summary ||= '';
+    memory.longTerm.facts ||= [];
+    memory.longTerm.relationships ||= {};
+    memory.longTerm.visualNotes ||= [];
+    memory.longTerm.visualEvents ||= [];
+    memory.longTerm.summaryTree ||= { l1: [], l2: [], l3: [] };
+    memory.longTerm.summaryTree.l1 ||= [];
+    memory.longTerm.summaryTree.l2 ||= [];
+    memory.longTerm.summaryTree.l3 ||= [];
+    return memory.longTerm;
+}
+
+function memoryTokens(...parts) {
+    const text = normalizeLine(parts.filter(Boolean).join(' ')).toLowerCase();
+    const tokens = new Set();
+    const matches = text.match(/[a-z0-9_]{3,}|[\u4e00-\u9fff]{2,}/g) || [];
+    for (const raw of matches) {
+        const token = normalizeLine(raw);
+        if (!token) continue;
+        tokens.add(token);
+        if (/^[\u4e00-\u9fff]+$/.test(token) && token.length > 2) {
+            for (let i = 0; i < token.length - 1; i++) tokens.add(token.slice(i, i + 2));
+            for (let i = 0; i < token.length - 3; i += 2) tokens.add(token.slice(i, i + 4));
+        }
+    }
+    return tokens;
+}
+
+function summarizePatchForMemory(patch, sourceText = '') {
+    const parts = [];
+    const scene = patchSceneWithSourceFacts(patch?.scene || {}, sourceText);
+    for (const key of ['location', 'time', 'weather', 'lighting', 'mood', 'worldState']) {
+        if (isUsefulText(scene[key])) parts.push(scene[key]);
+    }
+    for (const [name, charPatch] of Object.entries(patch?.characters || {})) {
+        const details = ['appearance', 'currentOutfit', 'accessories', 'expression', 'pose', 'state']
+            .map(key => charPatch?.[key])
+            .filter(isUsefulText)
+            .join('，');
+        if (details) parts.push((name || getCurrentCharacterName()) + '：' + details);
+    }
+    const longTerm = patch?.longTerm || patch?.long_term || {};
+    parts.push(...textArray(longTerm.visualNotes || longTerm.visual_notes || patch?.visualNotes || patch?.visual_notes || patch?.notes || []));
+    return compactPreview(parts.filter(Boolean).join('；') || sourceText, 260);
+}
+
+function addVisualMemoryEvent(sourceText = '', patch = {}, source = 'memory') {
+    const longTerm = ensureLongTermMemory();
+    const summary = summarizePatchForMemory(patch, sourceText);
+    if (!summary) return;
+    const scene = patchSceneWithSourceFacts(patch?.scene || {}, sourceText);
+    const charNames = Object.keys(patch?.characters || {}).filter(Boolean);
+    const id = hashText([source, sourceText, summary].join('\n'));
+    longTerm.visualEvents = (longTerm.visualEvents || []).filter(item => item.id !== id);
+    const keywords = [...memoryTokens(sourceText, summary, scene.location, scene.time, scene.weather, charNames.join(' '))].slice(0, 80);
+    longTerm.visualEvents.unshift({
+        id,
+        at: Date.now(),
+        source,
+        preview: compactPreview(sourceText, 220),
+        summary,
+        scene,
+        characters: charNames,
+        keywords,
+    });
+    longTerm.visualEvents = longTerm.visualEvents.slice(0, 160);
+    rebuildVisualSummaryTree(longTerm);
+}
+
+function makeSummaryNode(level, items, index) {
+    const summaries = items.map(item => item.summary || item.preview).filter(Boolean);
+    const keywords = [...memoryTokens(...summaries, ...items.flatMap(item => item.keywords || []))].slice(0, 90);
+    return {
+        id: level + '-' + index + '-' + hashText(summaries.join('\n')).slice(0, 8),
+        level,
+        at: Math.max(...items.map(item => Number(item.at || 0)), 0),
+        summary: compactPreview(summaries.join('；'), level === 'L1' ? 360 : 520),
+        keywords,
+        children: items.map(item => item.id).filter(Boolean).slice(0, 60),
+    };
+}
+
+function chunkItems(items, size) {
+    const chunks = [];
+    for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+    return chunks;
+}
+
+function rebuildVisualSummaryTree(longTerm = ensureLongTermMemory()) {
+    const events = longTerm.visualEvents || [];
+    const l1 = chunkItems(events, 8).map((items, index) => makeSummaryNode('L1', items, index));
+    const l2 = chunkItems(l1, 6).map((items, index) => makeSummaryNode('L2', items, index));
+    const l3 = chunkItems(l2, 6).map((items, index) => makeSummaryNode('L3', items, index));
+    longTerm.summaryTree = { l1: l1.slice(0, 40), l2: l2.slice(0, 16), l3: l3.slice(0, 8) };
+}
+
+function scoreMemoryItem(item, tokens, recencyWeight = 0.2) {
+    const itemTokens = new Set(item.keywords || [...memoryTokens(item.summary, item.preview)]);
+    let score = 0;
+    for (const token of tokens) if (itemTokens.has(token)) score += token.length >= 4 ? 2 : 1;
+    const ageHours = Math.max(0, (Date.now() - Number(item.at || 0)) / 36e5);
+    return score + Math.max(0, 1 - ageHours / 168) * recencyWeight;
+}
+
+function retrieveRelevantMemories(selectedText = '', limit = 10) {
+    const longTerm = ensureLongTermMemory();
+    const tokens = memoryTokens(selectedText, getCurrentCharacterName(), ensureChatMemory().scene.location, ensureChatMemory().scene.time);
+    const candidates = [
+        ...(longTerm.summaryTree?.l3 || []).map(item => ({ ...item, kind: 'L3' })),
+        ...(longTerm.summaryTree?.l2 || []).map(item => ({ ...item, kind: 'L2' })),
+        ...(longTerm.summaryTree?.l1 || []).map(item => ({ ...item, kind: 'L1' })),
+        ...(longTerm.visualEvents || []).map(item => ({ ...item, kind: 'event' })),
+    ];
+    const ranked = candidates
+        .map(item => ({ item, score: scoreMemoryItem(item, tokens) }))
+        .filter(entry => entry.score > 0 || !selectedText)
+        .sort((a, b) => b.score - a.score || Number(b.item.at || 0) - Number(a.item.at || 0))
+        .slice(0, limit)
+        .map(entry => ({
+            kind: entry.item.kind,
+            score: Number(entry.score.toFixed(2)),
+            summary: entry.item.summary || entry.item.preview || '',
+            preview: entry.item.preview || '',
+            scene: entry.item.scene || undefined,
+            characters: entry.item.characters || undefined,
+        }));
+    return ranked;
 }
 
 function isUsefulText(value) {
@@ -744,6 +879,7 @@ async function analyzeMemoryPatch(text) {
                     '永久外观如发色、瞳色、体型、种族默认不要覆盖，除非文本明确是稳定设定。',
                     '优先更新 currentOutfit、location、time、weather、lighting、mood、expression、pose、state。',
                     '同时维护长期记忆：summary 用一句话概括当前长期剧情状态；facts 保存不会轻易改变的事实；relationships 保存人物关系；visualNotes 保存会影响画面的稳定视觉线索。',
+                    '把当前片段可用于未来出图稳定性的内容写进 visualNotes 或 characters/scene；后端会把它压入视觉事件记忆树。',
                     'JSON 格式: {"confidence":0-1,"scene":{},"characters":{"角色名":{}},"world":{},"longTerm":{"summary":"","facts":[],"relationships":{},"visualNotes":[]},"notes":[]}',
                 ].join('\n'),
             },
@@ -860,6 +996,7 @@ async function analyzeScenePrompt(text) {
                     '如果 selectedText 很短，只用记忆补足角色外观、当前服装和地点时间，不要擅自改剧情动作。',
                     '如果剧情出现换衣服、换地点、时间/天气/光线改变，写入 memory_patch。',
                     '不要覆盖永久外观，除非文本明确给出稳定设定。',
+                    'currentMemory.retrieved 是从视觉事件记忆树检索出的相关 L3/L2/L1/原文事件摘要，优先用于保持角色、地点、服装和世界观一致。',
                     'memory_patch 可包含 longTerm: {summary, facts, relationships, visualNotes}，用于下次稳定角色、地点、关系和世界观。',
                     'JSON 格式：{"positive_prompt":"...","negative_prompt":"...","shot_card":"...","memory_patch":{"confidence":0-1,"scene":{},"characters":{},"world":{},"longTerm":{"summary":"","facts":[],"relationships":{},"visualNotes":[]},"notes":[]}}',
                 ].join('\n'),
@@ -953,6 +1090,7 @@ function applyMemoryPatch(patch, sourceText = '', source = 'api') {
         if (isUsefulText(scene[key])) memory.scene[key] = normalizeLine(scene[key]);
     }
     mergeLongTermMemory(patch, sourceText);
+    addVisualMemoryEvent(sourceText, patch, source);
     if (patch.world && typeof patch.world === 'object') {
         for (const key of ['name', 'genre', 'rules', 'visualStyle', 'negativeRules']) {
             if (isUsefulText(patch.world[key]) && (settings.behavior.allowPermanentOverwrite || !settings.memory.world[key])) {
@@ -1111,7 +1249,7 @@ function readFormToMemory() {
     chatMemory.scene.weather = root.querySelector('[name="scene.weather"]').value.trim();
     chatMemory.scene.lighting = root.querySelector('[name="scene.lighting"]').value.trim();
     chatMemory.scene.mood = root.querySelector('[name="scene.mood"]').value.trim();
-    chatMemory.longTerm ||= { summary: '', facts: [], relationships: {}, visualNotes: [] };
+    chatMemory.longTerm = ensureLongTermMemory();
     chatMemory.longTerm.summary = root.querySelector('[name="memory.summary"]')?.value.trim() || '';
     chatMemory.longTerm.facts = textArray(root.querySelector('[name="memory.facts"]')?.value || '').slice(0, 80);
     chatMemory.longTerm.visualNotes = textArray(root.querySelector('[name="memory.visualNotes"]')?.value || '').slice(0, 60);
@@ -1132,7 +1270,7 @@ function renderMemoryFields() {
     for (const key of ['location', 'time', 'weather', 'lighting', 'mood']) {
         setValue(root, `scene.${key}`, chatMemory.scene[key] || '');
     }
-    const longTerm = chatMemory.longTerm || {};
+    const longTerm = ensureLongTermMemory();
     setValue(root, 'memory.summary', longTerm.summary || '');
     setValue(root, 'memory.facts', Array.isArray(longTerm.facts) ? longTerm.facts.join('\n') : '');
     setValue(root, 'memory.visualNotes', Array.isArray(longTerm.visualNotes) ? longTerm.visualNotes.join('\n') : '');
@@ -2022,7 +2160,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.1.6',
+        version: '0.1.7',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
