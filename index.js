@@ -1218,9 +1218,29 @@ function init() {
     fillFormFromSettings();
     const tab = ensureSettings().ui.tab || 'compose';
     switchTab(tab);
+    exposeDebugApi();
     setStatus(getTavernHelper() ? '就绪，已检测到酒馆助手' : '就绪，独立记忆模式');
 }
 
+function exposeDebugApi() {
+    globalThis.codexSceneImageDirector = {
+        version: '0.1.0',
+        extractSceneLocal,
+        compilePrompt,
+        composeText(text, { updateMemory = false } = {}) {
+            const result = compilePrompt(String(text || ''));
+            if (updateMemory) {
+                updateMemoryFromSelectedScene(String(text || ''), result.localScene);
+                syncTavernHelperMemory();
+            }
+            return result;
+        },
+        getSettings: () => structuredClone(ensureSettings()),
+        getMemory: () => structuredClone(ensureChatMemory()),
+    };
+}
 $(() => init());
+
+
 
 
