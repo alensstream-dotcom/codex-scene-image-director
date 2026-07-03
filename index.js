@@ -1661,7 +1661,7 @@ async function writePromptUnderLatestFromInput() {
     const inputArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="scene-input"]');
     const input = await resolveSourceText(inputArea?.value || '');
     const latest = getLatestAssistantMessage();
-    if (!latest?.index) {
+    if (!latest || latest.index === undefined || latest.index === null || latest.index < 0) {
         setStatus('没有找到可写入的最新回复，请直接双击原文消息');
         return;
     }
@@ -1815,9 +1815,12 @@ function exposeDebugApi() {
         },
         getSettings: () => structuredClone(ensureSettings()),
         getMemory: () => structuredClone(ensureChatMemory()),
+        writePromptToMessage,
     };
 }
 $(() => init());
+
+
 
 
 
