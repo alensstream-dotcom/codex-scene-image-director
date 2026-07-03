@@ -20,13 +20,14 @@ const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 
 const DEFAULT_SETTINGS = {
-    version: 1,
+    version: 2,
     api: {
         enabled: false,
         url: '',
         key: '',
         model: '',
-        timeoutMs: 8000,
+        models: [],
+        timeoutMs: 12000,
         temperature: 0.1,
     },
     behavior: {
@@ -34,7 +35,14 @@ const DEFAULT_SETTINGS = {
         syncTavernHelper: false,
         allowPermanentOverwrite: false,
         maxRecentMessages: 8,
-        promptLanguage: 'mixed',
+        promptLanguage: 'en',
+        preferClipboard: true,
+    },
+    chatu8: {
+        enabled: true,
+        startTag: '[',
+        endTag: ']',
+        insertToChatInput: true,
     },
     prompt: {
         stylePreset: 'anime',
@@ -140,6 +148,7 @@ let state = {
     lastPositive: '',
     lastNegative: '',
     lastShotCard: '',
+    lastTrigger: '',
     analyzerRunning: false,
     analyzerQueue: [],
     saveTimer: null,
@@ -174,7 +183,20 @@ function ensureSettings() {
         extension_settings[EXT_ID] = deepClone(DEFAULT_SETTINGS);
     }
     extension_settings[EXT_ID] = deepMerge(DEFAULT_SETTINGS, extension_settings[EXT_ID]);
+    migrateSettings(extension_settings[EXT_ID]);
     return extension_settings[EXT_ID];
+}
+
+function migrateSettings(settings) {
+    if (!settings || settings.version >= DEFAULT_SETTINGS.version) return;
+    settings.behavior.promptLanguage = 'en';
+    settings.behavior.preferClipboard = true;
+    settings.chatu8.enabled = true;
+    settings.chatu8.insertToChatInput = true;
+    settings.chatu8.startTag = settings.chatu8.startTag || '[';
+    settings.chatu8.endTag = settings.chatu8.endTag || ']';
+    settings.api.timeoutMs = Math.max(Number(settings.api.timeoutMs || 0), 12000);
+    settings.version = DEFAULT_SETTINGS.version;
 }
 
 function ensureChatMemory() {
@@ -329,6 +351,23 @@ function translateKnownTags(text) {
     return output;
 }
 
+function englishTagsFromText(text) {
+    const tags = [];
+    for (const [pattern, tag] of CN_TO_TAG) {
+        if (pattern.test(text)) tags.push(tag);
+        pattern.lastIndex = 0;
+    }
+    return uniqueParts(tags).join(', ');
+}
+
+function englishSceneTags(scene) {
+    return joinPrompt([
+        englishTagsFromText([scene.location, scene.time, scene.weather, scene.lighting, scene.outfit, scene.expression, scene.action, scene.props].join(' ')),
+        scene.camera,
+        scene.mood,
+    ]);
+}
+
 function extractSceneLocal(text) {
     const clean = normalizeMultiline(text);
     const result = {
@@ -422,7 +461,11 @@ function compilePrompt(inputText) {
     const outfit = localScene.outfit || charMemory.currentOutfit;
     const expression = localScene.expression || charMemory.expression;
     const pose = localScene.action || charMemory.pose;
-    const translatedInput = settings.behavior.promptLanguage === 'zh' ? inputText : translateKnownTags(inputText);
+    const translatedInput = settings.behavior.promptLanguage === 'zh'
+        ? inputText
+        : settings.behavior.promptLanguage === 'en'
+            ? englishSceneTags(localScene)
+            : translateKnownTags(inputText);
 
     const positive = joinPrompt([
         settings.prompt.positivePrefix,
@@ -651,6 +694,132 @@ function parsePatchContent(content) {
     }
 }
 
+function normalizeModelsUrl(url) {
+    const clean = String(url || '').trim().replace(/\/+$/, '');
+    if (/\/models$/.test(clean)) return clean;
+    if (/\/chat\/completions$/.test(clean)) return clean.replace(/\/chat\/completions$/, '/models');
+    if (/\/v1$/.test(clean)) return clean + '/models';
+    return clean + '/v1/models';
+}
+
+async function refreshApiModels() {
+    readFormToSettings();
+    const settings = ensureSettings();
+    if (!settings.api.url) {
+        setStatus('请先填写 API 地址');
+        return [];
+    }
+    setStatus('正在读取 API 模型列表');
+    const response = await fetch(normalizeModelsUrl(settings.api.url), {
+        headers: {
+            ...(settings.api.key ? { Authorization: 'Bearer ' + settings.api.key } : {}),
+        },
+    });
+    if (!response.ok) throw new Error('models API ' + response.status);
+    const data = await response.json();
+    const models = Array.isArray(data?.data)
+        ? data.data.map(item => item?.id || item?.name).filter(Boolean)
+        : Array.isArray(data)
+            ? data.map(item => item?.id || item?.name || item).filter(Boolean)
+            : [];
+    settings.api.models = uniqueParts(models.map(String)).sort();
+    if (!settings.api.model && settings.api.models.length) settings.api.model = settings.api.models[0];
+    renderModelOptions();
+    fillFormFromSettings();
+    saveAll();
+    setStatus(settings.api.models.length ? '已读取 ' + settings.api.models.length + ' 个模型' : '没有读取到模型');
+    return settings.api.models;
+}
+
+async function analyzeScenePrompt(text) {
+    const settings = ensureSettings();
+    if (!settings.api.enabled || !settings.api.url) throw new Error('API not enabled');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.max(3000, settings.api.timeoutMs || 12000));
+    const localScene = extractSceneLocal(text);
+    const currentMemory = { chat: ensureChatMemory(), character: getCharacterMemory(), world: settings.memory.world };
+    const body = {
+        model: settings.api.model || undefined,
+        temperature: Number(settings.api.temperature ?? 0.1),
+        response_format: { type: 'json_object' },
+        messages: [
+            {
+                role: 'system',
+                content: [
+                    '你是 SillyTavern 的智能文生图导演。',
+                    '任务：根据用户选中的剧情段落、现有视觉记忆和本地抽取结果，生成可直接给 ComfyUI/Stable Diffusion 使用的英文提示词，并返回可合并的视觉记忆补丁。',
+                    '只返回严格 JSON，不要解释，不要 Markdown。',
+                    'positive_prompt 必须是英文逗号分隔标签，不要中文，不要方括号。',
+                    'negative_prompt 必须是英文逗号分隔标签。',
+                    '角色外观、衣服、地点、时间、光线、动作、表情、镜头必须尽量从剧情和记忆中保留一致。',
+                    '如果剧情出现换衣服、换地点、时间/天气/光线改变，写入 memory_patch。',
+                    '不要覆盖永久外观，除非文本明确给出稳定设定。',
+                    'JSON 格式：{"positive_prompt":"...","negative_prompt":"...","shot_card":"...","memory_patch":{"confidence":0-1,"scene":{},"characters":{},"world":{},"notes":[]}}',
+                ].join('\n'),
+            },
+            {
+                role: 'user',
+                content: JSON.stringify({ selectedText: text, currentCharacter: getCurrentCharacterName(), localScene, currentMemory, stylePreset: settings.prompt.stylePreset, quality: settings.prompt.quality, camera: settings.prompt.camera, positivePrefix: settings.prompt.positivePrefix, baseNegative: settings.prompt.negative }),
+            },
+        ],
+    };
+    try {
+        const response = await fetch(normalizeApiUrl(settings.api.url), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(settings.api.key ? { Authorization: 'Bearer ' + settings.api.key } : {}) },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('API ' + response.status);
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content ?? data?.content ?? data?.text ?? data;
+        const parsed = parsePatchContent(content);
+        return {
+            positive: normalizePromptText(parsed.positive_prompt || parsed.positive || ''),
+            negative: normalizePromptText(parsed.negative_prompt || parsed.negative || ''),
+            shotCard: String(parsed.shot_card || parsed.shotCard || '').trim(),
+            localScene,
+            memoryPatch: parsed.memory_patch || parsed.memoryPatch || parsed.patch || null,
+            source: 'api',
+        };
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function normalizePromptText(text) {
+    return String(text || '')
+        .replace(/[\[\]]/g, '')
+        .replace(/\s*[,，]\s*/g, ', ')
+        .replace(/\s+/g, ' ')
+        .replace(/^,+|,+$/g, '')
+        .trim();
+}
+
+function buildChatu8Trigger(positive) {
+    const settings = ensureSettings();
+    const clean = normalizePromptText(positive);
+    if (!settings.chatu8?.enabled) return clean;
+    const start = settings.chatu8?.startTag || '[';
+    const end = settings.chatu8?.endTag || ']';
+    return start + clean + end;
+}
+
+async function buildSmartPrompt(text) {
+    const local = compilePrompt(text);
+    const settings = ensureSettings();
+    if (settings.api.enabled && settings.api.url) {
+        try {
+            const smart = await analyzeScenePrompt(text);
+            return { positive: smart.positive || local.positive, negative: smart.negative || local.negative, shotCard: smart.shotCard || local.shotCard, localScene: smart.localScene || local.localScene, memoryPatch: smart.memoryPatch, source: smart.source };
+        } catch (error) {
+            console.warn('[' + EXT_NAME + '] smart prompt API failed, falling back', error);
+            setStatus('API 失败，已使用本地规则: ' + error.message);
+        }
+    }
+    return { ...local, source: 'local' };
+}
+
 function applyMemoryPatch(patch, sourceText = '', source = 'api') {
     if (!patch || typeof patch !== 'object') return;
     const confidence = Number(patch.confidence ?? 0.5);
@@ -771,12 +940,17 @@ function readFormToSettings() {
     settings.api.url = root.querySelector('[name="api.url"]').value.trim();
     settings.api.key = root.querySelector('[name="api.key"]').value.trim();
     settings.api.model = root.querySelector('[name="api.model"]').value.trim();
-    settings.api.timeoutMs = Number(root.querySelector('[name="api.timeoutMs"]').value || 8000);
+    settings.api.timeoutMs = Number(root.querySelector('[name="api.timeoutMs"]').value || 12000);
     settings.api.temperature = Number(root.querySelector('[name="api.temperature"]').value || 0.1);
     settings.behavior.autoMemory = root.querySelector('[name="behavior.autoMemory"]').checked;
     settings.behavior.syncTavernHelper = root.querySelector('[name="behavior.syncTavernHelper"]').checked;
     settings.behavior.allowPermanentOverwrite = root.querySelector('[name="behavior.allowPermanentOverwrite"]').checked;
     settings.behavior.promptLanguage = root.querySelector('[name="behavior.promptLanguage"]').value;
+    settings.behavior.preferClipboard = root.querySelector('[name="behavior.preferClipboard"]')?.checked ?? true;
+    settings.chatu8.enabled = root.querySelector('[name="chatu8.enabled"]')?.checked ?? true;
+    settings.chatu8.insertToChatInput = root.querySelector('[name="chatu8.insertToChatInput"]')?.checked ?? true;
+    settings.chatu8.startTag = root.querySelector('[name="chatu8.startTag"]')?.value || '[';
+    settings.chatu8.endTag = root.querySelector('[name="chatu8.endTag"]')?.value || ']';
     settings.prompt.stylePreset = root.querySelector('[name="prompt.stylePreset"]').value;
     settings.prompt.quality = root.querySelector('[name="prompt.quality"]').value.trim();
     settings.prompt.positivePrefix = root.querySelector('[name="prompt.positivePrefix"]').value.trim();
@@ -838,6 +1012,13 @@ function setValue(root, name, value) {
     if (el) el.value = value ?? '';
 }
 
+function renderModelOptions() {
+    const list = document.querySelector(SETTINGS_SELECTOR + ' #csid-api-models');
+    if (!list) return;
+    const models = ensureSettings().api.models || [];
+    list.innerHTML = models.map(model => '<option value="' + escapeHtml(model) + '"></option>').join('');
+}
+
 function renderRecentMessages() {
     const box = document.querySelector(`${SETTINGS_SELECTOR} [data-role="recent-messages"]`);
     if (!box) return;
@@ -873,6 +1054,7 @@ function escapeHtml(value) {
 }
 
 function fillFormFromSettings() {
+    renderModelOptions();
     const root = document.querySelector(SETTINGS_SELECTOR);
     if (!root) return;
     const settings = ensureSettings();
@@ -886,6 +1068,14 @@ function fillFormFromSettings() {
     root.querySelector('[name="behavior.syncTavernHelper"]').checked = settings.behavior.syncTavernHelper;
     root.querySelector('[name="behavior.allowPermanentOverwrite"]').checked = settings.behavior.allowPermanentOverwrite;
     root.querySelector('[name="behavior.promptLanguage"]').value = settings.behavior.promptLanguage;
+    const preferClipboard = root.querySelector('[name="behavior.preferClipboard"]');
+    if (preferClipboard) preferClipboard.checked = settings.behavior.preferClipboard;
+    const chatu8Enabled = root.querySelector('[name="chatu8.enabled"]');
+    if (chatu8Enabled) chatu8Enabled.checked = settings.chatu8.enabled;
+    const chatu8Insert = root.querySelector('[name="chatu8.insertToChatInput"]');
+    if (chatu8Insert) chatu8Insert.checked = settings.chatu8.insertToChatInput;
+    setValue(root, 'chatu8.startTag', settings.chatu8.startTag);
+    setValue(root, 'chatu8.endTag', settings.chatu8.endTag);
     root.querySelector('[name="prompt.stylePreset"]').value = settings.prompt.stylePreset;
     root.querySelector('[name="prompt.quality"]').value = settings.prompt.quality;
     root.querySelector('[name="prompt.positivePrefix"]').value = settings.prompt.positivePrefix;
@@ -911,14 +1101,18 @@ function buildSettingsHtml() {
                     </div>
 
                     <section class="csid-panel is-active" data-panel="compose">
-                        <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="粘贴或读取选中的剧情段落"></textarea>
-                        <div class="csid-actions">
+                        <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="复制剧情后直接点一键出图；也可选中文本或使用最新回复"></textarea>
+                        <div class="csid-actions csid-primary-actions">
+                            <button class="menu_button result-control" data-action="auto-image">一键出图</button>
+                            <button class="menu_button" data-action="compose">只生成提示词</button>
                             <button class="menu_button" data-action="read-selection">读取选中</button>
-                            <button class="menu_button" data-action="use-recent">使用勾选</button>
+                            <button class="menu_button" data-action="read-clipboard">读取剪贴板</button>
                             <button class="menu_button" data-action="use-latest">最新回复</button>
-                            <button class="menu_button result-control" data-action="compose">生成提示词</button>
+                            <button class="menu_button" data-action="use-recent">使用勾选</button>
                         </div>
                         <div class="csid-recent" data-role="recent-messages"></div>
+                        <label class="csid-label">智绘姬触发文本</label>
+                        <textarea class="text_pole csid-output" data-role="chatu8-trigger" readonly></textarea>
                         <label class="csid-label">镜头卡</label>
                         <textarea class="text_pole csid-output" data-role="shot-card" readonly></textarea>
                         <label class="csid-label">正向提示词</label>
@@ -926,6 +1120,9 @@ function buildSettingsHtml() {
                         <label class="csid-label">反向提示词</label>
                         <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
                         <div class="csid-actions">
+                            <button class="menu_button" data-action="copy-trigger">复制触发文本</button>
+                            <button class="menu_button" data-action="insert-trigger">填入聊天框</button>
+                            <button class="menu_button" data-action="send-trigger">发送触发</button>
                             <button class="menu_button" data-action="copy-positive">复制正向</button>
                             <button class="menu_button" data-action="copy-negative">复制反向</button>
                             <button class="menu_button" data-action="analyze-input">后台记忆</button>
@@ -986,6 +1183,7 @@ function buildSettingsHtml() {
                             </label>
                             <label>提示词语言
                                 <select class="text_pole" name="behavior.promptLanguage">
+                                    <option value="en">英文</option>
                                     <option value="mixed">混合</option>
                                     <option value="zh">中文</option>
                                 </select>
@@ -1002,20 +1200,26 @@ function buildSettingsHtml() {
 
                         <div class="csid-toggles">
                             <label><input type="checkbox" name="behavior.autoMemory"> 自动后台记忆</label>
+                            <label><input type="checkbox" name="behavior.preferClipboard"> 优先读取剪贴板</label>
                             <label><input type="checkbox" name="behavior.syncTavernHelper"> 同步酒馆助手变量</label>
                             <label><input type="checkbox" name="behavior.allowPermanentOverwrite"> 允许覆盖永久设定</label>
                             <label><input type="checkbox" name="api.enabled"> 启用额外 API</label>
+                            <label><input type="checkbox" name="chatu8.enabled"> 输出智绘姬触发文本</label>
+                            <label><input type="checkbox" name="chatu8.insertToChatInput"> 生成后填入聊天框</label>
                         </div>
                         <div class="csid-grid two">
                             <label>API 地址<input class="text_pole" name="api.url" placeholder="http://127.0.0.1:8000/v1"></label>
-                            <label>模型<input class="text_pole" name="api.model"></label>
-                            <label>超时 ms<input class="text_pole" type="number" name="api.timeoutMs" min="1500" step="500"></label>
+                            <label>模型<input class="text_pole" name="api.model" list="csid-api-models"><datalist id="csid-api-models"></datalist></label>
+                            <label>开始标记<input class="text_pole" name="chatu8.startTag" placeholder="["></label>
+                            <label>结束标记<input class="text_pole" name="chatu8.endTag" placeholder="]"></label>
+                            <label>超时 ms<input class="text_pole" type="number" name="api.timeoutMs" min="3000" step="500"></label>
                             <label>温度<input class="text_pole" type="number" name="api.temperature" min="0" max="2" step="0.1"></label>
                         </div>
                         <label class="csid-label">API Key</label>
                         <input class="text_pole" type="password" name="api.key" autocomplete="off">
                         <div class="csid-actions">
                             <button class="menu_button result-control" data-action="save-settings">保存设置</button>
+                            <button class="menu_button" data-action="refresh-models">刷新模型</button>
                             <button class="menu_button" data-action="test-api">测试 API</button>
                         </div>
                     </section>
@@ -1039,9 +1243,14 @@ function bindEvents() {
         if (!button) return;
         const action = button.dataset.action;
         if (action === 'read-selection') readSelectionIntoInput();
+        if (action === 'read-clipboard') readClipboardIntoInput();
         if (action === 'use-recent') useRecentIntoInput();
         if (action === 'use-latest') useLatestIntoInput();
         if (action === 'compose') composeFromInput();
+        if (action === 'auto-image') composeFromInput({ sendToChat: true });
+        if (action === 'copy-trigger') copyText(state.lastTrigger, '已复制智绘姬触发文本');
+        if (action === 'insert-trigger') insertTriggerIntoChat();
+        if (action === 'send-trigger') sendTriggerToChat();
         if (action === 'copy-positive') copyText(state.lastPositive, '已复制正向提示词');
         if (action === 'copy-negative') copyText(state.lastNegative, '已复制反向提示词');
         if (action === 'analyze-input') analyzeInputNow();
@@ -1055,6 +1264,7 @@ function bindEvents() {
         }
         if (action === 'export-memory') downloadMemory();
         if (action === 'import-th') importTavernHelperMemory();
+        if (action === 'refresh-models') refreshApiModels().catch(error => setStatus('模型读取失败: ' + error.message));
         if (action === 'test-api') testApi();
     });
     root.addEventListener('change', event => {
@@ -1067,6 +1277,9 @@ function bindEvents() {
         if (event.target.matches('[data-action="import-file"]')) {
             readImportFile(event.target.files?.[0]);
             event.target.value = '';
+        }
+        if (event.target.matches('[name="api.url"], [name="api.key"]')) {
+            refreshApiModels().catch(error => setStatus('模型自动读取失败: ' + error.message));
         }
     });
     root.addEventListener('input', event => {
@@ -1115,25 +1328,98 @@ function useLatestIntoInput() {
     setStatus(`已填入第 ${latest.index} 楼`);
 }
 
-function composeFromInput() {
-    readFormToSettings();
-    readFormToMemory();
-    const input = document.querySelector(`${SETTINGS_SELECTOR} [data-role="scene-input"]`).value.trim();
-    if (!input) {
-        setStatus('请先选择或粘贴剧情段落');
+async function readClipboardText() {
+    try {
+        if (navigator.clipboard?.readText) return normalizeMultiline(await navigator.clipboard.readText());
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] clipboard read failed', error);
+    }
+    return '';
+}
+
+async function readClipboardIntoInput() {
+    const text = await readClipboardText();
+    if (!text) {
+        setStatus('没有读取到剪贴板文本');
         return;
     }
-    const result = compilePrompt(input);
-    state.lastPositive = result.positive;
-    state.lastNegative = result.negative;
+    document.querySelector(SETTINGS_SELECTOR + ' [data-role="scene-input"]').value = text;
+    setStatus('已读取剪贴板');
+}
+
+async function resolveSourceText(currentInput = '') {
+    const settings = ensureSettings();
+    const candidates = [];
+    if (settings.behavior.preferClipboard) candidates.push(await readClipboardText());
+    candidates.push(getSelectedText());
+    candidates.push(currentInput);
+    candidates.push(buildSelectedRecentText());
+    candidates.push(getLatestAssistantMessage()?.text || '');
+    return candidates.map(normalizeMultiline).find(Boolean) || '';
+}
+
+function getChatInputElement() {
+    return document.querySelector('#send_textarea')
+        || document.querySelector('textarea[name="send_textarea"]')
+        || document.querySelector('#send_textarea textarea')
+        || document.querySelector('textarea[placeholder]');
+}
+
+function insertTriggerIntoChat() {
+    if (!state.lastTrigger) {
+        setStatus('没有可填入的智绘姬触发文本');
+        return false;
+    }
+    const input = getChatInputElement();
+    if (!input) {
+        setStatus('没有找到酒馆聊天输入框');
+        return false;
+    }
+    input.value = state.lastTrigger;
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: state.lastTrigger }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setStatus('已填入聊天输入框');
+    return true;
+}
+
+function sendTriggerToChat() {
+    if (!insertTriggerIntoChat()) return;
+    const sendButton = document.querySelector('#send_but') || document.querySelector('[id="send_but"]');
+    if (!sendButton) {
+        setStatus('已填入输入框，但没有找到发送按钮');
+        return;
+    }
+    sendButton.click();
+}
+
+async function composeFromInput(options = {}) {
+    readFormToSettings();
+    readFormToMemory();
+    const inputArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="scene-input"]');
+    const input = await resolveSourceText(inputArea?.value || '');
+    if (!input) {
+        setStatus('没有读到剧情段落：请复制、选中或点最新回复');
+        return;
+    }
+    if (inputArea) inputArea.value = input;
+    setStatus('正在分析剧情并生成英文提示词');
+    const result = await buildSmartPrompt(input);
+    state.lastPositive = normalizePromptText(result.positive);
+    state.lastNegative = normalizePromptText(result.negative);
     state.lastShotCard = result.shotCard;
-    document.querySelector(`${SETTINGS_SELECTOR} [data-role="positive"]`).value = result.positive;
-    document.querySelector(`${SETTINGS_SELECTOR} [data-role="negative"]`).value = result.negative;
-    document.querySelector(`${SETTINGS_SELECTOR} [data-role="shot-card"]`).value = result.shotCard;
-    updateMemoryFromSelectedScene(input, result.localScene);
+    state.lastTrigger = buildChatu8Trigger(state.lastPositive);
+    document.querySelector(SETTINGS_SELECTOR + ' [data-role="positive"]').value = state.lastPositive;
+    document.querySelector(SETTINGS_SELECTOR + ' [data-role="negative"]').value = state.lastNegative;
+    document.querySelector(SETTINGS_SELECTOR + ' [data-role="shot-card"]').value = state.lastShotCard;
+    const triggerArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="chatu8-trigger"]');
+    if (triggerArea) triggerArea.value = state.lastTrigger;
+    if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, input, result.source || 'api');
+    else updateMemoryFromSelectedScene(input, result.localScene);
     syncTavernHelperMemory();
     renderMemoryFields();
-    setStatus('提示词已生成');
+    if (ensureSettings().chatu8.insertToChatInput || options.sendToChat) insertTriggerIntoChat();
+    if (options.sendToChat) sendTriggerToChat();
+    setStatus(options.sendToChat ? '已生成并发送智绘姬触发文本' : '提示词已生成');
 }
 
 function analyzeInputNow() {
@@ -1149,10 +1435,19 @@ async function testApi() {
     readFormToSettings();
     setStatus('API 测试中');
     try {
-        const patch = await analyzeMemoryPatch('她在深夜的旅馆房间里换上白色睡裙，灯光很柔和。');
-        setStatus(`API 正常: ${JSON.stringify(patch).slice(0, 80)}`);
+        const result = await buildSmartPrompt('她在深夜的旅馆房间里换上白色睡裙，靠在窗边微笑，月光很柔和。');
+        state.lastPositive = normalizePromptText(result.positive);
+        state.lastNegative = normalizePromptText(result.negative);
+        state.lastShotCard = result.shotCard;
+        state.lastTrigger = buildChatu8Trigger(state.lastPositive);
+        const triggerArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="chatu8-trigger"]');
+        if (triggerArea) triggerArea.value = state.lastTrigger;
+        document.querySelector(SETTINGS_SELECTOR + ' [data-role="positive"]').value = state.lastPositive;
+        document.querySelector(SETTINGS_SELECTOR + ' [data-role="negative"]').value = state.lastNegative;
+        document.querySelector(SETTINGS_SELECTOR + ' [data-role="shot-card"]').value = state.lastShotCard;
+        setStatus('API/提示词正常: ' + state.lastTrigger.slice(0, 90));
     } catch (error) {
-        setStatus(`API 测试失败: ${error.message}`);
+        setStatus('API 测试失败: ' + error.message);
     }
 }
 
@@ -1227,13 +1522,13 @@ function exposeDebugApi() {
         version: '0.1.0',
         extractSceneLocal,
         compilePrompt,
-        composeText(text, { updateMemory = false } = {}) {
-            const result = compilePrompt(String(text || ''));
+        async composeText(text, { updateMemory = false, smart = true } = {}) {
+            const result = smart ? await buildSmartPrompt(String(text || '')) : compilePrompt(String(text || ''));
             if (updateMemory) {
                 updateMemoryFromSelectedScene(String(text || ''), result.localScene);
                 syncTavernHelperMemory();
             }
-            return result;
+            return { ...result, trigger: buildChatu8Trigger(result.positive) };
         },
         getSettings: () => structuredClone(ensureSettings()),
         getMemory: () => structuredClone(ensureChatMemory()),

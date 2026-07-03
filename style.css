@@ -202,3 +202,24 @@
         grid-template-columns: 1fr;
     }
 }
+
+.csid-primary-actions .result-control {
+    flex: 1 1 100%;
+    min-height: 42px;
+    font-weight: 700;
+}
+
+#codex_scene_image_director [data-role="chatu8-trigger"] {
+    min-height: 72px;
+}
+
+#codex_scene_image_director .result-control {
+    border-color: var(--csid-accent);
+}
+
+@media (max-width: 720px) {
+    .csid-primary-actions .result-control {
+        flex-basis: 100%;
+        min-height: 46px;
+    }
+}
