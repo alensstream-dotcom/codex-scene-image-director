@@ -73,7 +73,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_CHAT_MEMORY = {
-    version: 1,
+    version: 2,
     scene: {
         location: '',
         time: '',
@@ -83,6 +83,12 @@ const DEFAULT_CHAT_MEMORY = {
         worldState: '',
     },
     characters: {},
+    longTerm: {
+        summary: '',
+        facts: [],
+        relationships: {},
+        visualNotes: [],
+    },
     history: [],
     runtime: {
         lastMessageHash: '',
@@ -288,6 +294,79 @@ function updateCharacterMemory(name, patch, options = {}) {
     chatMemory.characters[name] = chatTarget;
 }
 
+function textArray(value) {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map(item => normalizeLine(item)).filter(Boolean);
+    return String(value)
+        .split(/\n|；|;/)
+        .map(item => normalizeLine(item))
+        .filter(Boolean);
+}
+
+function pushUniqueLimited(target, values, limit = 60) {
+    if (!Array.isArray(target)) return [];
+    const seen = new Set(target.map(item => normalizeLine(item).toLowerCase()));
+    for (const value of textArray(values)) {
+        const key = value.toLowerCase();
+        if (!key || seen.has(key)) continue;
+        target.unshift(value);
+        seen.add(key);
+    }
+    return target.slice(0, limit);
+}
+
+function mergeRelationshipMemory(target, patch) {
+    if (!patch || typeof patch !== 'object') return target;
+    for (const [name, value] of Object.entries(patch)) {
+        if (!name || value === undefined || value === null) continue;
+        if (typeof value === 'string') {
+            target[name] = normalizeLine(value);
+        } else if (typeof value === 'object') {
+            target[name] = { ...(target[name] && typeof target[name] === 'object' ? target[name] : {}), ...value };
+        }
+    }
+    return target;
+}
+
+function getAllCharacterMemories() {
+    const settings = ensureSettings();
+    const chatMemory = ensureChatMemory();
+    const names = uniqueParts([
+        getCurrentCharacterName(),
+        ...Object.keys(settings.memory.characters || {}),
+        ...Object.keys(chatMemory.characters || {}),
+    ].filter(Boolean));
+    const output = {};
+    for (const name of names) output[name] = getCharacterMemory(name);
+    return output;
+}
+
+function buildVisualMemoryContext(selectedText = '') {
+    const settings = ensureSettings();
+    const memory = ensureChatMemory();
+    return {
+        scene: memory.scene,
+        world: settings.memory.world,
+        characters: getAllCharacterMemories(),
+        longTerm: memory.longTerm || {},
+        recentHistory: (memory.history || []).slice(0, 10).map(item => ({ type: item.type, preview: item.preview })),
+        selectedTextPreview: compactPreview(selectedText, 260),
+    };
+}
+
+function mergeLongTermMemory(patch, sourceText = '') {
+    const memory = ensureChatMemory();
+    memory.longTerm ||= { summary: '', facts: [], relationships: {}, visualNotes: [] };
+    const longTerm = patch.longTerm || patch.long_term || {};
+    const summary = longTerm.summary || patch.summary;
+    if (isUsefulText(summary)) memory.longTerm.summary = normalizeLine(summary);
+    memory.longTerm.facts = pushUniqueLimited(memory.longTerm.facts || [], longTerm.facts || patch.facts || [], 80);
+    memory.longTerm.visualNotes = pushUniqueLimited(memory.longTerm.visualNotes || [], longTerm.visualNotes || longTerm.visual_notes || patch.visualNotes || patch.visual_notes || patch.notes || [], 60);
+    memory.longTerm.relationships ||= {};
+    mergeRelationshipMemory(memory.longTerm.relationships, longTerm.relationships || patch.relationships || {});
+    if (!memory.longTerm.summary && sourceText) memory.longTerm.summary = compactPreview(sourceText, 220);
+}
+
 function isUsefulText(value) {
     return typeof value === 'string' && value.trim().length > 0;
 }
@@ -484,6 +563,8 @@ function compilePrompt(inputText) {
     const outfit = localScene.outfit || charMemory.currentOutfit;
     const expression = localScene.expression || charMemory.expression;
     const pose = localScene.action || charMemory.pose;
+    const longTerm = chatMemory.longTerm || {};
+    const visualNotes = Array.isArray(longTerm.visualNotes) ? longTerm.visualNotes.slice(0, 6).join(', ') : '';
     const englishOnly = settings.behavior.promptLanguage === 'en';
     const translatedInput = settings.behavior.promptLanguage === 'zh'
         ? inputText
@@ -504,6 +585,7 @@ function compilePrompt(inputText) {
         promptPart(charMemory.accessories, englishOnly),
         promptPart(outfit, englishOnly),
         promptPart(charMemory.state, englishOnly),
+        promptPart(visualNotes, englishOnly),
         promptPart(sceneLocation, englishOnly),
         promptPart(sceneTime, englishOnly),
         promptPart(sceneWeather, englishOnly),
@@ -646,11 +728,7 @@ async function analyzeMemoryPatch(text) {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.max(1500, settings.api.timeoutMs || 8000));
-    const currentMemory = {
-        chat: ensureChatMemory(),
-        character: getCharacterMemory(),
-        world: settings.memory.world,
-    };
+    const currentMemory = buildVisualMemoryContext(text);
     const url = normalizeApiUrl(settings.api.url);
     const body = {
         model: settings.api.model || undefined,
@@ -665,7 +743,8 @@ async function analyzeMemoryPatch(text) {
                     '不要续写剧情，不要解释。',
                     '永久外观如发色、瞳色、体型、种族默认不要覆盖，除非文本明确是稳定设定。',
                     '优先更新 currentOutfit、location、time、weather、lighting、mood、expression、pose、state。',
-                    'JSON 格式: {"confidence":0-1,"scene":{},"characters":{"角色名":{}},"world":{},"notes":[]}',
+                    '同时维护长期记忆：summary 用一句话概括当前长期剧情状态；facts 保存不会轻易改变的事实；relationships 保存人物关系；visualNotes 保存会影响画面的稳定视觉线索。',
+                    'JSON 格式: {"confidence":0-1,"scene":{},"characters":{"角色名":{}},"world":{},"longTerm":{"summary":"","facts":[],"relationships":{},"visualNotes":[]},"notes":[]}',
                 ].join('\n'),
             },
             {
@@ -762,7 +841,7 @@ async function analyzeScenePrompt(text) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.max(3000, settings.api.timeoutMs || 12000));
     const localScene = extractSceneLocal(text);
-    const currentMemory = { chat: ensureChatMemory(), character: getCharacterMemory(), world: settings.memory.world };
+    const currentMemory = buildVisualMemoryContext(text);
     const body = {
         model: settings.api.model || undefined,
         temperature: Number(settings.api.temperature ?? 0.1),
@@ -777,9 +856,12 @@ async function analyzeScenePrompt(text) {
                     'positive_prompt 必须是英文逗号分隔标签，不要中文，不要方括号。',
                     'negative_prompt 必须是英文逗号分隔标签。',
                     '角色外观、衣服、地点、时间、光线、动作、表情、镜头必须尽量从剧情和记忆中保留一致。',
+                    '只能画 selectedText 当前可见的这一幕；不要把系统提示、剧情规划、思考路线、写作要求、后续安排画进提示词。',
+                    '如果 selectedText 很短，只用记忆补足角色外观、当前服装和地点时间，不要擅自改剧情动作。',
                     '如果剧情出现换衣服、换地点、时间/天气/光线改变，写入 memory_patch。',
                     '不要覆盖永久外观，除非文本明确给出稳定设定。',
-                    'JSON 格式：{"positive_prompt":"...","negative_prompt":"...","shot_card":"...","memory_patch":{"confidence":0-1,"scene":{},"characters":{},"world":{},"notes":[]}}',
+                    'memory_patch 可包含 longTerm: {summary, facts, relationships, visualNotes}，用于下次稳定角色、地点、关系和世界观。',
+                    'JSON 格式：{"positive_prompt":"...","negative_prompt":"...","shot_card":"...","memory_patch":{"confidence":0-1,"scene":{},"characters":{},"world":{},"longTerm":{"summary":"","facts":[],"relationships":{},"visualNotes":[]},"notes":[]}}',
                 ].join('\n'),
             },
             {
@@ -870,6 +952,7 @@ function applyMemoryPatch(patch, sourceText = '', source = 'api') {
     for (const key of ['location', 'time', 'weather', 'lighting', 'mood', 'worldState']) {
         if (isUsefulText(scene[key])) memory.scene[key] = normalizeLine(scene[key]);
     }
+    mergeLongTermMemory(patch, sourceText);
     if (patch.world && typeof patch.world === 'object') {
         for (const key of ['name', 'genre', 'rules', 'visualStyle', 'negativeRules']) {
             if (isUsefulText(patch.world[key]) && (settings.behavior.allowPermanentOverwrite || !settings.memory.world[key])) {
@@ -1028,6 +1111,10 @@ function readFormToMemory() {
     chatMemory.scene.weather = root.querySelector('[name="scene.weather"]').value.trim();
     chatMemory.scene.lighting = root.querySelector('[name="scene.lighting"]').value.trim();
     chatMemory.scene.mood = root.querySelector('[name="scene.mood"]').value.trim();
+    chatMemory.longTerm ||= { summary: '', facts: [], relationships: {}, visualNotes: [] };
+    chatMemory.longTerm.summary = root.querySelector('[name="memory.summary"]')?.value.trim() || '';
+    chatMemory.longTerm.facts = textArray(root.querySelector('[name="memory.facts"]')?.value || '').slice(0, 80);
+    chatMemory.longTerm.visualNotes = textArray(root.querySelector('[name="memory.visualNotes"]')?.value || '').slice(0, 60);
     saveAll();
 }
 
@@ -1045,6 +1132,10 @@ function renderMemoryFields() {
     for (const key of ['location', 'time', 'weather', 'lighting', 'mood']) {
         setValue(root, `scene.${key}`, chatMemory.scene[key] || '');
     }
+    const longTerm = chatMemory.longTerm || {};
+    setValue(root, 'memory.summary', longTerm.summary || '');
+    setValue(root, 'memory.facts', Array.isArray(longTerm.facts) ? longTerm.facts.join('\n') : '');
+    setValue(root, 'memory.visualNotes', Array.isArray(longTerm.visualNotes) ? longTerm.visualNotes.join('\n') : '');
     for (const key of ['name', 'genre', 'rules', 'visualStyle', 'negativeRules']) {
         setValue(root, `world.${key}`, settings.memory.world[key] || '');
     }
@@ -1218,6 +1309,12 @@ function buildSettingsHtml() {
                             <label>光线<input class="text_pole" name="scene.lighting"></label>
                             <label>氛围<input class="text_pole" name="scene.mood"></label>
                         </div>
+                        <label class="csid-label">长期摘要</label>
+                        <textarea class="text_pole csid-memory-area small" name="memory.summary"></textarea>
+                        <label class="csid-label">关键事实</label>
+                        <textarea class="text_pole csid-memory-area small" name="memory.facts" placeholder="每行一条，角色身份/世界规则/重要事件"></textarea>
+                        <label class="csid-label">视觉备注</label>
+                        <textarea class="text_pole csid-memory-area small" name="memory.visualNotes" placeholder="每行一条，固定服饰/标志物/场景视觉锚点"></textarea>
                         <label class="csid-label">固定外观</label>
                         <textarea class="text_pole csid-memory-area" name="char.appearance"></textarea>
                         <div class="csid-grid two">
@@ -1925,7 +2022,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.1.5',
+        version: '0.1.6',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
