@@ -107,6 +107,8 @@ const FIELD_LABELS = {
 };
 
 const CN_TO_TAG = [
+    [/旅馆房间|酒店房间|旅店房间/g, 'hotel room'],
+    [/旅馆|酒店|旅店/g, 'hotel'],
     [/卧室|房间|寝室/g, 'bedroom'],
     [/客厅/g, 'living room'],
     [/浴室|洗浴/g, 'bathroom'],
@@ -351,6 +353,10 @@ function translateKnownTags(text) {
     return output;
 }
 
+function hasCjk(text) {
+    return /[\u4e00-\u9fff]/.test(String(text || ''));
+}
+
 function englishTagsFromText(text) {
     const tags = [];
     for (const [pattern, tag] of CN_TO_TAG) {
@@ -366,6 +372,19 @@ function englishSceneTags(scene) {
         scene.camera,
         scene.mood,
     ]);
+}
+
+function promptPart(value, englishOnly = false) {
+    const clean = normalizeLine(value);
+    if (!clean) return '';
+    if (!englishOnly) return clean;
+    const tags = englishTagsFromText(clean);
+    if (tags) return tags;
+    return hasCjk(clean) ? '' : clean;
+}
+
+function cleanEnglishPrompt(text) {
+    return joinPrompt(normalizePromptText(text).split(',').filter(part => !hasCjk(part)));
 }
 
 function extractSceneLocal(text) {
@@ -461,11 +480,13 @@ function compilePrompt(inputText) {
     const outfit = localScene.outfit || charMemory.currentOutfit;
     const expression = localScene.expression || charMemory.expression;
     const pose = localScene.action || charMemory.pose;
+    const englishOnly = settings.behavior.promptLanguage === 'en';
     const translatedInput = settings.behavior.promptLanguage === 'zh'
         ? inputText
-        : settings.behavior.promptLanguage === 'en'
+        : englishOnly
             ? englishSceneTags(localScene)
             : translateKnownTags(inputText);
+    const promptName = englishOnly && hasCjk(name) ? '' : name;
 
     const positive = joinPrompt([
         settings.prompt.positivePrefix,
@@ -474,19 +495,19 @@ function compilePrompt(inputText) {
         settings.memory.world.visualStyle,
         settings.memory.world.genre,
         settings.memory.world.rules,
-        `${name}`,
-        charMemory.appearance,
-        charMemory.accessories,
-        outfit,
-        charMemory.state,
-        sceneLocation,
-        sceneTime,
-        sceneWeather,
-        sceneLighting,
-        sceneMood,
-        localScene.props,
-        expression,
-        pose,
+        promptName,
+        promptPart(charMemory.appearance, englishOnly),
+        promptPart(charMemory.accessories, englishOnly),
+        promptPart(outfit, englishOnly),
+        promptPart(charMemory.state, englishOnly),
+        promptPart(sceneLocation, englishOnly),
+        promptPart(sceneTime, englishOnly),
+        promptPart(sceneWeather, englishOnly),
+        promptPart(sceneLighting, englishOnly),
+        promptPart(sceneMood, englishOnly),
+        promptPart(localScene.props, englishOnly),
+        promptPart(expression, englishOnly),
+        promptPart(pose, englishOnly),
         localScene.camera || settings.prompt.camera,
         translatedInput,
     ]);
@@ -798,7 +819,7 @@ function normalizePromptText(text) {
 
 function buildChatu8Trigger(positive) {
     const settings = ensureSettings();
-    const clean = normalizePromptText(positive);
+    const clean = settings.behavior.promptLanguage === 'en' ? cleanEnglishPrompt(positive) : normalizePromptText(positive);
     if (!settings.chatu8?.enabled) return clean;
     const start = settings.chatu8?.startTag || '[';
     const end = settings.chatu8?.endTag || ']';
