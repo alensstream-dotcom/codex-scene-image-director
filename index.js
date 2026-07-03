@@ -5,6 +5,7 @@ import {
     eventSource,
     event_types,
     getCurrentChatId,
+    getRequestHeaders,
     saveSettingsDebounced,
     this_chid,
 } from '../../../../script.js';
@@ -151,6 +152,7 @@ let state = {
     lastNegative: '',
     lastShotCard: '',
     lastTrigger: '',
+    lastImageDataUrl: '',
     analyzerRunning: false,
     analyzerQueue: [],
     saveTimer: null,
@@ -1163,12 +1165,12 @@ function buildSettingsHtml() {
                         <div class="csid-workflow">
                             <div><b>取材</b><span>剪贴板 / 选中 / 勾选 / 最新回复</span></div>
                             <div><b>导演</b><span>英文提示词 + 镜头卡</span></div>
-                            <div><b>触发</b><span>方括号发给智绘姬</span></div>
+                            <div><b>出图</b><span>直连 ComfyUI + 智绘姬兼容</span></div>
                             <div><b>记忆</b><span>地点服装自动更新</span></div>
                         </div>
                         <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="复制想出图的剧情段落后点一键出图；也可以先在聊天里选中文字，或用最新回复/勾选消息。"></textarea>
                         <div class="csid-actions csid-primary-actions">
-                            <button class="menu_button result-control" data-action="auto-image">一键出图</button>
+                            <button class="menu_button result-control" data-action="auto-image">一键生成图片</button>
                             <button class="menu_button" data-action="compose">只生成提示词</button>
                             <button class="menu_button" data-action="read-selection">读取选中</button>
                             <button class="menu_button" data-action="read-clipboard">读取剪贴板</button>
@@ -1193,6 +1195,9 @@ function buildSettingsHtml() {
                                 <label class="csid-label">反向提示词</label>
                                 <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
                             </div>
+                        </div>
+                        <div class="csid-image-preview" data-role="image-preview">
+                            <div class="csid-image-placeholder">暂无图片</div>
                         </div>
                         <div class="csid-actions">
                             <button class="menu_button" data-action="copy-trigger">复制触发文本</button>
@@ -1324,7 +1329,7 @@ function bindEvents() {
         if (action === 'use-recent') useRecentIntoInput();
         if (action === 'use-latest') useLatestIntoInput();
         if (action === 'compose') composeFromInput();
-        if (action === 'auto-image') composeFromInput({ sendToChat: true });
+        if (action === 'auto-image') autoImageFromInput();
         if (action === 'copy-trigger') copyText(state.lastTrigger, '已复制智绘姬触发文本');
         if (action === 'insert-trigger') insertTriggerIntoChat();
         if (action === 'send-trigger') sendTriggerToChat();
@@ -1480,6 +1485,97 @@ function sendTriggerToChat() {
     sendButton.click();
 }
 
+
+function replaceQuotedPlaceholder(text, key, value) {
+    return String(text || '').replaceAll('"%' + key + '%"', JSON.stringify(value));
+}
+
+async function loadComfyWorkflow(sdSettings) {
+    const response = await fetch('/api/sd/comfy/workflow', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ file_name: sdSettings.comfy_workflow || 'Default_Comfy_Workflow.json' }),
+    });
+    if (!response.ok) throw new Error('工作流读取失败: ' + await response.text());
+    return await response.json();
+}
+
+function buildComfyWorkflow(sdSettings, positive, negative) {
+    return async function build() {
+        let workflow = await loadComfyWorkflow(sdSettings);
+        workflow = replaceQuotedPlaceholder(workflow, 'prompt', positive);
+        workflow = replaceQuotedPlaceholder(workflow, 'negative_prompt', negative);
+        const seed = Number(sdSettings.seed) >= 0 ? Number(sdSettings.seed) : Math.round(Math.random() * Number.MAX_SAFE_INTEGER);
+        const denoise = sdSettings.denoising_strength === undefined ? 1 : Number(sdSettings.denoising_strength || 1);
+        const clipSkip = Number.isNaN(Number(sdSettings.clip_skip)) ? -1 : -Number(sdSettings.clip_skip);
+        const values = {
+            seed,
+            denoise,
+            clip_skip: clipSkip,
+            model: sdSettings.model,
+            vae: sdSettings.vae,
+            sampler: sdSettings.sampler,
+            scheduler: sdSettings.scheduler,
+            steps: Number(sdSettings.steps || 20),
+            scale: Number(sdSettings.scale || 7),
+            width: Number(sdSettings.width || 768),
+            height: Number(sdSettings.height || 1024),
+        };
+        for (const [key, value] of Object.entries(values)) {
+            workflow = replaceQuotedPlaceholder(workflow, key, value);
+        }
+        for (const item of sdSettings.comfy_placeholders || []) {
+            if (!item?.find) continue;
+            workflow = replaceQuotedPlaceholder(workflow, item.find, String(item.replace || ''));
+        }
+        return workflow;
+    };
+}
+
+async function generateDirectComfyImage(positive, negative) {
+    const sdSettings = extension_settings?.sd || {};
+    if (!sdSettings.comfy_url) throw new Error('请先在 ST 的文生图扩展里设置 ComfyUI 地址');
+    const workflow = await buildComfyWorkflow(sdSettings, positive, negative)();
+    const response = await fetch('/api/sd/comfy/generate', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            url: sdSettings.comfy_url,
+            prompt: JSON.stringify({ prompt: JSON.parse(workflow) }),
+        }),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return await response.json();
+}
+
+function renderGeneratedImage(image) {
+    const preview = document.querySelector(SETTINGS_SELECTOR + ' [data-role="image-preview"]');
+    if (!preview || !image?.data) return;
+    const format = image.format || 'png';
+    state.lastImageDataUrl = 'data:image/' + format + ';base64,' + image.data;
+    preview.innerHTML = '';
+    const img = document.createElement('img');
+    img.className = 'csid-generated-image';
+    img.alt = 'generated image';
+    img.src = state.lastImageDataUrl;
+    preview.appendChild(img);
+}
+
+async function autoImageFromInput() {
+    try {
+        const promptResult = await composeFromInput({ skipInsert: true });
+        if (!promptResult?.positive) return;
+        setStatus('正在提交 ComfyUI 生成图片');
+        const image = await generateDirectComfyImage(promptResult.positive, promptResult.negative || ensureSettings().prompt.negative);
+        renderGeneratedImage(image);
+        if (ensureSettings().chatu8.insertToChatInput) insertTriggerIntoChat();
+        setStatus('图片已生成，预览已更新');
+    } catch (error) {
+        console.error('[' + EXT_NAME + '] direct ComfyUI image failed', error);
+        setStatus('出图失败: ' + error.message);
+    }
+}
+
 async function composeFromInput(options = {}) {
     readFormToSettings();
     readFormToMemory();
@@ -1505,9 +1601,10 @@ async function composeFromInput(options = {}) {
     else updateMemoryFromSelectedScene(input, result.localScene);
     syncTavernHelperMemory();
     renderMemoryFields();
-    if (ensureSettings().chatu8.insertToChatInput || options.sendToChat) insertTriggerIntoChat();
-    if (options.sendToChat) sendTriggerToChat();
+    if (!options.skipInsert && (ensureSettings().chatu8.insertToChatInput || options.sendToChat)) insertTriggerIntoChat();
+    if (!options.skipInsert && options.sendToChat) sendTriggerToChat();
     setStatus(options.sendToChat ? '已生成并发送智绘姬触发文本' : '提示词已生成');
+    return { positive: state.lastPositive, negative: state.lastNegative, trigger: state.lastTrigger, shotCard: state.lastShotCard };
 }
 
 function analyzeInputNow() {
