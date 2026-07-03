@@ -5,7 +5,7 @@ import {
     eventSource,
     event_types,
     getCurrentChatId,
-    getRequestHeaders,
+    saveChatConditional,
     saveSettingsDebounced,
     this_chid,
 } from '../../../../script.js';
@@ -148,6 +148,8 @@ const CN_TO_TAG = [
 let state = {
     selectedMessages: new Set(),
     stEventsBound: false,
+    messageMenuBound: false,
+    activeMessageId: null,
     lastPositive: '',
     lastNegative: '',
     lastShotCard: '',
@@ -1165,12 +1167,12 @@ function buildSettingsHtml() {
                         <div class="csid-workflow">
                             <div><b>取材</b><span>剪贴板 / 选中 / 勾选 / 最新回复</span></div>
                             <div><b>导演</b><span>英文提示词 + 镜头卡</span></div>
-                            <div><b>出图</b><span>直连 ComfyUI + 智绘姬兼容</span></div>
+                            <div><b>出图</b><span>写回原文 + 智绘姬识别</span></div>
                             <div><b>记忆</b><span>地点服装自动更新</span></div>
                         </div>
                         <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="复制想出图的剧情段落后点一键出图；也可以先在聊天里选中文字，或用最新回复/勾选消息。"></textarea>
                         <div class="csid-actions csid-primary-actions">
-                            <button class="menu_button result-control" data-action="auto-image">一键生成图片</button>
+                            <button class="menu_button result-control" data-action="auto-image">写入最新回复下方</button>
                             <button class="menu_button" data-action="compose">只生成提示词</button>
                             <button class="menu_button" data-action="read-selection">读取选中</button>
                             <button class="menu_button" data-action="read-clipboard">读取剪贴板</button>
@@ -1195,9 +1197,6 @@ function buildSettingsHtml() {
                                 <label class="csid-label">反向提示词</label>
                                 <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
                             </div>
-                        </div>
-                        <div class="csid-image-preview" data-role="image-preview">
-                            <div class="csid-image-placeholder">暂无图片</div>
                         </div>
                         <div class="csid-actions">
                             <button class="menu_button" data-action="copy-trigger">复制触发文本</button>
@@ -1329,7 +1328,7 @@ function bindEvents() {
         if (action === 'use-recent') useRecentIntoInput();
         if (action === 'use-latest') useLatestIntoInput();
         if (action === 'compose') composeFromInput();
-        if (action === 'auto-image') autoImageFromInput();
+        if (action === 'auto-image') writePromptUnderLatestFromInput();
         if (action === 'copy-trigger') copyText(state.lastTrigger, '已复制智绘姬触发文本');
         if (action === 'insert-trigger') insertTriggerIntoChat();
         if (action === 'send-trigger') sendTriggerToChat();
@@ -1486,93 +1485,191 @@ function sendTriggerToChat() {
 }
 
 
-function replaceQuotedPlaceholder(text, key, value) {
-    return String(text || '').replaceAll('"%' + key + '%"', JSON.stringify(value));
+
+function getMessageElementById(messageId) {
+    return document.querySelector('.mes[mesid="' + messageId + '"]')
+        || document.querySelector('[data-mes-id="' + messageId + '"]')
+        || document.querySelector('[data-message-id="' + messageId + '"]')
+        || [...document.querySelectorAll('.mes')][Number(messageId)];
 }
 
-async function loadComfyWorkflow(sdSettings) {
-    const response = await fetch('/api/sd/comfy/workflow', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ file_name: sdSettings.comfy_workflow || 'Default_Comfy_Workflow.json' }),
-    });
-    if (!response.ok) throw new Error('工作流读取失败: ' + await response.text());
-    return await response.json();
+function getMessageIdFromElement(element) {
+    const mes = element?.closest?.('.mes');
+    if (!mes) return -1;
+    const raw = mes.getAttribute('mesid') || mes.dataset.mesId || mes.dataset.messageId;
+    if (raw !== undefined && raw !== null && raw !== '') return Number(raw);
+    return [...document.querySelectorAll('.mes')].indexOf(mes);
 }
 
-function buildComfyWorkflow(sdSettings, positive, negative) {
-    return async function build() {
-        let workflow = await loadComfyWorkflow(sdSettings);
-        workflow = replaceQuotedPlaceholder(workflow, 'prompt', positive);
-        workflow = replaceQuotedPlaceholder(workflow, 'negative_prompt', negative);
-        const seed = Number(sdSettings.seed) >= 0 ? Number(sdSettings.seed) : Math.round(Math.random() * Number.MAX_SAFE_INTEGER);
-        const denoise = sdSettings.denoising_strength === undefined ? 1 : Number(sdSettings.denoising_strength || 1);
-        const clipSkip = Number.isNaN(Number(sdSettings.clip_skip)) ? -1 : -Number(sdSettings.clip_skip);
-        const values = {
-            seed,
-            denoise,
-            clip_skip: clipSkip,
-            model: sdSettings.model,
-            vae: sdSettings.vae,
-            sampler: sdSettings.sampler,
-            scheduler: sdSettings.scheduler,
-            steps: Number(sdSettings.steps || 20),
-            scale: Number(sdSettings.scale || 7),
-            width: Number(sdSettings.width || 768),
-            height: Number(sdSettings.height || 1024),
-        };
-        for (const [key, value] of Object.entries(values)) {
-            workflow = replaceQuotedPlaceholder(workflow, key, value);
+function closeMessageMenu() {
+    document.querySelectorAll('.csid-message-menu').forEach(menu => menu.remove());
+}
+
+function showMessageMenu(event, messageId) {
+    closeMessageMenu();
+    state.activeMessageId = messageId;
+    const menu = document.createElement('div');
+    menu.className = 'csid-message-menu';
+    menu.innerHTML = '<button type="button" data-csid-message-action="image"><span class="fa-solid fa-image"></span>图片生成</button>'
+        + '<button type="button" data-csid-message-action="copy"><span class="fa-solid fa-copy"></span>复制生成文本</button>'
+        + '<button type="button" data-csid-message-action="close"><span class="fa-solid fa-xmark"></span>取消</button>';
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(Math.max(8, event.clientX), window.innerWidth - rect.width - 8);
+    const top = Math.min(Math.max(8, event.clientY), window.innerHeight - rect.height - 8);
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+}
+
+function bindMessageMenu() {
+    if (state.messageMenuBound) return;
+    state.messageMenuBound = true;
+    document.addEventListener('dblclick', event => {
+        if (event.target.closest(SETTINGS_SELECTOR)) return;
+        if (event.target.closest('textarea,input,button,select,a')) return;
+        const mes = event.target.closest('.mes');
+        if (!mes) return;
+        const messageId = getMessageIdFromElement(mes);
+        if (!Number.isInteger(messageId) || messageId < 0 || !chat?.[messageId]) return;
+        event.preventDefault();
+        event.stopPropagation();
+        showMessageMenu(event, messageId);
+    }, true);
+    document.addEventListener('click', event => {
+        const actionButton = event.target.closest('[data-csid-message-action]');
+        if (actionButton) {
+            const action = actionButton.dataset.csidMessageAction;
+            const messageId = Number(state.activeMessageId);
+            closeMessageMenu();
+            if (action === 'image') generatePromptUnderMessage(messageId);
+            if (action === 'copy') copyMessageTrigger(messageId);
+            return;
         }
-        for (const item of sdSettings.comfy_placeholders || []) {
-            if (!item?.find) continue;
-            workflow = replaceQuotedPlaceholder(workflow, item.find, String(item.replace || ''));
+        if (!event.target.closest('.csid-message-menu')) closeMessageMenu();
+    }, true);
+}
+
+function stripLastInlinePrompt(text, message) {
+    let output = String(text || '').trimEnd();
+    const lastTrigger = message?.extra?.[EXT_ID]?.lastTrigger;
+    if (lastTrigger && output.endsWith(lastTrigger)) {
+        output = output.slice(0, -lastTrigger.length).trimEnd();
+    }
+    return output;
+}
+
+function setMessageRawText(messageId, text, trigger) {
+    const message = chat?.[Number(messageId)];
+    if (!message) throw new Error('没有找到这条消息');
+    message.extra ||= {};
+    message.extra[EXT_ID] ||= {};
+    message.extra[EXT_ID].lastTrigger = trigger;
+    message.mes = text;
+    if (Array.isArray(message.swipes) && message.swipes.length) {
+        const swipeId = Number.isInteger(Number(message.swipe_id)) ? Number(message.swipe_id) : message.swipes.length - 1;
+        message.swipes[Math.max(0, Math.min(swipeId, message.swipes.length - 1))] = text;
+    }
+}
+
+function renderInlinePrompt(messageId, trigger) {
+    const mes = getMessageElementById(messageId);
+    const textNode = mes?.querySelector('.mes_text');
+    if (!textNode) return;
+    textNode.querySelectorAll('.csid-inline-prompt').forEach(node => node.remove());
+    const block = document.createElement('div');
+    block.className = 'csid-inline-prompt';
+    block.textContent = trigger;
+    textNode.appendChild(block);
+}
+
+async function clickChatu8ImageButton(messageId) {
+    const mes = getMessageElementById(messageId);
+    if (!mes) return false;
+    for (let i = 0; i < 24; i++) {
+        const button = mes.querySelector('.st-chatu8-image-button, .image-tag-button, button.st-chatu8-image-button');
+        if (button) {
+            button.click();
+            return true;
         }
-        return workflow;
-    };
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    return false;
 }
 
-async function generateDirectComfyImage(positive, negative) {
-    const sdSettings = extension_settings?.sd || {};
-    if (!sdSettings.comfy_url) throw new Error('请先在 ST 的文生图扩展里设置 ComfyUI 地址');
-    const workflow = await buildComfyWorkflow(sdSettings, positive, negative)();
-    const response = await fetch('/api/sd/comfy/generate', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({
-            url: sdSettings.comfy_url,
-            prompt: JSON.stringify({ prompt: JSON.parse(workflow) }),
-        }),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    return await response.json();
+async function emitMessagePromptEvents(messageId) {
+    try { await saveChatConditional?.(); } catch (error) { console.warn('[' + EXT_NAME + '] save chat failed', error); }
+    try { await eventSource.emit(event_types.MESSAGE_UPDATED, Number(messageId)); } catch {}
+    try { await eventSource.emit(event_types.GENERATION_ENDED, Number(messageId)); } catch {}
 }
 
-function renderGeneratedImage(image) {
-    const preview = document.querySelector(SETTINGS_SELECTOR + ' [data-role="image-preview"]');
-    if (!preview || !image?.data) return;
-    const format = image.format || 'png';
-    state.lastImageDataUrl = 'data:image/' + format + ';base64,' + image.data;
-    preview.innerHTML = '';
-    const img = document.createElement('img');
-    img.className = 'csid-generated-image';
-    img.alt = 'generated image';
-    img.src = state.lastImageDataUrl;
-    preview.appendChild(img);
+async function writePromptToMessage(messageId, sourceText) {
+    const message = chat?.[Number(messageId)];
+    if (!message) throw new Error('没有找到这条消息');
+    const baseText = stripLastInlinePrompt(sourceText || getMessageText(message), message);
+    if (!baseText) throw new Error('这条消息没有可用于生图的正文');
+    setStatus('正在为原文生成智绘姬提示词');
+    const result = await buildSmartPrompt(baseText);
+    state.lastPositive = normalizePromptText(result.positive);
+    state.lastNegative = normalizePromptText(result.negative);
+    state.lastShotCard = result.shotCard;
+    state.lastTrigger = buildChatu8Trigger(state.lastPositive);
+    const positiveArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="positive"]');
+    const negativeArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="negative"]');
+    const shotArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="shot-card"]');
+    const triggerArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="chatu8-trigger"]');
+    if (positiveArea) positiveArea.value = state.lastPositive;
+    if (negativeArea) negativeArea.value = state.lastNegative;
+    if (shotArea) shotArea.value = state.lastShotCard;
+    if (triggerArea) triggerArea.value = state.lastTrigger;
+    if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, baseText, result.source || 'api');
+    else updateMemoryFromSelectedScene(baseText, result.localScene);
+    chat_metadata.variables ||= {};
+    chat_metadata.variables.zhihuiji = true;
+    syncTavernHelperMemory();
+    renderMemoryFields();
+    saveAll();
+    const nextText = baseText.trimEnd() + '\n\n' + state.lastTrigger;
+    setMessageRawText(messageId, nextText, state.lastTrigger);
+    renderInlinePrompt(messageId, state.lastTrigger);
+    await emitMessagePromptEvents(messageId);
+    const clicked = await clickChatu8ImageButton(messageId);
+    setStatus(clicked ? '已写入原文下方，并点击智绘姬图片按钮' : '已写入原文下方，等待智绘姬识别图片按钮');
+    return { ...result, trigger: state.lastTrigger };
 }
 
-async function autoImageFromInput() {
+async function generatePromptUnderMessage(messageId) {
     try {
-        const promptResult = await composeFromInput({ skipInsert: true });
-        if (!promptResult?.positive) return;
-        setStatus('正在提交 ComfyUI 生成图片');
-        const image = await generateDirectComfyImage(promptResult.positive, promptResult.negative || ensureSettings().prompt.negative);
-        renderGeneratedImage(image);
-        if (ensureSettings().chatu8.insertToChatInput) insertTriggerIntoChat();
-        setStatus('图片已生成，预览已更新');
+        await writePromptToMessage(messageId);
     } catch (error) {
-        console.error('[' + EXT_NAME + '] direct ComfyUI image failed', error);
-        setStatus('出图失败: ' + error.message);
+        console.error('[' + EXT_NAME + '] write prompt under message failed', error);
+        setStatus('图片生成入口失败: ' + error.message);
+    }
+}
+
+async function copyMessageTrigger(messageId) {
+    try {
+        const message = chat?.[Number(messageId)];
+        const text = stripLastInlinePrompt(getMessageText(message), message);
+        const result = await buildSmartPrompt(text);
+        await copyText(buildChatu8Trigger(result.positive), '已复制这条消息的智绘姬触发文本');
+    } catch (error) {
+        setStatus('复制失败: ' + error.message);
+    }
+}
+
+async function writePromptUnderLatestFromInput() {
+    const inputArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="scene-input"]');
+    const input = await resolveSourceText(inputArea?.value || '');
+    const latest = getLatestAssistantMessage();
+    if (!latest?.index) {
+        setStatus('没有找到可写入的最新回复，请直接双击原文消息');
+        return;
+    }
+    if (inputArea) inputArea.value = input || latest.text;
+    try {
+        await writePromptToMessage(latest.index, input || latest.text);
+    } catch (error) {
+        setStatus('写入最新回复失败: ' + error.message);
     }
 }
 
@@ -1695,6 +1792,7 @@ function init() {
     }
     bindEvents();
     bindStEvents();
+    bindMessageMenu();
     fillFormFromSettings();
     const tab = ensureSettings().ui.tab || 'compose';
     switchTab(tab);
@@ -1704,7 +1802,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.1.0',
+        version: '0.1.2',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
