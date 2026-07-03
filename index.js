@@ -4,9 +4,12 @@ import {
     characters,
     eventSource,
     event_types,
+    extension_prompt_roles,
+    extension_prompt_types,
     getCurrentChatId,
     saveChatConditional,
     saveSettingsDebounced,
+    setExtensionPrompt,
     this_chid,
 } from '../../../../script.js';
 import {
@@ -19,6 +22,7 @@ const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
+const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
 
 const DEFAULT_SETTINGS = {
     version: 2,
@@ -38,6 +42,18 @@ const DEFAULT_SETTINGS = {
         maxRecentMessages: 8,
         promptLanguage: 'en',
         preferClipboard: true,
+    },
+    storyMemory: {
+        enabled: true,
+        autoIndex: true,
+        injectToPrompt: true,
+        includeOriginal: true,
+        useApiSummary: true,
+        injectDepth: 2,
+        maxEntries: 500,
+        maxRetrieved: 8,
+        maxInjectChars: 1800,
+        maxEntryChars: 900,
     },
     chatu8: {
         enabled: true,
@@ -91,9 +107,21 @@ const DEFAULT_CHAT_MEMORY = {
         visualEvents: [],
         summaryTree: { l1: [], l2: [], l3: [] },
     },
+    story: {
+        summary: '',
+        facts: [],
+        relationships: {},
+        openThreads: [],
+        characterStates: {},
+        entries: [],
+        summaryTree: { l1: [], l2: [], l3: [] },
+        lastRetrieval: [],
+        lastInjectedPrompt: '',
+    },
     history: [],
     runtime: {
         lastMessageHash: '',
+        lastStoryHash: '',
         lastUpdateAt: 0,
     },
 };
@@ -165,6 +193,8 @@ let state = {
     lastImageDataUrl: '',
     analyzerRunning: false,
     analyzerQueue: [],
+    storyAnalyzerRunning: false,
+    storyAnalyzerQueue: [],
     saveTimer: null,
 };
 
@@ -214,6 +244,7 @@ function migrateSettings(settings) {
 }
 
 function ensureChatMemory() {
+    chat_metadata.variables ||= {};
     if (!chat_metadata[EXT_ID]) {
         chat_metadata[EXT_ID] = deepClone(DEFAULT_CHAT_MEMORY);
     }
@@ -500,6 +531,502 @@ function retrieveRelevantMemories(selectedText = '', limit = 10) {
             characters: entry.item.characters || undefined,
         }));
     return ranked;
+}
+
+
+function ensureStoryMemory() {
+    const memory = ensureChatMemory();
+    memory.story ||= {};
+    memory.story.summary ||= '';
+    memory.story.facts ||= [];
+    memory.story.relationships ||= {};
+    memory.story.openThreads ||= [];
+    memory.story.characterStates ||= {};
+    memory.story.entries ||= [];
+    memory.story.summaryTree ||= { l1: [], l2: [], l3: [] };
+    memory.story.summaryTree.l1 ||= [];
+    memory.story.summaryTree.l2 ||= [];
+    memory.story.summaryTree.l3 ||= [];
+    memory.story.lastRetrieval ||= [];
+    memory.story.lastInjectedPrompt ||= '';
+    return memory.story;
+}
+
+function getStoryConfig() {
+    const settings = ensureSettings();
+    settings.storyMemory = deepMerge(DEFAULT_SETTINGS.storyMemory, settings.storyMemory || {});
+    return settings.storyMemory;
+}
+
+function clampText(text, max = 1000) {
+    const clean = normalizeMultiline(text || '');
+    const limit = Math.max(80, Number(max) || 1000);
+    return clean.length > limit ? clean.slice(0, limit - 12).trimEnd() + '\n...(截断)' : clean;
+}
+
+function stripGeneratedPromptText(text) {
+    return normalizeMultiline(text)
+        .replace(/\n{1,2}\[[A-Za-z0-9\s,.;:'"()_+\-\/\\|]+\]\s*$/g, '')
+        .replace(/^\s*(scene_position|prompt|negative_prompt)\s*:\s*[^\n]*(?:\n|$)/gmi, '')
+        .trim();
+}
+
+function looksLikePromptScaffold(text) {
+    const clean = normalizeMultiline(text);
+    const hits = [
+        '剧情要求', '详略安排', '文笔要求', '补充要求', '增项检查', '创作预备',
+        '生图处理', '正文模型禁止输出', 'JSON 格式', 'positive_prompt', 'negative_prompt',
+        'scene_position', '不要输出任何图片标签', '基于历史对话',
+    ].filter(term => clean.includes(term)).length;
+    return hits >= 2 || /^\s*(prompt|negative_prompt|scene_position)\s*:/mi.test(clean);
+}
+
+function isStoryIndexableText(text) {
+    const clean = stripGeneratedPromptText(text);
+    if (clean.length < 12) return false;
+    if (looksLikePromptScaffold(clean)) return false;
+    return true;
+}
+
+function getMessageRole(message) {
+    if (message?.is_user) return 'user';
+    if (message?.is_system) return 'system';
+    return 'assistant';
+}
+
+function getMessageSpeaker(message) {
+    return normalizeLine(message?.name || (message?.is_user ? 'user' : getCurrentCharacterName()));
+}
+
+function extractImportantStoryLines(text, pattern, limit = 5) {
+    const clean = normalizeMultiline(text);
+    const lines = clean
+        .split(/(?<=[。！？!?])\s*|\n+/)
+        .map(line => normalizeLine(line))
+        .filter(line => line.length >= 8 && line.length <= 180);
+    return uniqueParts(lines.filter(line => pattern.test(line))).slice(0, limit);
+}
+
+function createStoryEntry(text, source = 'message', index = null, patch = {}) {
+    const cfg = getStoryConfig();
+    const clean = stripGeneratedPromptText(text);
+    const message = Number.isInteger(Number(index)) ? chat?.[Number(index)] : null;
+    const id = patch.id || hashText([getCurrentChatId?.() || '', Number.isInteger(Number(index)) ? Number(index) : '', clean].join('\n'));
+    const summary = normalizeLine(patch.summary || patch.entrySummary || compactPreview(clean, 260));
+    return {
+        id,
+        at: Number(patch.at || Date.now()),
+        index: Number.isInteger(Number(index)) ? Number(index) : null,
+        role: patch.role || getMessageRole(message),
+        name: patch.name || getMessageSpeaker(message),
+        source,
+        summary,
+        text: clampText(patch.text || patch.original || clean, cfg.maxEntryChars),
+        keywords: uniqueParts([...(patch.keywords || []), ...memoryTokens(clean, summary)].map(String)).slice(0, 90),
+        importance: Number.isFinite(Number(patch.importance)) ? Number(patch.importance) : 0.5,
+    };
+}
+
+function storyPatchFromLocal(text, source = 'message', index = null) {
+    const clean = stripGeneratedPromptText(text);
+    const factPattern = /(设定|身份|名字|叫|来自|属于|规则|不能|必须|曾经|过去|契约|秘密|真相|目标|任务|约定|承诺|关系|喜欢|讨厌|害怕|信任|背叛|死亡|受伤|发现|知道|记得|忘记|原因|因为|所以|世界|组织|地点|家族|能力|魔法|天使|恶魔|决定|选择)/;
+    const threadPattern = /(还没|尚未|准备|打算|决定|将要|之后|接下来|寻找|调查|等待|疑问|为什么|怎么办|是否|能否|没有解决|留下|伏笔|\?|？)/;
+    return {
+        confidence: 0.45,
+        facts: extractImportantStoryLines(clean, factPattern, 4),
+        openThreads: extractImportantStoryLines(clean, threadPattern, 4),
+        entry: createStoryEntry(clean, source, index),
+    };
+}
+
+function sanitizeStoryEntry(entry) {
+    const cfg = getStoryConfig();
+    const cleanText = clampText(entry.text || entry.original || entry.preview || '', cfg.maxEntryChars);
+    const summary = normalizeLine(entry.summary || compactPreview(cleanText, 260));
+    return {
+        id: entry.id || hashText([entry.index ?? '', summary, cleanText].join('\n')),
+        at: Number(entry.at || Date.now()),
+        index: Number.isInteger(Number(entry.index)) ? Number(entry.index) : null,
+        role: entry.role || 'assistant',
+        name: normalizeLine(entry.name || ''),
+        source: entry.source || 'story',
+        summary,
+        text: cleanText,
+        keywords: uniqueParts([...(entry.keywords || []), ...memoryTokens(summary, cleanText)].map(String)).slice(0, 90),
+        importance: Number.isFinite(Number(entry.importance)) ? Number(entry.importance) : 0.5,
+    };
+}
+
+function mergeNamedMemoryMap(target, patch) {
+    if (!patch || typeof patch !== 'object') return target;
+    for (const [name, value] of Object.entries(patch)) {
+        if (!normalizeLine(name)) continue;
+        if (typeof value === 'string') target[name] = normalizeLine(value);
+        else if (value && typeof value === 'object') target[name] = normalizeLine(Object.entries(value).map(([key, item]) => key + ': ' + item).join('；'));
+    }
+    return target;
+}
+
+function applyStoryMemoryPatch(patch, sourceText = '', source = 'story', index = null, options = {}) {
+    if (!patch || typeof patch !== 'object') return;
+    const confidence = Number(patch.confidence ?? 0.5);
+    if (confidence < 0.25) return;
+    const cfg = getStoryConfig();
+    const story = ensureStoryMemory();
+    const summary = patch.summary || patch.storySummary || patch.longTermSummary;
+    if (isUsefulText(summary)) story.summary = normalizeLine(summary);
+    story.facts = pushUniqueLimited(story.facts || [], patch.facts || patch.keyFacts || [], 160);
+    story.openThreads = pushUniqueLimited(story.openThreads || [], patch.openThreads || patch.threads || patch.unresolved || [], 120);
+    story.relationships ||= {};
+    story.characterStates ||= {};
+    mergeNamedMemoryMap(story.relationships, patch.relationships || {});
+    mergeNamedMemoryMap(story.characterStates, patch.characterStates || patch.characters || {});
+
+    const clean = stripGeneratedPromptText(sourceText);
+    if (clean || patch.entry) {
+        const entry = sanitizeStoryEntry({ ...createStoryEntry(clean, source, index, patch.entry || {}), ...(patch.entry || {}) });
+        story.entries = (story.entries || []).filter(item => item.id !== entry.id);
+        story.entries.unshift(entry);
+        story.entries = story.entries.slice(0, Math.max(50, Number(cfg.maxEntries) || 500));
+    }
+
+    rebuildStorySummaryTree(story);
+    updateStoryMemoryInjection();
+    if (!options.deferRender) renderStoryMemoryFields();
+    if (!options.deferSave) saveAll();
+}
+
+function rebuildStorySummaryTree(story = ensureStoryMemory()) {
+    const entries = story.entries || [];
+    const l1 = chunkItems(entries, 10).map((items, index) => makeSummaryNode('L1', items, index));
+    const l2 = chunkItems(l1, 6).map((items, index) => makeSummaryNode('L2', items, index));
+    const l3 = chunkItems(l2, 6).map((items, index) => makeSummaryNode('L3', items, index));
+    story.summaryTree = { l1: l1.slice(0, 60), l2: l2.slice(0, 24), l3: l3.slice(0, 10) };
+}
+
+function formatNamedMemoryMap(map, limit = 24) {
+    return Object.entries(map || {})
+        .filter(([name, value]) => normalizeLine(name) && isUsefulText(String(value)))
+        .slice(0, limit)
+        .map(([name, value]) => name + '：' + normalizeLine(typeof value === 'string' ? value : JSON.stringify(value)))
+        .join('\n');
+}
+
+function parseNamedMemoryLines(text) {
+    const output = {};
+    for (const line of String(text || '').split(/\n+/)) {
+        const clean = normalizeLine(line);
+        if (!clean) continue;
+        const match = clean.match(/^([^:：]{1,40})[:：]\s*(.+)$/);
+        if (match) output[match[1].trim()] = match[2].trim();
+    }
+    return output;
+}
+
+function buildStoryMemoryApiContext() {
+    const story = ensureStoryMemory();
+    return {
+        summary: story.summary,
+        facts: (story.facts || []).slice(0, 30),
+        relationships: story.relationships || {},
+        openThreads: (story.openThreads || []).slice(0, 30),
+        characterStates: story.characterStates || {},
+        recentEntries: (story.entries || []).slice(0, 12).map(item => ({ name: item.name, role: item.role, summary: item.summary })),
+    };
+}
+
+async function analyzeStoryMemoryPatch(text, source = 'message', index = null) {
+    const settings = ensureSettings();
+    const cfg = getStoryConfig();
+    if (!settings.api.enabled || !settings.api.url || !cfg.useApiSummary) return null;
+    const clean = stripGeneratedPromptText(text);
+    if (!isStoryIndexableText(clean)) return null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.max(2500, settings.api.timeoutMs || 12000));
+    const body = {
+        model: settings.api.model || undefined,
+        temperature: Number(settings.api.temperature ?? 0.1),
+        response_format: { type: 'json_object' },
+        messages: [
+            {
+                role: 'system',
+                content: [
+                    '你是 SillyTavern 角色扮演/小说创作的长期剧情记忆整理器。',
+                    '只整理已经发生或已经明确设定的内容，返回严格 JSON，不要续写剧情，不要解释。',
+                    '目标是防止后续正文生成吃设定：保留人物身份、世界规则、前因后果、关系变化、承诺、秘密、目标、未解决伏笔。',
+                    '不要记录临时画面细节，如当前服装、光线、姿势，除非它们成为剧情设定。不要记录系统提示、写作要求、prompt、negative_prompt。',
+                    'summary 是当前长期剧情状态的一段短摘要；facts 是稳定事实；relationships 是人物关系；openThreads 是未解决目标/伏笔；characterStates 是持续性心理/立场/伤势/能力状态。',
+                    'entry.summary 是这条新增文本的剧情摘要，keywords 是用于检索的中文关键词。',
+                    'JSON 格式: {"confidence":0-1,"summary":"","facts":[],"relationships":{},"openThreads":[],"characterStates":{},"entry":{"summary":"","importance":0-1,"keywords":[]}}',
+                ].join('\n'),
+            },
+            {
+                role: 'user',
+                content: JSON.stringify({
+                    currentStoryMemory: buildStoryMemoryApiContext(),
+                    newText: clean,
+                    source,
+                    index,
+                    currentCharacter: getCurrentCharacterName(),
+                    world: ensureSettings().memory.world,
+                }),
+            },
+        ],
+    };
+    try {
+        const response = await fetch(normalizeApiUrl(settings.api.url), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(settings.api.key ? { Authorization: 'Bearer ' + settings.api.key } : {}) },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('story memory API ' + response.status);
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content ?? data?.content ?? data?.text ?? data;
+        return parsePatchContent(content);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function enqueueStoryIndex(text, source = 'message', index = null) {
+    const settings = ensureSettings();
+    const cfg = getStoryConfig();
+    const clean = stripGeneratedPromptText(text);
+    if (!cfg.enabled || !cfg.autoIndex || !isStoryIndexableText(clean)) return;
+    const hash = hashText([getCurrentChatId?.() || '', Number.isInteger(Number(index)) ? Number(index) : source, clean].join('\n'));
+    const memory = ensureChatMemory();
+    if (memory.runtime.lastStoryHash === hash) return;
+    memory.runtime.lastStoryHash = hash;
+    applyStoryMemoryPatch(storyPatchFromLocal(clean, source, index), clean, source, index, { deferRender: true, deferSave: true });
+    updateStoryMemoryInjection();
+    saveAll();
+    if (settings.api.enabled && settings.api.url && cfg.useApiSummary) {
+        state.storyAnalyzerQueue.push({ text: clean, source, index, hash });
+        runStoryAnalyzerQueue();
+    }
+}
+
+async function runStoryAnalyzerQueue() {
+    if (state.storyAnalyzerRunning) return;
+    state.storyAnalyzerRunning = true;
+    try {
+        while (state.storyAnalyzerQueue.length) {
+            const item = state.storyAnalyzerQueue.shift();
+            try {
+                const patch = await analyzeStoryMemoryPatch(item.text, item.source, item.index);
+                if (patch) applyStoryMemoryPatch(patch, item.text, item.source + ':api', item.index);
+            } catch (error) {
+                console.warn('[' + EXT_NAME + '] story memory analysis failed', error);
+            }
+        }
+    } finally {
+        state.storyAnalyzerRunning = false;
+        renderStoryMemoryFields();
+    }
+}
+
+function retrieveStoryMemories(query = '', limit = getStoryConfig().maxRetrieved || 8) {
+    const story = ensureStoryMemory();
+    const tokens = memoryTokens(query, getCurrentCharacterName(), story.summary, (story.facts || []).slice(0, 12).join(' '));
+    const latestIndex = Math.max(0, (chat || []).length - 1);
+    const candidates = [
+        ...(story.summaryTree?.l3 || []).map(item => ({ ...item, kind: 'L3' })),
+        ...(story.summaryTree?.l2 || []).map(item => ({ ...item, kind: 'L2' })),
+        ...(story.summaryTree?.l1 || []).map(item => ({ ...item, kind: 'L1' })),
+        ...(story.entries || []).filter(item => Number(item.index) !== latestIndex).map(item => ({ ...item, kind: '原文' })),
+    ];
+    let ranked = candidates
+        .map(item => ({ item, score: scoreMemoryItem(item, tokens, 0.08) }))
+        .filter(entry => entry.score > 0 || !query)
+        .sort((a, b) => b.score - a.score || Number(b.item.at || 0) - Number(a.item.at || 0))
+        .slice(0, Math.max(1, Number(limit) || 8))
+        .map(entry => ({
+            kind: entry.item.kind,
+            score: Number(entry.score.toFixed(2)),
+            summary: entry.item.summary || entry.item.preview || '',
+            text: entry.item.text || entry.item.preview || '',
+            name: entry.item.name || '',
+            role: entry.item.role || '',
+            index: entry.item.index ?? null,
+        }));
+    if (!ranked.length) {
+        ranked = (story.entries || [])
+            .filter(item => Number(item.index) !== latestIndex)
+            .slice(0, Math.max(1, Number(limit) || 8))
+            .map(item => ({ kind: '原文', score: 0, summary: item.summary, text: item.text, name: item.name, role: item.role, index: item.index ?? null }));
+    }
+    const seen = new Set();
+    ranked = ranked.filter(item => {
+        const key = normalizeLine(item.summary || item.text).slice(0, 120);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    story.lastRetrieval = ranked;
+    return ranked;
+}
+
+function getLatestStoryQuery() {
+    const recent = (chat || [])
+        .slice(-6)
+        .map(message => stripGeneratedPromptText(getMessageText(message)))
+        .filter(Boolean)
+        .join('\n\n');
+    return recent || getCurrentCharacterName();
+}
+
+function buildStoryMemoryPrompt(query = '') {
+    const cfg = getStoryConfig();
+    if (!cfg.enabled || !cfg.injectToPrompt) return '';
+    const story = ensureStoryMemory();
+    const hasMemory = story.summary || (story.facts || []).length || (story.entries || []).length || Object.keys(story.relationships || {}).length;
+    if (!hasMemory) return '';
+    const retrieved = retrieveStoryMemories(query || getLatestStoryQuery(), cfg.maxRetrieved);
+    const lines = [
+        '[剧情长期记忆]',
+        '用途：保持角色设定、世界规则、前文因果、关系变化和未解决伏笔一致；只在相关时自然使用，不要声明你读取了记忆。',
+    ];
+    if (story.summary) lines.push('长期摘要：' + story.summary);
+    if ((story.facts || []).length) lines.push('关键设定：\n- ' + story.facts.slice(0, 18).join('\n- '));
+    const relationshipLines = formatNamedMemoryMap(story.relationships, 16);
+    if (relationshipLines) lines.push('人物关系：\n' + relationshipLines.split('\n').map(line => '- ' + line).join('\n'));
+    const stateLines = formatNamedMemoryMap(story.characterStates, 16);
+    if (stateLines) lines.push('持续状态：\n' + stateLines.split('\n').map(line => '- ' + line).join('\n'));
+    if ((story.openThreads || []).length) lines.push('未解决伏笔/目标：\n- ' + story.openThreads.slice(0, 14).join('\n- '));
+    if (retrieved.length) {
+        lines.push('相关旧剧情：');
+        for (const item of retrieved.slice(0, cfg.maxRetrieved)) {
+            const prefix = item.index !== null && item.index !== undefined ? '#' + item.index + ' ' : '';
+            const original = cfg.includeOriginal && item.text ? '；原文片段：' + compactPreview(item.text, 180) : '';
+            lines.push('- ' + prefix + compactPreview(item.summary, 220) + original);
+        }
+    }
+    lines.push('[/剧情长期记忆]');
+    const prompt = clampText(lines.join('\n'), cfg.maxInjectChars);
+    story.lastInjectedPrompt = prompt;
+    return prompt;
+}
+
+function clearStoryMemoryInjection() {
+    try {
+        setExtensionPrompt(STORY_MEMORY_PROMPT_KEY, '', extension_prompt_types.IN_CHAT, 0, false, extension_prompt_roles.SYSTEM);
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] clear story injection failed', error);
+    }
+}
+
+function updateStoryMemoryInjection(query = '') {
+    const cfg = getStoryConfig();
+    if (!cfg.enabled || !cfg.injectToPrompt) {
+        clearStoryMemoryInjection();
+        return '';
+    }
+    const prompt = buildStoryMemoryPrompt(query || getLatestStoryQuery());
+    try {
+        setExtensionPrompt(
+            STORY_MEMORY_PROMPT_KEY,
+            prompt,
+            extension_prompt_types.IN_CHAT,
+            Math.max(0, Number(cfg.injectDepth) || 0),
+            false,
+            extension_prompt_roles.SYSTEM,
+        );
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] update story injection failed', error);
+    }
+    return prompt;
+}
+
+function indexExistingStoryMemory(options = {}) {
+    const cfg = getStoryConfig();
+    if (!cfg.enabled) return 0;
+    const story = ensureStoryMemory();
+    const existing = new Map((story.entries || []).map(item => [item.id, item]));
+    const rows = (chat || [])
+        .map((message, index) => ({ message, index, text: stripGeneratedPromptText(getMessageText(message)) }))
+        .filter(item => item.text && !item.message?.is_system && isStoryIndexableText(item.text));
+    for (const item of rows) {
+        const entry = createStoryEntry(item.text, 'backfill', item.index);
+        existing.set(entry.id, { ...(existing.get(entry.id) || {}), ...entry });
+    }
+    story.entries = [...existing.values()]
+        .sort((a, b) => Number(b.index ?? -1) - Number(a.index ?? -1) || Number(b.at || 0) - Number(a.at || 0))
+        .slice(0, Math.max(50, Number(cfg.maxEntries) || 500));
+    if (!story.summary && story.entries.length) {
+        story.summary = compactPreview(story.entries.slice(0, 12).reverse().map(item => item.summary).join('；'), 620);
+    }
+    rebuildStorySummaryTree(story);
+    updateStoryMemoryInjection();
+    renderStoryMemoryFields();
+    saveAll();
+    if (!options.silent) setStatus('已回溯索引当前聊天 ' + rows.length + ' 条剧情记忆');
+    return rows.length;
+}
+
+function readStorySettingsFromForm(root) {
+    if (!root) return;
+    const cfg = getStoryConfig();
+    const bool = (name, fallback) => root.querySelector('[name="' + name + '"]')?.checked ?? fallback;
+    const num = (name, fallback, min = 0) => Math.max(min, Number(root.querySelector('[name="' + name + '"]')?.value || fallback));
+    cfg.enabled = bool('storyMemory.enabled', cfg.enabled);
+    cfg.autoIndex = bool('storyMemory.autoIndex', cfg.autoIndex);
+    cfg.injectToPrompt = bool('storyMemory.injectToPrompt', cfg.injectToPrompt);
+    cfg.includeOriginal = bool('storyMemory.includeOriginal', cfg.includeOriginal);
+    cfg.useApiSummary = bool('storyMemory.useApiSummary', cfg.useApiSummary);
+    cfg.injectDepth = num('storyMemory.injectDepth', cfg.injectDepth, 0);
+    cfg.maxRetrieved = num('storyMemory.maxRetrieved', cfg.maxRetrieved, 1);
+    cfg.maxInjectChars = num('storyMemory.maxInjectChars', cfg.maxInjectChars, 400);
+    cfg.maxEntries = num('storyMemory.maxEntries', cfg.maxEntries, 50);
+}
+
+function readStoryMemoryFromForm(root) {
+    if (!root) return;
+    const story = ensureStoryMemory();
+    const summary = root.querySelector('[name="story.summary"]');
+    if (!summary) return;
+    story.summary = summary.value.trim();
+    story.facts = textArray(root.querySelector('[name="story.facts"]')?.value || '').slice(0, 160);
+    story.openThreads = textArray(root.querySelector('[name="story.openThreads"]')?.value || '').slice(0, 120);
+    story.relationships = parseNamedMemoryLines(root.querySelector('[name="story.relationships"]')?.value || '');
+    story.characterStates = parseNamedMemoryLines(root.querySelector('[name="story.characterStates"]')?.value || '');
+    updateStoryMemoryInjection();
+}
+
+function renderStoryMemoryFields() {
+    const root = document.querySelector(SETTINGS_SELECTOR);
+    if (!root) return;
+    const cfg = getStoryConfig();
+    const story = ensureStoryMemory();
+    const setChecked = (name, value) => {
+        const el = root.querySelector('[name="' + name + '"]');
+        if (el) el.checked = Boolean(value);
+    };
+    setChecked('storyMemory.enabled', cfg.enabled);
+    setChecked('storyMemory.autoIndex', cfg.autoIndex);
+    setChecked('storyMemory.injectToPrompt', cfg.injectToPrompt);
+    setChecked('storyMemory.includeOriginal', cfg.includeOriginal);
+    setChecked('storyMemory.useApiSummary', cfg.useApiSummary);
+    setValue(root, 'storyMemory.injectDepth', cfg.injectDepth);
+    setValue(root, 'storyMemory.maxRetrieved', cfg.maxRetrieved);
+    setValue(root, 'storyMemory.maxInjectChars', cfg.maxInjectChars);
+    setValue(root, 'storyMemory.maxEntries', cfg.maxEntries);
+    setValue(root, 'story.summary', story.summary || '');
+    setValue(root, 'story.facts', Array.isArray(story.facts) ? story.facts.join('\n') : '');
+    setValue(root, 'story.openThreads', Array.isArray(story.openThreads) ? story.openThreads.join('\n') : '');
+    setValue(root, 'story.relationships', formatNamedMemoryMap(story.relationships));
+    setValue(root, 'story.characterStates', formatNamedMemoryMap(story.characterStates));
+    const stats = root.querySelector('[data-role="story-stats"]');
+    if (stats) {
+        const tree = story.summaryTree || {};
+        const injectedLength = (story.lastInjectedPrompt || buildStoryMemoryPrompt(getLatestStoryQuery()) || '').length;
+        stats.textContent = '已索引 ' + (story.entries || []).length + ' 条；L1 ' + (tree.l1 || []).length + ' / L2 ' + (tree.l2 || []).length + ' / L3 ' + (tree.l3 || []).length + '；注入 ' + injectedLength + ' 字';
+    }
+    const retrieval = root.querySelector('[data-role="story-retrieval"]');
+    if (retrieval) {
+        const items = story.lastRetrieval?.length ? story.lastRetrieval : retrieveStoryMemories(getLatestStoryQuery(), cfg.maxRetrieved);
+        retrieval.value = items.map(item => (item.index !== null && item.index !== undefined ? '#' + item.index + ' ' : '') + '[' + item.kind + '] ' + item.summary).join('\n');
+    }
 }
 
 function isUsefulText(value) {
@@ -1217,6 +1744,7 @@ function readFormToSettings() {
     settings.chatu8.insertToChatInput = root.querySelector('[name="chatu8.insertToChatInput"]')?.checked ?? true;
     settings.chatu8.startTag = root.querySelector('[name="chatu8.startTag"]')?.value || '[';
     settings.chatu8.endTag = root.querySelector('[name="chatu8.endTag"]')?.value || ']';
+    readStorySettingsFromForm(root);
     settings.prompt.stylePreset = root.querySelector('[name="prompt.stylePreset"]').value;
     settings.prompt.quality = root.querySelector('[name="prompt.quality"]').value.trim();
     settings.prompt.positivePrefix = root.querySelector('[name="prompt.positivePrefix"]').value.trim();
@@ -1253,6 +1781,7 @@ function readFormToMemory() {
     chatMemory.longTerm.summary = root.querySelector('[name="memory.summary"]')?.value.trim() || '';
     chatMemory.longTerm.facts = textArray(root.querySelector('[name="memory.facts"]')?.value || '').slice(0, 80);
     chatMemory.longTerm.visualNotes = textArray(root.querySelector('[name="memory.visualNotes"]')?.value || '').slice(0, 60);
+    readStoryMemoryFromForm(root);
     saveAll();
 }
 
@@ -1279,6 +1808,7 @@ function renderMemoryFields() {
     }
     renderRecentMessages();
     renderHistory();
+    renderStoryMemoryFields();
 }
 
 function setValue(root, name, value) {
@@ -1388,7 +1918,8 @@ function buildSettingsHtml() {
                     <div class="csid-status" data-role="status">就绪</div>
                     <div class="csid-tabs">
                         <button class="menu_button csid-tab is-active" data-tab="compose">生图</button>
-                        <button class="menu_button csid-tab" data-tab="memory">记忆</button>
+                        <button class="menu_button csid-tab" data-tab="memory">视觉记忆</button>
+                        <button class="menu_button csid-tab" data-tab="story">剧情记忆</button>
                         <button class="menu_button csid-tab" data-tab="settings">设置</button>
                     </div>
 
@@ -1472,6 +2003,42 @@ function buildSettingsHtml() {
                             <label class="menu_button csid-file-button">导入文件<input type="file" data-action="import-file" accept="application/json"></label>
                         </div>
                         <div class="csid-history" data-role="history"></div>
+                    </section>
+
+
+                    <section class="csid-panel" data-panel="story">
+                        <div class="csid-memory-note">剧情长期记忆只注入正文生成上下文，用来保持设定、前因后果、关系和伏笔一致；不会写入聊天正文，也不会进入智绘姬方括号。</div>
+                        <div class="csid-toggles">
+                            <label><input type="checkbox" name="storyMemory.enabled"> 启用剧情长期记忆</label>
+                            <label><input type="checkbox" name="storyMemory.autoIndex"> 自动索引新聊天</label>
+                            <label><input type="checkbox" name="storyMemory.injectToPrompt"> 生成正文时注入</label>
+                            <label><input type="checkbox" name="storyMemory.includeOriginal"> 注入相关原文片段</label>
+                            <label><input type="checkbox" name="storyMemory.useApiSummary"> 用额外 API 后台整理</label>
+                        </div>
+                        <div class="csid-grid two">
+                            <label>注入深度<input class="text_pole" type="number" name="storyMemory.injectDepth" min="0" max="20" step="1"></label>
+                            <label>检索条数<input class="text_pole" type="number" name="storyMemory.maxRetrieved" min="1" max="20" step="1"></label>
+                            <label>注入字数上限<input class="text_pole" type="number" name="storyMemory.maxInjectChars" min="400" max="6000" step="100"></label>
+                            <label>最多记忆条数<input class="text_pole" type="number" name="storyMemory.maxEntries" min="50" max="2000" step="50"></label>
+                        </div>
+                        <label class="csid-label">长期剧情摘要</label>
+                        <textarea class="text_pole csid-memory-area" name="story.summary" placeholder="由插件自动整理，也可以手动修正。"></textarea>
+                        <label class="csid-label">关键设定 / 已发生事实</label>
+                        <textarea class="text_pole csid-memory-area" name="story.facts" placeholder="每行一条：身份、规则、重要事件、承诺、秘密等。"></textarea>
+                        <label class="csid-label">未解决伏笔 / 目标</label>
+                        <textarea class="text_pole csid-memory-area small" name="story.openThreads" placeholder="每行一条：尚未解决的疑问、目标、约定、危险。"></textarea>
+                        <label class="csid-label">人物关系</label>
+                        <textarea class="text_pole csid-memory-area small" name="story.relationships" placeholder="格式：角色A：与角色B的关系变化"></textarea>
+                        <label class="csid-label">持续状态</label>
+                        <textarea class="text_pole csid-memory-area small" name="story.characterStates" placeholder="格式：角色名：持续心理、立场、伤势、能力状态"></textarea>
+                        <div class="csid-actions">
+                            <button class="menu_button result-control" data-action="save-story-memory">保存剧情记忆</button>
+                            <button class="menu_button" data-action="backfill-story">回溯索引当前聊天</button>
+                            <button class="menu_button" data-action="refresh-story-injection">刷新注入</button>
+                        </div>
+                        <div class="csid-memory-note" data-role="story-stats">剧情记忆未索引</div>
+                        <label class="csid-label">本次检索预览</label>
+                        <textarea class="text_pole csid-output" data-role="story-retrieval" readonly></textarea>
                     </section>
 
                     <section class="csid-panel" data-panel="settings">
@@ -1570,6 +2137,21 @@ function bindEvents() {
         if (action === 'copy-positive') copyText(state.lastPositive, '已复制正向提示词');
         if (action === 'copy-negative') copyText(state.lastNegative, '已复制反向提示词');
         if (action === 'analyze-input') analyzeInputNow();
+        if (action === 'backfill-story') indexExistingStoryMemory();
+        if (action === 'refresh-story-injection') {
+            readFormToSettings();
+            readFormToMemory();
+            updateStoryMemoryInjection();
+            renderStoryMemoryFields();
+            setStatus('剧情记忆注入已刷新');
+        }
+        if (action === 'save-story-memory') {
+            readFormToSettings();
+            readFormToMemory();
+            updateStoryMemoryInjection();
+            renderStoryMemoryFields();
+            setStatus('剧情记忆已保存');
+        }
         if (action === 'save-memory') {
             readFormToMemory();
             setStatus('记忆已保存');
@@ -1786,7 +2368,7 @@ function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRa
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
     copyButton.dataset.csidMessageAction = 'copy';
-    copyButton.innerHTML = '<span class="fa-solid fa-copy"></span><span>复制生成文本</span>';
+    copyButton.innerHTML = '<span class="fa-solid fa-copy"></span><span>复制触发文本</span>';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.dataset.csidMessageAction = 'close';
@@ -2119,28 +2701,54 @@ function bindStEvents() {
     state.stEventsBound = true;
     onStEvent(event_types.CHAT_CHANGED, () => {
         ensureChatMemory();
+        ensureStoryMemory();
         state.selectedMessages.clear();
         setTimeout(() => {
+            indexExistingStoryMemory({ silent: true });
+            updateStoryMemoryInjection();
             fillFormFromSettings();
             renderMemoryFields();
         }, 150);
     });
+    onStEvent(event_types.MESSAGE_SENT, messageId => {
+        const text = getMessageText(chat?.[Number(messageId)]);
+        if (text) enqueueStoryIndex(text, 'message_sent', Number(messageId));
+        updateStoryMemoryInjection(text || getLatestStoryQuery());
+        setTimeout(renderRecentMessages, 150);
+    });
     onStEvent(event_types.MESSAGE_RECEIVED, messageId => {
         const text = getMessageText(chat?.[Number(messageId)]);
-        if (text) enqueueMemoryAnalysis(text, 'message_received');
+        if (text) {
+            enqueueMemoryAnalysis(text, 'message_received');
+            enqueueStoryIndex(text, 'message_received', Number(messageId));
+        }
         setTimeout(renderRecentMessages, 150);
     });
     onStEvent(event_types.MESSAGE_UPDATED, messageId => {
         const text = getMessageText(chat?.[Number(messageId)]);
-        if (text) enqueueMemoryAnalysis(text, 'message_updated');
+        if (text) {
+            enqueueMemoryAnalysis(text, 'message_updated');
+            enqueueStoryIndex(text, 'message_updated', Number(messageId));
+        }
         setTimeout(renderRecentMessages, 150);
+    });
+    onStEvent(event_types.GENERATION_STARTED, () => {
+        updateStoryMemoryInjection(getLatestStoryQuery());
+    });
+    onStEvent(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, () => {
+        updateStoryMemoryInjection(getLatestStoryQuery());
     });
     onStEvent(event_types.GENERATION_ENDED, () => {
         const latest = getLatestAssistantMessage();
-        if (latest?.text) enqueueMemoryAnalysis(latest.text, 'generation_ended');
+        if (latest?.text) {
+            enqueueMemoryAnalysis(latest.text, 'generation_ended');
+            enqueueStoryIndex(latest.text, 'generation_ended', latest.index);
+        }
+        updateStoryMemoryInjection();
         setTimeout(renderRecentMessages, 150);
     });
 }
+
 
 function init() {
     ensureSettings();
@@ -2152,6 +2760,11 @@ function init() {
     bindStEvents();
     bindMessageMenu();
     fillFormFromSettings();
+    setTimeout(() => {
+        indexExistingStoryMemory({ silent: true });
+        updateStoryMemoryInjection();
+        renderStoryMemoryFields();
+    }, 300);
     const tab = ensureSettings().ui.tab || 'compose';
     switchTab(tab);
     exposeDebugApi();
@@ -2160,7 +2773,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.1.7',
+        version: '0.2.0',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
@@ -2173,6 +2786,9 @@ function exposeDebugApi() {
         },
         getSettings: () => structuredClone(ensureSettings()),
         getMemory: () => structuredClone(ensureChatMemory()),
+        getStoryPrompt: () => buildStoryMemoryPrompt(getLatestStoryQuery()),
+        refreshStoryMemory: () => updateStoryMemoryInjection(getLatestStoryQuery()),
+        indexStoryMemory: () => indexExistingStoryMemory(),
         writePromptToMessage,
     };
 }
