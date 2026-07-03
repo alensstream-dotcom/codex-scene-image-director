@@ -414,8 +414,8 @@ function extractSceneLocal(text) {
     const timeMatch = clean.match(/(清晨|早晨|上午|中午|下午|黄昏|傍晚|夜晚|深夜|凌晨|雨夜|雪夜)/);
     if (timeMatch) result.time = timeMatch[1];
 
-    const weatherMatch = clean.match(/(下雨|雨中|暴雨|小雨|下雪|雪中|大雪|雾|薄雾|晴朗|阴天|雷雨|风很大)/);
-    if (weatherMatch) result.weather = weatherMatch[1];
+    const weatherMatch = clean.match(/(下雨|雨中|雨夜|暴雨|小雨|下雪|雪中|雪夜|大雪|雾|薄雾|晴朗|阴天|雷雨|风很大)/);
+    if (weatherMatch) result.weather = normalizeWeatherFromText(weatherMatch[1]);
 
     const lightingMatch = clean.match(/(阳光|月光|灯光|烛光|霓虹|昏暗|逆光|暖光|冷光|阴影|晨光|夕阳)/);
     if (lightingMatch) result.lighting = lightingMatch[1];
@@ -817,6 +817,21 @@ function normalizePromptText(text) {
         .trim();
 }
 
+function normalizeWeatherFromText(value) {
+    const text = String(value || '');
+    if (/雨夜|雨中|下雨|暴雨|小雨|雷雨/.test(text)) return '下雨';
+    if (/雪夜|雪中|下雪|大雪/.test(text)) return '下雪';
+    return normalizeLine(text);
+}
+
+function patchSceneWithSourceFacts(scene, sourceText) {
+    const next = { ...(scene || {}) };
+    const text = String(sourceText || '');
+    if (/雨夜|雨中|下雨|暴雨|小雨|雷雨/.test(text)) next.weather = '下雨';
+    if (/雪夜|雪中|下雪|大雪/.test(text)) next.weather = '下雪';
+    return next;
+}
+
 function buildChatu8Trigger(positive) {
     const settings = ensureSettings();
     const clean = (settings.behavior.promptLanguage === 'en' ? cleanEnglishPrompt(positive) : normalizePromptText(positive)).trim();
@@ -847,7 +862,7 @@ function applyMemoryPatch(patch, sourceText = '', source = 'api') {
     if (confidence < 0.35) return;
     const settings = ensureSettings();
     const memory = ensureChatMemory();
-    const scene = patch.scene || {};
+    const scene = patchSceneWithSourceFacts(patch.scene || {}, sourceText);
     for (const key of ['location', 'time', 'weather', 'lighting', 'mood', 'worldState']) {
         if (isUsefulText(scene[key])) memory.scene[key] = normalizeLine(scene[key]);
     }
