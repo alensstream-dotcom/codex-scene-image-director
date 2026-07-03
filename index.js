@@ -819,11 +819,11 @@ function normalizePromptText(text) {
 
 function buildChatu8Trigger(positive) {
     const settings = ensureSettings();
-    const clean = settings.behavior.promptLanguage === 'en' ? cleanEnglishPrompt(positive) : normalizePromptText(positive);
+    const clean = (settings.behavior.promptLanguage === 'en' ? cleanEnglishPrompt(positive) : normalizePromptText(positive)).trim();
     if (!settings.chatu8?.enabled) return clean;
-    const start = settings.chatu8?.startTag || '[';
-    const end = settings.chatu8?.endTag || ']';
-    return start + clean + end;
+    const start = String(settings.chatu8?.startTag || '[').trim() || '[';
+    const end = String(settings.chatu8?.endTag || ']').trim() || ']';
+    return (start + clean + end).trim();
 }
 
 async function buildSmartPrompt(text) {
