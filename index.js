@@ -1582,18 +1582,6 @@ function bindMessageMenu() {
     state.messageMenuBound = true;
     document.addEventListener('mouseup', event => openMenuFromSelection(event, 0), true);
     document.addEventListener('touchend', event => openMenuFromSelection(event, 120), true);
-    document.addEventListener('dblclick', event => {
-        if (event.target.closest(SETTINGS_SELECTOR)) return;
-        if (event.target.closest('textarea,input,button,select,a')) return;
-        const mes = event.target.closest('.mes');
-        if (!mes) return;
-        const messageId = getMessageIdFromElement(mes);
-        if (!Number.isInteger(messageId) || messageId < 0 || !chat?.[messageId]) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const context = getSelectionContext(event);
-        showMessageMenu(event, messageId, context?.messageId === messageId ? context.text : '', context?.messageId === messageId ? context.range : null);
-    }, true);
     document.addEventListener('click', event => {
         const actionButton = event.target.closest('[data-csid-message-action]');
         if (actionButton) {
@@ -1725,89 +1713,8 @@ function renderInlinePrompt(messageId, trigger) {
     return insertTriggerIntoVisibleMessage(messageId, trigger, state.activeSelectionRange || null);
 }
 
-function getChatu8Buttons(messageId) {
-    const mes = getMessageElementById(messageId);
-    if (!mes) return [];
-    return [...mes.querySelectorAll('.st-chatu8-image-button, .image-tag-button, button.st-chatu8-image-button')];
-}
-
-function getButtonLink(button) {
-    if (!button) return '';
-    const datasetValues = Object.values(button.dataset || {});
-    const attrValues = ['data-link', 'data-prompt', 'title', 'aria-label', 'value'].map(name => button.getAttribute?.(name));
-    return [...datasetValues, ...attrValues].filter(Boolean).join('\n');
-}
-
-function normalizeButtonComparable(text) {
-    return normalizePromptText(String(text || ''))
-        .replace(/^\s*\[/, '')
-        .replace(/\]\s*$/, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-}
-
-function buttonMatchesTrigger(button, trigger) {
-    const target = normalizeButtonComparable(trigger);
-    if (!target) return false;
-    const values = [getButtonLink(button), button?.textContent || ''];
-    return values.some(value => {
-        const normalized = normalizeButtonComparable(value);
-        return normalized && (normalized.includes(target) || target.includes(normalized));
-    });
-}
-
-function getButtonSignature(button) {
-    const rect = button.getBoundingClientRect?.() || { top: 0, left: 0 };
-    return [getButtonLink(button), button.textContent || '', Math.round(rect.top), Math.round(rect.left)].join('|');
-}
-
-function collectButtonSignatures(messageId) {
-    return new Set(getChatu8Buttons(messageId).map(getButtonSignature));
-}
-
-function nearestButtonToAnchor(buttons, anchorNode, maxDistance = 260) {
-    if (!anchorNode || !buttons.length) return null;
-    const anchorRect = anchorNode.getBoundingClientRect?.();
-    if (!anchorRect) return null;
-    const anchorY = anchorRect.top + anchorRect.height / 2;
-    const ranked = buttons
-        .map(button => {
-            const rect = button.getBoundingClientRect?.() || { top: 0, height: 0 };
-            return { button, distance: Math.abs((rect.top + rect.height / 2) - anchorY) };
-        })
-        .filter(item => item.distance <= maxDistance)
-        .sort((a, b) => a.distance - b.distance);
-    return ranked[0]?.button || null;
-}
-
-async function clickChatu8ImageButton(messageId, trigger = '', anchorNode = null, beforeSignatures = new Set()) {
-    for (let i = 0; i < 24; i++) {
-        const buttons = getChatu8Buttons(messageId);
-        const matching = buttons.filter(button => buttonMatchesTrigger(button, trigger));
-        const fresh = buttons.filter(button => !beforeSignatures.has(getButtonSignature(button)));
-        const exact = nearestButtonToAnchor(matching, anchorNode, 9999) || matching[0];
-        if (exact) {
-            exact.click();
-            return true;
-        }
-        const nearFresh = nearestButtonToAnchor(fresh, anchorNode);
-        if (nearFresh) {
-            nearFresh.click();
-            return true;
-        }
-        if (fresh.length === 1 && buttons.length === 1) {
-            fresh[0].click();
-            return true;
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    return false;
-}
-
 async function emitMessagePromptEvents(messageId) {
     try { await saveChatConditional?.(); } catch (error) { console.warn('[' + EXT_NAME + '] save chat failed', error); }
-    try { await eventSource.emit(event_types.GENERATION_ENDED, Number(messageId)); } catch {}
 }
 
 async function writePromptToMessage(messageId, sourceText, options = {}) {
@@ -1818,7 +1725,6 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     const sceneText = selectedText || fullText;
     if (!sceneText) throw new Error('这条消息没有可用于生图的正文');
     setStatus(selectedText ? '正在为选中剧情生成智绘姬提示词' : '正在为原文生成智绘姬提示词');
-    const beforeButtons = collectButtonSignatures(messageId);
     const result = await buildSmartPrompt(sceneText);
     state.lastPositive = normalizePromptText(result.positive);
     state.lastNegative = normalizePromptText(result.negative);
@@ -1843,9 +1749,8 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     setMessageRawText(messageId, nextText, state.lastTrigger);
     const promptAnchor = insertTriggerIntoVisibleMessage(messageId, state.lastTrigger, options.selectionRange || null);
     await emitMessagePromptEvents(messageId);
-    const clicked = await clickChatu8ImageButton(messageId, state.lastTrigger, promptAnchor, beforeButtons);
-    setStatus(clicked ? '已写到选中剧情下方，并点击对应的智绘姬图片按钮' : '已写到选中剧情下方；未找到对应按钮，避免误点其它按钮');
-    return { ...result, trigger: state.lastTrigger, insertedAtSelection: Boolean(selectedText && findSelectedTextRange(fullText, selectedText)), clicked };
+    setStatus('已写到选中剧情下方；请点击出现的智绘姬图片按钮生成');
+    return { ...result, trigger: state.lastTrigger, insertedAtSelection: Boolean(selectedText && findSelectedTextRange(fullText, selectedText)), clicked: false };
 }
 
 async function generatePromptUnderMessage(messageId, selectedText = '', selectionRange = null) {
@@ -2020,7 +1925,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.1.4',
+        version: '0.1.5',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
