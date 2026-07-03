@@ -23,6 +23,8 @@ const EXT_NAME = '剧情镜头导演';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
+const STORY_DB_NAME = EXT_ID + '_prism_memory_v1';
+const STORY_DB_VERSION = 1;
 
 const DEFAULT_SETTINGS = {
     version: 2,
@@ -49,11 +51,21 @@ const DEFAULT_SETTINGS = {
         injectToPrompt: true,
         includeOriginal: true,
         useApiSummary: true,
+        useIndexedDb: true,
+        prismMode: true,
         injectDepth: 2,
-        maxEntries: 500,
+        maxEntries: 800,
         maxRetrieved: 8,
-        maxInjectChars: 1800,
-        maxEntryChars: 900,
+        maxInjectChars: 1600,
+        maxEntryChars: 520,
+        maxOriginalSnippets: 3,
+        maxOriginalSnippetChars: 220,
+        rootSummaryChars: 560,
+        pathSummaryChars: 900,
+        l1ChunkSize: 8,
+        l2ChunkSize: 6,
+        l3ChunkSize: 6,
+        maxDbMessages: 4000,
     },
     chatu8: {
         enabled: true,
@@ -109,6 +121,7 @@ const DEFAULT_CHAT_MEMORY = {
     },
     story: {
         summary: '',
+        rootSummary: '',
         facts: [],
         relationships: {},
         openThreads: [],
@@ -116,7 +129,9 @@ const DEFAULT_CHAT_MEMORY = {
         entries: [],
         summaryTree: { l1: [], l2: [], l3: [] },
         lastRetrieval: [],
+        lastPrismPath: null,
         lastInjectedPrompt: '',
+        dbStats: { enabled: false, messages: 0, nodes: 0, lastSyncAt: 0, dbName: STORY_DB_NAME },
     },
     history: [],
     runtime: {
@@ -538,6 +553,7 @@ function ensureStoryMemory() {
     const memory = ensureChatMemory();
     memory.story ||= {};
     memory.story.summary ||= '';
+    memory.story.rootSummary ||= '';
     memory.story.facts ||= [];
     memory.story.relationships ||= {};
     memory.story.openThreads ||= [];
@@ -548,7 +564,10 @@ function ensureStoryMemory() {
     memory.story.summaryTree.l2 ||= [];
     memory.story.summaryTree.l3 ||= [];
     memory.story.lastRetrieval ||= [];
+    memory.story.lastPrismPath ||= null;
     memory.story.lastInjectedPrompt ||= '';
+    memory.story.dbStats ||= { enabled: false, messages: 0, nodes: 0, lastSyncAt: 0, dbName: STORY_DB_NAME };
+    memory.story.dbStats.dbName ||= STORY_DB_NAME;
     return memory.story;
 }
 
@@ -556,6 +575,219 @@ function getStoryConfig() {
     const settings = ensureSettings();
     settings.storyMemory = deepMerge(DEFAULT_SETTINGS.storyMemory, settings.storyMemory || {});
     return settings.storyMemory;
+}
+
+
+let storyDbPromise = null;
+
+function getStoryChatKey() {
+    const id = normalizeLine(getCurrentChatId?.() || '');
+    const name = normalizeLine(getCurrentCharacterName?.() || '');
+    return hashText([id, name, location?.pathname || 'st'].join('|'));
+}
+
+function canUseStoryIndexedDb() {
+    return typeof indexedDB !== 'undefined' && Boolean(getStoryConfig().useIndexedDb);
+}
+
+function requestToPromise(request) {
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('IndexedDB request failed'));
+    });
+}
+
+function transactionDone(tx) {
+    return new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+    });
+}
+
+function openStoryDb() {
+    if (!canUseStoryIndexedDb()) return Promise.resolve(null);
+    if (storyDbPromise) return storyDbPromise;
+    storyDbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(STORY_DB_NAME, STORY_DB_VERSION);
+        request.onupgradeneeded = event => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('messages')) {
+                const store = db.createObjectStore('messages', { keyPath: 'id' });
+                store.createIndex('chatId', 'chatId', { unique: false });
+                store.createIndex('chatIndex', ['chatId', 'index'], { unique: false });
+            }
+            if (!db.objectStoreNames.contains('nodes')) {
+                const store = db.createObjectStore('nodes', { keyPath: 'id' });
+                store.createIndex('chatId', 'chatId', { unique: false });
+                store.createIndex('chatLevel', ['chatId', 'level'], { unique: false });
+            }
+            if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => {
+            storyDbPromise = null;
+            reject(request.error || new Error('IndexedDB open failed'));
+        };
+    });
+    return storyDbPromise;
+}
+
+async function putStoryDbRecords(storeName, records = []) {
+    const cfg = getStoryConfig();
+    if (!records.length || !cfg.useIndexedDb) return 0;
+    try {
+        const db = await openStoryDb();
+        if (!db) return 0;
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        for (const record of records) store.put(record);
+        await transactionDone(tx);
+        return records.length;
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] IndexedDB write failed', error);
+        ensureStoryMemory().dbStats.enabled = false;
+        return 0;
+    }
+}
+
+async function putStoryDbMeta(key, value) {
+    if (!getStoryConfig().useIndexedDb) return;
+    try {
+        const db = await openStoryDb();
+        if (!db) return;
+        const tx = db.transaction('meta', 'readwrite');
+        tx.objectStore('meta').put({ key, value, updatedAt: Date.now() });
+        await transactionDone(tx);
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] IndexedDB meta write failed', error);
+    }
+}
+
+async function readStoryDbByChat(storeName, chatId = getStoryChatKey()) {
+    if (!getStoryConfig().useIndexedDb) return [];
+    try {
+        const db = await openStoryDb();
+        if (!db) return [];
+        const tx = db.transaction(storeName, 'readonly');
+        const index = tx.objectStore(storeName).index('chatId');
+        const records = await requestToPromise(index.getAll(chatId));
+        await transactionDone(tx).catch(() => undefined);
+        return Array.isArray(records) ? records : [];
+    } catch (error) {
+        console.warn('[' + EXT_NAME + '] IndexedDB read failed', error);
+        return [];
+    }
+}
+
+function makeStoryDbMessageRecord(entry, fullText = '') {
+    const chatId = getStoryChatKey();
+    return {
+        ...entry,
+        id: entry.id,
+        chatId,
+        fullText: clampText(fullText || entry.text || '', 20000),
+        text: clampText(entry.text || fullText || '', getStoryConfig().maxEntryChars),
+        updatedAt: Date.now(),
+    };
+}
+
+function updateStoryDbStats(messageCount = null, nodeCount = null) {
+    const story = ensureStoryMemory();
+    story.dbStats ||= { enabled: false, messages: 0, nodes: 0, lastSyncAt: 0, dbName: STORY_DB_NAME };
+    story.dbStats.enabled = canUseStoryIndexedDb();
+    story.dbStats.dbName = STORY_DB_NAME;
+    if (messageCount !== null && messageCount !== undefined && Number.isFinite(Number(messageCount))) story.dbStats.messages = Number(messageCount);
+    if (nodeCount !== null && nodeCount !== undefined && Number.isFinite(Number(nodeCount))) story.dbStats.nodes = Number(nodeCount);
+    story.dbStats.lastSyncAt = Date.now();
+}
+
+function persistStoryEntry(entry, fullText = '') {
+    if (!entry || !getStoryConfig().useIndexedDb) return;
+    putStoryDbRecords('messages', [makeStoryDbMessageRecord(entry, fullText)]).then(count => {
+        if (count) updateStoryDbStats(Math.max(ensureStoryMemory().dbStats?.messages || 0, ensureStoryMemory().entries?.length || 0), null);
+    });
+}
+
+function persistStoryRows(rows = [], entriesById = new Map()) {
+    if (!rows.length || !getStoryConfig().useIndexedDb) return;
+    const records = [];
+    for (const row of rows) {
+        const entry = entriesById.get(row.entryId) || row.entry || createStoryEntry(row.text, 'backfill', row.index);
+        records.push(makeStoryDbMessageRecord(entry, row.text));
+    }
+    putStoryDbRecords('messages', records).then(count => {
+        if (count) updateStoryDbStats(count, null);
+    });
+}
+
+function flattenStoryTreeRecords(story = ensureStoryMemory()) {
+    const chatId = getStoryChatKey();
+    const records = [];
+    for (const level of ['l1', 'l2', 'l3']) {
+        for (const node of story.summaryTree?.[level] || []) {
+            records.push({ ...node, id: chatId + ':' + node.id, nodeId: node.id, chatId, level: node.level || level.toUpperCase(), updatedAt: Date.now() });
+        }
+    }
+    if (story.rootSummary) records.push({ id: chatId + ':root', nodeId: 'root', chatId, level: 'ROOT', summary: story.rootSummary, at: Date.now(), children: (story.summaryTree?.l3 || []).map(node => node.id), keywords: [...memoryTokens(story.rootSummary)].slice(0, 90), updatedAt: Date.now() });
+    return records;
+}
+
+function persistStoryTreeSnapshot() {
+    const cfg = getStoryConfig();
+    if (!cfg.useIndexedDb) return;
+    const story = ensureStoryMemory();
+    const records = flattenStoryTreeRecords(story);
+    putStoryDbRecords('nodes', records).then(count => {
+        updateStoryDbStats(story.entries?.length || null, count || records.length);
+        putStoryDbMeta(getStoryChatKey() + ':snapshot', {
+            chatId: getStoryChatKey(),
+            summary: story.summary,
+            rootSummary: story.rootSummary,
+            facts: story.facts,
+            relationships: story.relationships,
+            openThreads: story.openThreads,
+            characterStates: story.characterStates,
+            dbStats: story.dbStats,
+        });
+    });
+}
+
+async function hydrateStoryFromDbIfUseful() {
+    const cfg = getStoryConfig();
+    const story = ensureStoryMemory();
+    if (!cfg.useIndexedDb || (story.entries || []).length) return 0;
+    const records = await readStoryDbByChat('messages');
+    if (!records.length) return 0;
+    story.entries = records
+        .map(record => sanitizeStoryEntry({ ...record, text: record.text || record.fullText }))
+        .sort((a, b) => Number(b.index ?? -1) - Number(a.index ?? -1) || Number(b.at || 0) - Number(a.at || 0))
+        .slice(0, Math.max(50, Number(cfg.maxEntries) || 800));
+    rebuildStorySummaryTree(story);
+    updateStoryMemoryInjection();
+    renderStoryMemoryFields();
+    updateStoryDbStats(records.length, flattenStoryTreeRecords(story).length);
+    return records.length;
+}
+
+function compactJoin(parts = [], maxChars = 800, separator = '；') {
+    const output = [];
+    let used = 0;
+    for (const part of parts.map(normalizeLine).filter(Boolean)) {
+        const next = output.length ? separator + part : part;
+        if (used + next.length > maxChars) break;
+        output.push(part);
+        used += next.length;
+    }
+    return output.join(separator);
+}
+
+function rankTextItems(values = [], tokens = new Set(), limit = 8) {
+    return values
+        .map(value => ({ value, score: scoreMemoryItem({ summary: value }, tokens, 0) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map(item => item.value);
 }
 
 function clampText(text, max = 1000) {
@@ -687,7 +919,8 @@ function applyStoryMemoryPatch(patch, sourceText = '', source = 'story', index =
         const entry = sanitizeStoryEntry({ ...createStoryEntry(clean, source, index, patch.entry || {}), ...(patch.entry || {}) });
         story.entries = (story.entries || []).filter(item => item.id !== entry.id);
         story.entries.unshift(entry);
-        story.entries = story.entries.slice(0, Math.max(50, Number(cfg.maxEntries) || 500));
+        story.entries = story.entries.slice(0, Math.max(50, Number(cfg.maxEntries) || 800));
+        persistStoryEntry(entry, clean);
     }
 
     rebuildStorySummaryTree(story);
@@ -696,12 +929,37 @@ function applyStoryMemoryPatch(patch, sourceText = '', source = 'story', index =
     if (!options.deferSave) saveAll();
 }
 
+
+function makeStorySummaryNode(level, items, index) {
+    const cfg = getStoryConfig();
+    const summaries = items.map(item => item.summary || item.preview || item.text).filter(Boolean);
+    const max = level === 'L1' ? 260 : level === 'L2' ? 360 : 480;
+    const range = items.map(item => Number(item.index ?? -1)).filter(n => n >= 0);
+    const summary = compactJoin(summaries, Math.min(max, cfg.pathSummaryChars || max));
+    return {
+        id: level + '-' + index + '-' + hashText(summaries.join('\n')).slice(0, 8),
+        level,
+        at: Math.max(...items.map(item => Number(item.at || 0)), 0),
+        summary: summary || compactPreview(summaries.join('；'), max),
+        keywords: [...memoryTokens(...summaries, ...items.flatMap(item => item.keywords || []))].slice(0, 100),
+        children: items.map(item => item.id).filter(Boolean).slice(0, 80),
+        fromIndex: range.length ? Math.min(...range) : undefined,
+        toIndex: range.length ? Math.max(...range) : undefined,
+    };
+}
+
 function rebuildStorySummaryTree(story = ensureStoryMemory()) {
-    const entries = story.entries || [];
-    const l1 = chunkItems(entries, 10).map((items, index) => makeSummaryNode('L1', items, index));
-    const l2 = chunkItems(l1, 6).map((items, index) => makeSummaryNode('L2', items, index));
-    const l3 = chunkItems(l2, 6).map((items, index) => makeSummaryNode('L3', items, index));
-    story.summaryTree = { l1: l1.slice(0, 60), l2: l2.slice(0, 24), l3: l3.slice(0, 10) };
+    const cfg = getStoryConfig();
+    const entries = [...(story.entries || [])]
+        .filter(item => item?.id && (item.summary || item.text))
+        .sort((a, b) => Number(a.index ?? 1e9) - Number(b.index ?? 1e9) || Number(a.at || 0) - Number(b.at || 0));
+    const l1 = chunkItems(entries, Math.max(3, Number(cfg.l1ChunkSize) || 8)).map((items, index) => makeStorySummaryNode('L1', items, index));
+    const l2 = chunkItems(l1, Math.max(3, Number(cfg.l2ChunkSize) || 6)).map((items, index) => makeStorySummaryNode('L2', items, index));
+    const l3 = chunkItems(l2, Math.max(3, Number(cfg.l3ChunkSize) || 6)).map((items, index) => makeStorySummaryNode('L3', items, index));
+    story.summaryTree = { l1: l1.slice(-80), l2: l2.slice(-32), l3: l3.slice(-12) };
+    const rootSource = story.summary || compactJoin(l3.map(node => node.summary), Number(cfg.rootSummaryChars) || 560);
+    story.rootSummary = compactPreview(rootSource, Number(cfg.rootSummaryChars) || 560);
+    persistStoryTreeSnapshot();
 }
 
 function formatNamedMemoryMap(map, limit = 24) {
@@ -826,45 +1084,91 @@ async function runStoryAnalyzerQueue() {
     }
 }
 
-function retrieveStoryMemories(query = '', limit = getStoryConfig().maxRetrieved || 8) {
-    const story = ensureStoryMemory();
-    const tokens = memoryTokens(query, getCurrentCharacterName(), story.summary, (story.facts || []).slice(0, 12).join(' '));
-    const latestIndex = Math.max(0, (chat || []).length - 1);
-    const candidates = [
-        ...(story.summaryTree?.l3 || []).map(item => ({ ...item, kind: 'L3' })),
-        ...(story.summaryTree?.l2 || []).map(item => ({ ...item, kind: 'L2' })),
-        ...(story.summaryTree?.l1 || []).map(item => ({ ...item, kind: 'L1' })),
-        ...(story.entries || []).filter(item => Number(item.index) !== latestIndex).map(item => ({ ...item, kind: '原文' })),
-    ];
-    let ranked = candidates
-        .map(item => ({ item, score: scoreMemoryItem(item, tokens, 0.08) }))
-        .filter(entry => entry.score > 0 || !query)
+
+function getStoryTreeMaps(story = ensureStoryMemory()) {
+    const tree = story.summaryTree || {};
+    const maps = { l1: new Map(), l2: new Map(), l3: new Map(), entries: new Map() };
+    for (const item of tree.l1 || []) maps.l1.set(item.id, item);
+    for (const item of tree.l2 || []) maps.l2.set(item.id, item);
+    for (const item of tree.l3 || []) maps.l3.set(item.id, item);
+    for (const item of story.entries || []) maps.entries.set(item.id, item);
+    return maps;
+}
+
+function rankStoryItems(items, tokens, limit = 4, recencyWeight = 0.06) {
+    return (items || [])
+        .map(item => ({ item, score: scoreMemoryItem(item, tokens, recencyWeight) }))
+        .filter(entry => entry.score > 0 || !tokens.size)
         .sort((a, b) => b.score - a.score || Number(b.item.at || 0) - Number(a.item.at || 0))
-        .slice(0, Math.max(1, Number(limit) || 8))
-        .map(entry => ({
-            kind: entry.item.kind,
-            score: Number(entry.score.toFixed(2)),
-            summary: entry.item.summary || entry.item.preview || '',
-            text: entry.item.text || entry.item.preview || '',
-            name: entry.item.name || '',
-            role: entry.item.role || '',
-            index: entry.item.index ?? null,
-        }));
-    if (!ranked.length) {
-        ranked = (story.entries || [])
-            .filter(item => Number(item.index) !== latestIndex)
-            .slice(0, Math.max(1, Number(limit) || 8))
-            .map(item => ({ kind: '原文', score: 0, summary: item.summary, text: item.text, name: item.name, role: item.role, index: item.index ?? null }));
-    }
-    const seen = new Set();
-    ranked = ranked.filter(item => {
+        .slice(0, Math.max(1, Number(limit) || 4))
+        .map(entry => ({ ...entry.item, score: Number(entry.score.toFixed(2)) }));
+}
+
+function dedupeStoryItems(items = []) {
+    const seenId = new Set();
+    const seenText = new Set();
+    const output = [];
+    for (const item of items) {
+        const id = item.id || (item.kind + ':' + item.index);
         const key = normalizeLine(item.summary || item.text).slice(0, 120);
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-    story.lastRetrieval = ranked;
-    return ranked;
+        if ((id && seenId.has(id)) || (key && seenText.has(key))) continue;
+        if (id) seenId.add(id);
+        if (key) seenText.add(key);
+        output.push(item);
+    }
+    return output;
+}
+
+function retrieveStoryPrismPath(query = '', limit = getStoryConfig().maxRetrieved || 8) {
+    const cfg = getStoryConfig();
+    const story = ensureStoryMemory();
+    const tree = story.summaryTree || {};
+    const maps = getStoryTreeMaps(story);
+    const tokens = memoryTokens(query, getCurrentCharacterName(), story.rootSummary, story.summary, (story.facts || []).slice(0, 12).join(' '));
+    const latestIndex = Math.max(0, (chat || []).length - 1);
+    const topL3 = rankStoryItems(tree.l3 || [], tokens, 2);
+    let l2Pool = topL3.flatMap(node => (node.children || []).map(id => maps.l2.get(id)).filter(Boolean));
+    if (!l2Pool.length) l2Pool = tree.l2 || [];
+    const topL2 = rankStoryItems(l2Pool, tokens, 2);
+    let l1Pool = topL2.flatMap(node => (node.children || []).map(id => maps.l1.get(id)).filter(Boolean));
+    if (!l1Pool.length) l1Pool = tree.l1 || [];
+    const topL1 = rankStoryItems(l1Pool, tokens, 3);
+    let entryPool = topL1.flatMap(node => (node.children || []).map(id => maps.entries.get(id)).filter(Boolean));
+    const direct = rankStoryItems((story.entries || []).filter(item => Number(item.index) !== latestIndex), tokens, Math.max(3, Number(limit) || 8), 0.04);
+    entryPool = dedupeStoryItems([...entryPool, ...direct]).filter(item => Number(item.index) !== latestIndex);
+    const topEntries = rankStoryItems(entryPool, tokens, Math.max(1, Number(cfg.maxOriginalSnippets) || 3), 0.04);
+    const path = {
+        root: story.rootSummary || compactPreview(story.summary, cfg.rootSummaryChars || 560),
+        l3: dedupeStoryItems(topL3).slice(0, 1),
+        l2: dedupeStoryItems(topL2).slice(0, 2),
+        l1: dedupeStoryItems(topL1).slice(0, 3),
+        entries: dedupeStoryItems(topEntries).slice(0, Math.max(1, Number(cfg.maxOriginalSnippets) || 3)),
+        tokenHints: { queryTokens: tokens.size, maxInjectChars: cfg.maxInjectChars, maxOriginalSnippets: cfg.maxOriginalSnippets },
+    };
+    story.lastPrismPath = path;
+    return path;
+}
+
+function retrieveStoryMemories(query = '', limit = getStoryConfig().maxRetrieved || 8) {
+    const path = getStoryConfig().prismMode
+        ? retrieveStoryPrismPath(query, limit)
+        : retrieveStoryPrismPath(query, limit);
+    const items = dedupeStoryItems([
+        ...path.l3.map(item => ({ ...item, kind: 'L3' })),
+        ...path.l2.map(item => ({ ...item, kind: 'L2' })),
+        ...path.l1.map(item => ({ ...item, kind: 'L1' })),
+        ...path.entries.map(item => ({ ...item, kind: '原文' })),
+    ]).map(item => ({
+        kind: item.kind || item.level || '记忆',
+        score: item.score || 0,
+        summary: item.summary || item.preview || '',
+        text: item.text || item.preview || '',
+        name: item.name || '',
+        role: item.role || '',
+        index: item.index ?? null,
+    }));
+    ensureStoryMemory().lastRetrieval = items;
+    return items;
 }
 
 function getLatestStoryQuery() {
@@ -876,31 +1180,40 @@ function getLatestStoryQuery() {
     return recent || getCurrentCharacterName();
 }
 
+
 function buildStoryMemoryPrompt(query = '') {
     const cfg = getStoryConfig();
     if (!cfg.enabled || !cfg.injectToPrompt) return '';
     const story = ensureStoryMemory();
-    const hasMemory = story.summary || (story.facts || []).length || (story.entries || []).length || Object.keys(story.relationships || {}).length;
+    const hasMemory = story.rootSummary || story.summary || (story.facts || []).length || (story.entries || []).length || Object.keys(story.relationships || {}).length;
     if (!hasMemory) return '';
-    const retrieved = retrieveStoryMemories(query || getLatestStoryQuery(), cfg.maxRetrieved);
+    const path = retrieveStoryPrismPath(query || getLatestStoryQuery(), cfg.maxRetrieved);
+    const tokens = memoryTokens(query || getLatestStoryQuery(), getCurrentCharacterName());
     const lines = [
         '[剧情长期记忆]',
         '用途：保持角色设定、世界规则、前文因果、关系变化和未解决伏笔一致；只在相关时自然使用，不要声明你读取了记忆。',
     ];
-    if (story.summary) lines.push('长期摘要：' + story.summary);
-    if ((story.facts || []).length) lines.push('关键设定：\n- ' + story.facts.slice(0, 18).join('\n- '));
-    const relationshipLines = formatNamedMemoryMap(story.relationships, 16);
-    if (relationshipLines) lines.push('人物关系：\n' + relationshipLines.split('\n').map(line => '- ' + line).join('\n'));
-    const stateLines = formatNamedMemoryMap(story.characterStates, 16);
-    if (stateLines) lines.push('持续状态：\n' + stateLines.split('\n').map(line => '- ' + line).join('\n'));
-    if ((story.openThreads || []).length) lines.push('未解决伏笔/目标：\n- ' + story.openThreads.slice(0, 14).join('\n- '));
-    if (retrieved.length) {
-        lines.push('相关旧剧情：');
-        for (const item of retrieved.slice(0, cfg.maxRetrieved)) {
+    if (path.root) lines.push('根摘要：' + compactPreview(path.root, cfg.rootSummaryChars || 560));
+    const factLines = rankTextItems(story.facts || [], tokens, 8);
+    if (factLines.length) lines.push('关键设定：\n- ' + factLines.join('\n- '));
+    const relationshipLines = rankTextItems(formatNamedMemoryMap(story.relationships, 18).split('\n'), tokens, 6).filter(Boolean);
+    if (relationshipLines.length) lines.push('关系：\n- ' + relationshipLines.join('\n- '));
+    const stateLines = rankTextItems(formatNamedMemoryMap(story.characterStates, 18).split('\n'), tokens, 5).filter(Boolean);
+    if (stateLines.length) lines.push('持续状态：\n- ' + stateLines.join('\n- '));
+    const threadLines = rankTextItems(story.openThreads || [], tokens, 6);
+    if (threadLines.length) lines.push('未解决线索：\n- ' + threadLines.join('\n- '));
+    const pathLines = [];
+    for (const item of [...path.l3, ...path.l2, ...path.l1]) {
+        const range = item.fromIndex !== undefined ? '#' + item.fromIndex + (item.toIndex !== undefined && item.toIndex !== item.fromIndex ? '-' + item.toIndex : '') + ' ' : '';
+        pathLines.push((item.level || 'L') + ' ' + range + compactPreview(item.summary, 220));
+    }
+    if (pathLines.length) lines.push('命中摘要路径：\n- ' + dedupeStoryItems(pathLines.map(summary => ({ summary }))).map(item => item.summary).join('\n- '));
+    if (cfg.includeOriginal && path.entries.length) {
+        const snippets = path.entries.slice(0, Math.max(1, Number(cfg.maxOriginalSnippets) || 3)).map(item => {
             const prefix = item.index !== null && item.index !== undefined ? '#' + item.index + ' ' : '';
-            const original = cfg.includeOriginal && item.text ? '；原文片段：' + compactPreview(item.text, 180) : '';
-            lines.push('- ' + prefix + compactPreview(item.summary, 220) + original);
-        }
+            return prefix + compactPreview(item.text || item.summary, Number(cfg.maxOriginalSnippetChars) || 220);
+        });
+        if (snippets.length) lines.push('相关原文片段：\n- ' + snippets.join('\n- '));
     }
     lines.push('[/剧情长期记忆]');
     const prompt = clampText(lines.join('\n'), cfg.maxInjectChars);
@@ -938,6 +1251,7 @@ function updateStoryMemoryInjection(query = '') {
     return prompt;
 }
 
+
 function indexExistingStoryMemory(options = {}) {
     const cfg = getStoryConfig();
     if (!cfg.enabled) return 0;
@@ -948,19 +1262,22 @@ function indexExistingStoryMemory(options = {}) {
         .filter(item => item.text && !item.message?.is_system && isStoryIndexableText(item.text));
     for (const item of rows) {
         const entry = createStoryEntry(item.text, 'backfill', item.index);
+        item.entryId = entry.id;
+        item.entry = entry;
         existing.set(entry.id, { ...(existing.get(entry.id) || {}), ...entry });
     }
     story.entries = [...existing.values()]
         .sort((a, b) => Number(b.index ?? -1) - Number(a.index ?? -1) || Number(b.at || 0) - Number(a.at || 0))
-        .slice(0, Math.max(50, Number(cfg.maxEntries) || 500));
+        .slice(0, Math.max(50, Number(cfg.maxEntries) || 800));
     if (!story.summary && story.entries.length) {
-        story.summary = compactPreview(story.entries.slice(0, 12).reverse().map(item => item.summary).join('；'), 620);
+        story.summary = compactPreview(story.entries.slice(0, 16).reverse().map(item => item.summary).join('；'), Math.max(520, Number(cfg.rootSummaryChars) || 560));
     }
     rebuildStorySummaryTree(story);
+    persistStoryRows(rows, new Map(story.entries.map(entry => [entry.id, entry])));
     updateStoryMemoryInjection();
     renderStoryMemoryFields();
     saveAll();
-    if (!options.silent) setStatus('已回溯索引当前聊天 ' + rows.length + ' 条剧情记忆');
+    if (!options.silent) setStatus('已回溯索引当前聊天 ' + rows.length + ' 条；PRISM 路径已重建');
     return rows.length;
 }
 
@@ -974,10 +1291,15 @@ function readStorySettingsFromForm(root) {
     cfg.injectToPrompt = bool('storyMemory.injectToPrompt', cfg.injectToPrompt);
     cfg.includeOriginal = bool('storyMemory.includeOriginal', cfg.includeOriginal);
     cfg.useApiSummary = bool('storyMemory.useApiSummary', cfg.useApiSummary);
+    cfg.useIndexedDb = bool('storyMemory.useIndexedDb', cfg.useIndexedDb);
+    cfg.prismMode = bool('storyMemory.prismMode', cfg.prismMode);
     cfg.injectDepth = num('storyMemory.injectDepth', cfg.injectDepth, 0);
     cfg.maxRetrieved = num('storyMemory.maxRetrieved', cfg.maxRetrieved, 1);
     cfg.maxInjectChars = num('storyMemory.maxInjectChars', cfg.maxInjectChars, 400);
     cfg.maxEntries = num('storyMemory.maxEntries', cfg.maxEntries, 50);
+    cfg.maxOriginalSnippets = num('storyMemory.maxOriginalSnippets', cfg.maxOriginalSnippets, 1);
+    cfg.maxOriginalSnippetChars = num('storyMemory.maxOriginalSnippetChars', cfg.maxOriginalSnippetChars, 80);
+    cfg.rootSummaryChars = num('storyMemory.rootSummaryChars', cfg.rootSummaryChars, 200);
 }
 
 function readStoryMemoryFromForm(root) {
@@ -1007,10 +1329,15 @@ function renderStoryMemoryFields() {
     setChecked('storyMemory.injectToPrompt', cfg.injectToPrompt);
     setChecked('storyMemory.includeOriginal', cfg.includeOriginal);
     setChecked('storyMemory.useApiSummary', cfg.useApiSummary);
+    setChecked('storyMemory.useIndexedDb', cfg.useIndexedDb);
+    setChecked('storyMemory.prismMode', cfg.prismMode);
     setValue(root, 'storyMemory.injectDepth', cfg.injectDepth);
     setValue(root, 'storyMemory.maxRetrieved', cfg.maxRetrieved);
     setValue(root, 'storyMemory.maxInjectChars', cfg.maxInjectChars);
     setValue(root, 'storyMemory.maxEntries', cfg.maxEntries);
+    setValue(root, 'storyMemory.maxOriginalSnippets', cfg.maxOriginalSnippets);
+    setValue(root, 'storyMemory.maxOriginalSnippetChars', cfg.maxOriginalSnippetChars);
+    setValue(root, 'storyMemory.rootSummaryChars', cfg.rootSummaryChars);
     setValue(root, 'story.summary', story.summary || '');
     setValue(root, 'story.facts', Array.isArray(story.facts) ? story.facts.join('\n') : '');
     setValue(root, 'story.openThreads', Array.isArray(story.openThreads) ? story.openThreads.join('\n') : '');
@@ -1020,7 +1347,10 @@ function renderStoryMemoryFields() {
     if (stats) {
         const tree = story.summaryTree || {};
         const injectedLength = (story.lastInjectedPrompt || buildStoryMemoryPrompt(getLatestStoryQuery()) || '').length;
-        stats.textContent = '已索引 ' + (story.entries || []).length + ' 条；L1 ' + (tree.l1 || []).length + ' / L2 ' + (tree.l2 || []).length + ' / L3 ' + (tree.l3 || []).length + '；注入 ' + injectedLength + ' 字';
+        const db = story.dbStats || {};
+        const dbEnabled = Boolean(cfg.useIndexedDb && typeof indexedDB !== 'undefined');
+        const dbMessages = Math.max(Number(db.messages || 0), dbEnabled ? (story.entries || []).length : 0);
+        stats.textContent = '已索引 ' + (story.entries || []).length + ' 条；L1 ' + (tree.l1 || []).length + ' / L2 ' + (tree.l2 || []).length + ' / L3 ' + (tree.l3 || []).length + '；注入 ' + injectedLength + ' 字；DB ' + (dbEnabled ? '开' : '关') + ' ' + dbMessages + ' 条';
     }
     const retrieval = root.querySelector('[data-role="story-retrieval"]');
     if (retrieval) {
@@ -2014,12 +2344,17 @@ function buildSettingsHtml() {
                             <label><input type="checkbox" name="storyMemory.injectToPrompt"> 生成正文时注入</label>
                             <label><input type="checkbox" name="storyMemory.includeOriginal"> 注入相关原文片段</label>
                             <label><input type="checkbox" name="storyMemory.useApiSummary"> 用额外 API 后台整理</label>
+                            <label><input type="checkbox" name="storyMemory.useIndexedDb"> 本地数据库保存原文</label>
+                            <label><input type="checkbox" name="storyMemory.prismMode"> PRISM 路径检索</label>
                         </div>
                         <div class="csid-grid two">
                             <label>注入深度<input class="text_pole" type="number" name="storyMemory.injectDepth" min="0" max="20" step="1"></label>
                             <label>检索条数<input class="text_pole" type="number" name="storyMemory.maxRetrieved" min="1" max="20" step="1"></label>
                             <label>注入字数上限<input class="text_pole" type="number" name="storyMemory.maxInjectChars" min="400" max="6000" step="100"></label>
-                            <label>最多记忆条数<input class="text_pole" type="number" name="storyMemory.maxEntries" min="50" max="2000" step="50"></label>
+                            <label>最多记忆条数<input class="text_pole" type="number" name="storyMemory.maxEntries" min="50" max="4000" step="50"></label>
+                            <label>原文片段数<input class="text_pole" type="number" name="storyMemory.maxOriginalSnippets" min="1" max="8" step="1"></label>
+                            <label>单段原文字数<input class="text_pole" type="number" name="storyMemory.maxOriginalSnippetChars" min="80" max="800" step="20"></label>
+                            <label>根摘要字数<input class="text_pole" type="number" name="storyMemory.rootSummaryChars" min="200" max="1600" step="50"></label>
                         </div>
                         <label class="csid-label">长期剧情摘要</label>
                         <textarea class="text_pole csid-memory-area" name="story.summary" placeholder="由插件自动整理，也可以手动修正。"></textarea>
@@ -2704,10 +3039,12 @@ function bindStEvents() {
         ensureStoryMemory();
         state.selectedMessages.clear();
         setTimeout(() => {
-            indexExistingStoryMemory({ silent: true });
-            updateStoryMemoryInjection();
-            fillFormFromSettings();
-            renderMemoryFields();
+            hydrateStoryFromDbIfUseful().finally(() => {
+                indexExistingStoryMemory({ silent: true });
+                updateStoryMemoryInjection();
+                fillFormFromSettings();
+                renderMemoryFields();
+            });
         }, 150);
     });
     onStEvent(event_types.MESSAGE_SENT, messageId => {
@@ -2761,9 +3098,11 @@ function init() {
     bindMessageMenu();
     fillFormFromSettings();
     setTimeout(() => {
-        indexExistingStoryMemory({ silent: true });
-        updateStoryMemoryInjection();
-        renderStoryMemoryFields();
+        hydrateStoryFromDbIfUseful().finally(() => {
+            indexExistingStoryMemory({ silent: true });
+            updateStoryMemoryInjection();
+            renderStoryMemoryFields();
+        });
     }, 300);
     const tab = ensureSettings().ui.tab || 'compose';
     switchTab(tab);
@@ -2773,7 +3112,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.2.0',
+        version: '0.3.0',
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
