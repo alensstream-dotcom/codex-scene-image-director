@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.3.1';
+const EXT_VERSION = '0.4.0';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -1469,6 +1469,7 @@ function renderStoryMemoryFields() {
         const items = story.lastRetrieval?.length ? story.lastRetrieval : retrieveStoryMemories(getLatestStoryQuery(), cfg.maxRetrieved);
         retrieval.value = items.map(item => (item.index !== null && item.index !== undefined ? '#' + item.index + ' ' : '') + '[' + item.kind + '] ' + item.summary).join('\n');
     }
+    refreshDashboard();
 }
 
 function isUsefulText(value) {
@@ -2252,6 +2253,7 @@ function renderMemoryFields() {
     renderRecentMessages();
     renderHistory();
     renderStoryMemoryFields();
+    refreshDashboard();
 }
 
 function setValue(root, name, value) {
@@ -2313,6 +2315,36 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;');
 }
 
+function setTextByRole(root, role, value) {
+    root?.querySelectorAll?.('[data-role="' + role + '"]').forEach(el => {
+        el.textContent = value ?? '';
+    });
+}
+
+function summarizeValue(value, fallback = '未记录', length = 28) {
+    const clean = normalizeLine(value);
+    return clean ? compactPreview(clean, length) : fallback;
+}
+
+function refreshDashboard() {
+    const root = document.querySelector(SETTINGS_SELECTOR);
+    if (!root) return;
+    const settings = ensureSettings();
+    const chatMemory = ensureChatMemory();
+    const story = ensureStoryMemory();
+    const name = getCurrentCharacterName();
+    const charMemory = getCharacterMemory(name);
+    const db = story.dbStats || {};
+    setTextByRole(root, 'dash-character', summarizeValue(name, '未选择角色', 18));
+    setTextByRole(root, 'dash-location', summarizeValue(chatMemory.scene?.location, '地点待识别', 22));
+    setTextByRole(root, 'dash-outfit', summarizeValue(charMemory.currentOutfit, '服装待识别', 22));
+    setTextByRole(root, 'dash-api', settings.api.enabled ? summarizeValue(settings.api.model, 'API 已启用', 24) : '本地快速模式');
+    setTextByRole(root, 'dash-story', (story.entries || []).length + ' 条剧情记忆');
+    setTextByRole(root, 'dash-db', settings.storyMemory?.useIndexedDb ? 'DB ' + (db.enabled ? '已连接' : '待连接') : 'DB 关闭');
+    setTextByRole(root, 'dash-chatu8', settings.chatu8?.enabled ? '智绘姬标签开启' : '仅生成提示词');
+    setTextByRole(root, 'dash-visual', summarizeValue([chatMemory.scene?.time, chatMemory.scene?.lighting].filter(Boolean).join(' / '), '时间光线待识别', 24));
+}
+
 function fillFormFromSettings() {
     renderModelOptions();
     const root = document.querySelector(SETTINGS_SELECTOR);
@@ -2358,200 +2390,300 @@ function buildSettingsHtml() {
                     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <div class="csid-status" data-role="status">就绪</div>
+                    <div class="csid-dashboard">
+                        <div class="csid-brand-row">
+                            <div class="csid-brand-mark"><i class="fa-solid fa-clapperboard"></i></div>
+                            <div class="csid-brand-copy">
+                                <b>${EXT_NAME}</b>
+                                <span>选段生图 · 视觉一致 · 剧情长期记忆</span>
+                            </div>
+                        </div>
+                        <div class="csid-status">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span data-role="status">就绪</span>
+                        </div>
+                        <div class="csid-kpi-grid">
+                            <div class="csid-kpi"><i class="fa-solid fa-user"></i><span>角色</span><b data-role="dash-character">未选择角色</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-location-dot"></i><span>地点</span><b data-role="dash-location">地点待识别</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-shirt"></i><span>服装</span><b data-role="dash-outfit">服装待识别</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-layer-group"></i><span>剧情</span><b data-role="dash-story">0 条剧情记忆</b></div>
+                        </div>
+                        <div class="csid-pill-row">
+                            <span class="csid-pill"><i class="fa-solid fa-wand-magic-sparkles"></i><span data-role="dash-chatu8">智绘姬标签开启</span></span>
+                            <span class="csid-pill"><i class="fa-solid fa-database"></i><span data-role="dash-db">DB 待连接</span></span>
+                            <span class="csid-pill"><i class="fa-solid fa-plug"></i><span data-role="dash-api">本地快速模式</span></span>
+                            <span class="csid-pill"><i class="fa-solid fa-sun"></i><span data-role="dash-visual">时间光线待识别</span></span>
+                        </div>
+                    </div>
+
                     <div class="csid-tabs">
-                        <button class="menu_button csid-tab is-active" data-tab="compose">生图</button>
-                        <button class="menu_button csid-tab" data-tab="memory">视觉记忆</button>
-                        <button class="menu_button csid-tab" data-tab="story">剧情记忆</button>
-                        <button class="menu_button csid-tab" data-tab="settings">设置</button>
+                        <button class="menu_button csid-tab is-active" data-tab="compose"><i class="fa-solid fa-image"></i><span>生图工作台</span></button>
+                        <button class="menu_button csid-tab" data-tab="memory"><i class="fa-solid fa-palette"></i><span>视觉记忆</span></button>
+                        <button class="menu_button csid-tab" data-tab="story"><i class="fa-solid fa-book-open"></i><span>剧情记忆</span></button>
+                        <button class="menu_button csid-tab" data-tab="settings"><i class="fa-solid fa-sliders"></i><span>设置</span></button>
                     </div>
 
                     <section class="csid-panel is-active" data-panel="compose">
+                        <div class="csid-section-head">
+                            <div>
+                                <b><i class="fa-solid fa-route"></i> 主流程</b>
+                                <span>取材 → 导演 → 写回原文 → 智绘姬出图</span>
+                            </div>
+                        </div>
                         <div class="csid-workflow">
-                            <div><b>取材</b><span>剪贴板 / 选中 / 勾选 / 最新回复</span></div>
-                            <div><b>导演</b><span>英文提示词 + 镜头卡</span></div>
-                            <div><b>出图</b><span>写回原文 + 智绘姬识别</span></div>
-                            <div><b>记忆</b><span>地点服装自动更新</span></div>
+                            <div><i class="fa-solid fa-highlighter"></i><b>选剧情</b><span>正文选段或剪贴板</span></div>
+                            <div><i class="fa-solid fa-wand-sparkles"></i><b>出 Prompt</b><span>英文标签 + 镜头卡</span></div>
+                            <div><i class="fa-solid fa-pen-to-square"></i><b>写回</b><span>插入原文下方</span></div>
+                            <div><i class="fa-solid fa-image"></i><b>生图</b><span>智绘姬按钮接管</span></div>
                         </div>
-                        <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="复制想出图的剧情段落后点一键出图；也可以先在聊天里选中文字，或用最新回复/勾选消息。"></textarea>
+                        <textarea class="text_pole csid-textarea" data-role="scene-input" placeholder="粘贴或读取一段剧情，例如：走廊尽头的夕光照在银发少女的制服袖口上……"></textarea>
                         <div class="csid-actions csid-primary-actions">
-                            <button class="menu_button result-control" data-action="auto-image">写入最新回复下方</button>
-                            <button class="menu_button" data-action="compose">只生成提示词</button>
-                            <button class="menu_button" data-action="read-selection">读取选中</button>
-                            <button class="menu_button" data-action="read-clipboard">读取剪贴板</button>
-                            <button class="menu_button" data-action="use-latest">最新回复</button>
-                            <button class="menu_button" data-action="use-recent">使用勾选</button>
+                            <button class="menu_button result-control csid-hero-action" data-action="auto-image"><i class="fa-solid fa-wand-magic-sparkles"></i><span>写入原文下方</span></button>
+                            <button class="menu_button csid-main-action" data-action="compose"><i class="fa-solid fa-eye"></i><span>预览 Prompt</span></button>
                         </div>
-                        <div class="csid-recent" data-role="recent-messages"></div>
-                        <div class="csid-result-grid">
+                        <div class="csid-action-strip">
+                            <button class="menu_button" data-action="read-selection"><i class="fa-solid fa-i-cursor"></i><span>读取选中</span></button>
+                            <button class="menu_button" data-action="read-clipboard"><i class="fa-solid fa-clipboard"></i><span>剪贴板</span></button>
+                            <button class="menu_button" data-action="use-latest"><i class="fa-solid fa-clock-rotate-left"></i><span>最新回复</span></button>
+                            <button class="menu_button" data-action="use-recent"><i class="fa-solid fa-list-check"></i><span>勾选消息</span></button>
+                        </div>
+                        <div class="csid-module">
+                            <div class="csid-module-head">
+                                <b><i class="fa-solid fa-comments"></i> 最近消息</b>
+                                <span>勾选多条可拼成一段剧情</span>
+                            </div>
+                            <div class="csid-recent" data-role="recent-messages"></div>
+                        </div>
+                        <div class="csid-result-grid csid-result-focus">
                             <div class="csid-result-block is-trigger">
-                                <label class="csid-label">智绘姬触发文本</label>
+                                <label class="csid-label"><i class="fa-solid fa-bolt"></i> 智绘姬触发文本</label>
                                 <textarea class="text_pole csid-output" data-role="chatu8-trigger" readonly></textarea>
                             </div>
-                            <div class="csid-result-block">
-                                <label class="csid-label">镜头卡</label>
-                                <textarea class="text_pole csid-output" data-role="shot-card" readonly></textarea>
-                            </div>
-                            <div class="csid-result-block">
-                                <label class="csid-label">正向提示词</label>
-                                <textarea class="text_pole csid-output" data-role="positive" readonly></textarea>
-                            </div>
-                            <div class="csid-result-block">
-                                <label class="csid-label">反向提示词</label>
-                                <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
-                            </div>
                         </div>
-                        <div class="csid-actions">
-                            <button class="menu_button" data-action="copy-trigger">复制触发文本</button>
-                            <button class="menu_button" data-action="insert-trigger">填入聊天框</button>
-                            <button class="menu_button" data-action="send-trigger">发送触发</button>
-                            <button class="menu_button" data-action="copy-positive">复制正向</button>
-                            <button class="menu_button" data-action="copy-negative">复制反向</button>
-                            <button class="menu_button" data-action="analyze-input">后台记忆</button>
+                        <div class="csid-actions csid-secondary-actions">
+                            <button class="menu_button" data-action="copy-trigger"><i class="fa-solid fa-copy"></i><span>复制触发文本</span></button>
+                            <button class="menu_button" data-action="insert-trigger"><i class="fa-solid fa-keyboard"></i><span>填入输入框</span></button>
+                            <button class="menu_button" data-action="analyze-input"><i class="fa-solid fa-brain"></i><span>更新视觉记忆</span></button>
                         </div>
+                        <details class="csid-advanced">
+                            <summary><i class="fa-solid fa-sliders"></i> 提示词明细</summary>
+                            <div class="csid-result-grid">
+                                <div class="csid-result-block">
+                                    <label class="csid-label">镜头卡</label>
+                                    <textarea class="text_pole csid-output" data-role="shot-card" readonly></textarea>
+                                </div>
+                                <div class="csid-result-block">
+                                    <label class="csid-label">正向提示词</label>
+                                    <textarea class="text_pole csid-output" data-role="positive" readonly></textarea>
+                                </div>
+                                <div class="csid-result-block">
+                                    <label class="csid-label">反向提示词</label>
+                                    <textarea class="text_pole csid-output small" data-role="negative" readonly></textarea>
+                                </div>
+                            </div>
+                            <div class="csid-actions csid-secondary-actions">
+                                <button class="menu_button" data-action="copy-positive"><i class="fa-solid fa-plus"></i><span>复制正向</span></button>
+                                <button class="menu_button" data-action="copy-negative"><i class="fa-solid fa-minus"></i><span>复制反向</span></button>
+                            </div>
+                        </details>
                     </section>
 
                     <section class="csid-panel" data-panel="memory">
-                        <div class="csid-memory-note">自动记忆会在新回复结束和一键出图时更新；这里用于检查或手动修正固定外观、服装、地点。</div>
-                        <div class="csid-grid two">
-                            <label>当前角色<input class="text_pole" name="char.name" readonly></label>
-                            <label>当前地点<input class="text_pole" name="scene.location"></label>
-                            <label>时间<input class="text_pole" name="scene.time"></label>
-                            <label>天气<input class="text_pole" name="scene.weather"></label>
-                            <label>光线<input class="text_pole" name="scene.lighting"></label>
-                            <label>氛围<input class="text_pole" name="scene.mood"></label>
+                        <div class="csid-section-head">
+                            <div>
+                                <b><i class="fa-solid fa-palette"></i> 视觉记忆</b>
+                                <span>角色外观、服装、地点和画面风格</span>
+                            </div>
                         </div>
-                        <label class="csid-label">长期摘要</label>
-                        <textarea class="text_pole csid-memory-area small" name="memory.summary"></textarea>
-                        <label class="csid-label">关键事实</label>
-                        <textarea class="text_pole csid-memory-area small" name="memory.facts" placeholder="每行一条，角色身份/世界规则/重要事件"></textarea>
-                        <label class="csid-label">视觉备注</label>
-                        <textarea class="text_pole csid-memory-area small" name="memory.visualNotes" placeholder="每行一条，固定服饰/标志物/场景视觉锚点"></textarea>
-                        <label class="csid-label">固定外观</label>
-                        <textarea class="text_pole csid-memory-area" name="char.appearance"></textarea>
-                        <div class="csid-grid two">
-                            <label>当前服装<input class="text_pole" name="char.currentOutfit"></label>
-                            <label>饰品<input class="text_pole" name="char.accessories"></label>
-                            <label>表情<input class="text_pole" name="char.expression"></label>
-                            <label>姿势<input class="text_pole" name="char.pose"></label>
+                        <div class="csid-kpi-grid csid-memory-kpis">
+                            <div class="csid-kpi"><i class="fa-solid fa-user"></i><span>角色</span><b data-role="dash-character">未选择角色</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-location-dot"></i><span>地点</span><b data-role="dash-location">地点待识别</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-shirt"></i><span>服装</span><b data-role="dash-outfit">服装待识别</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-sun"></i><span>光线</span><b data-role="dash-visual">时间光线待识别</b></div>
                         </div>
-                        <label class="csid-label">状态</label>
-                        <textarea class="text_pole csid-memory-area" name="char.state"></textarea>
-                        <label class="csid-label">角色负面词</label>
-                        <textarea class="text_pole csid-memory-area small" name="char.negative"></textarea>
+                        <div class="csid-module">
+                            <div class="csid-module-head"><b><i class="fa-solid fa-map"></i> 场景状态</b></div>
+                            <div class="csid-grid two">
+                                <label>当前角色<input class="text_pole" name="char.name" readonly></label>
+                                <label>当前地点<input class="text_pole" name="scene.location"></label>
+                                <label>时间<input class="text_pole" name="scene.time"></label>
+                                <label>天气<input class="text_pole" name="scene.weather"></label>
+                                <label>光线<input class="text_pole" name="scene.lighting"></label>
+                                <label>氛围<input class="text_pole" name="scene.mood"></label>
+                            </div>
+                        </div>
+                        <div class="csid-module">
+                            <div class="csid-module-head"><b><i class="fa-solid fa-user-pen"></i> 角色画面</b></div>
+                            <label class="csid-label">固定外观</label>
+                            <textarea class="text_pole csid-memory-area" name="char.appearance"></textarea>
+                            <div class="csid-grid two">
+                                <label>当前服装<input class="text_pole" name="char.currentOutfit"></label>
+                                <label>饰品<input class="text_pole" name="char.accessories"></label>
+                                <label>表情<input class="text_pole" name="char.expression"></label>
+                                <label>姿势<input class="text_pole" name="char.pose"></label>
+                            </div>
+                            <label class="csid-label">状态</label>
+                            <textarea class="text_pole csid-memory-area" name="char.state"></textarea>
+                            <label class="csid-label">角色负面词</label>
+                            <textarea class="text_pole csid-memory-area small" name="char.negative"></textarea>
+                        </div>
+                        <details class="csid-advanced">
+                            <summary><i class="fa-solid fa-box-archive"></i> 视觉长期项</summary>
+                            <label class="csid-label">长期摘要</label>
+                            <textarea class="text_pole csid-memory-area small" name="memory.summary"></textarea>
+                            <label class="csid-label">关键事实</label>
+                            <textarea class="text_pole csid-memory-area small" name="memory.facts" placeholder="每行一条，角色身份/世界规则/重要事件"></textarea>
+                            <label class="csid-label">视觉备注</label>
+                            <textarea class="text_pole csid-memory-area small" name="memory.visualNotes" placeholder="每行一条，固定服饰/标志物/场景视觉锚点"></textarea>
+                        </details>
                         <div class="csid-actions">
-                            <button class="menu_button result-control" data-action="save-memory">保存记忆</button>
-                            <button class="menu_button" data-action="import-th">导入酒馆助手</button>
-                            <button class="menu_button" data-action="export-memory">导出记忆</button>
-                            <label class="menu_button csid-file-button">导入文件<input type="file" data-action="import-file" accept="application/json"></label>
+                            <button class="menu_button result-control" data-action="save-memory"><i class="fa-solid fa-save"></i><span>保存记忆</span></button>
+                            <button class="menu_button" data-action="import-th"><i class="fa-solid fa-right-to-bracket"></i><span>导入酒馆助手</span></button>
+                            <button class="menu_button" data-action="export-memory"><i class="fa-solid fa-file-export"></i><span>导出记忆</span></button>
+                            <label class="menu_button csid-file-button"><i class="fa-solid fa-file-import"></i><span>导入文件</span><input type="file" data-action="import-file" accept="application/json"></label>
                         </div>
                         <div class="csid-history" data-role="history"></div>
                     </section>
 
 
                     <section class="csid-panel" data-panel="story">
-                        <div class="csid-memory-note">剧情长期记忆只注入正文生成上下文，用来保持设定、前因后果、关系和伏笔一致；不会写入聊天正文，也不会进入智绘姬方括号。</div>
-                        <div class="csid-toggles">
-                            <label><input type="checkbox" name="storyMemory.enabled"> 启用剧情长期记忆</label>
-                            <label><input type="checkbox" name="storyMemory.autoIndex"> 自动索引新聊天</label>
-                            <label><input type="checkbox" name="storyMemory.injectToPrompt"> 生成正文时注入</label>
-                            <label><input type="checkbox" name="storyMemory.includeOriginal"> 注入相关原文片段</label>
-                            <label><input type="checkbox" name="storyMemory.useApiSummary"> 用额外 API 后台整理</label>
-                            <label><input type="checkbox" name="storyMemory.useIndexedDb"> 本地数据库保存原文</label>
-                            <label><input type="checkbox" name="storyMemory.prismMode"> PRISM 路径检索</label>
+                        <div class="csid-section-head">
+                            <div>
+                                <b><i class="fa-solid fa-book-open-reader"></i> 剧情长期记忆</b>
+                                <span>摘要树、原文索引、正文注入</span>
+                            </div>
                         </div>
-                        <div class="csid-grid two">
-                            <label>注入深度<input class="text_pole" type="number" name="storyMemory.injectDepth" min="0" max="20" step="1"></label>
-                            <label>检索条数<input class="text_pole" type="number" name="storyMemory.maxRetrieved" min="1" max="20" step="1"></label>
-                            <label>注入字数上限<input class="text_pole" type="number" name="storyMemory.maxInjectChars" min="400" max="6000" step="100"></label>
-                            <label>最多记忆条数<input class="text_pole" type="number" name="storyMemory.maxEntries" min="50" max="4000" step="50"></label>
-                            <label>原文片段数<input class="text_pole" type="number" name="storyMemory.maxOriginalSnippets" min="1" max="8" step="1"></label>
-                            <label>单段原文字数<input class="text_pole" type="number" name="storyMemory.maxOriginalSnippetChars" min="80" max="800" step="20"></label>
-                            <label>根摘要字数<input class="text_pole" type="number" name="storyMemory.rootSummaryChars" min="200" max="1600" step="50"></label>
+                        <div class="csid-kpi-grid">
+                            <div class="csid-kpi"><i class="fa-solid fa-layer-group"></i><span>条目</span><b data-role="dash-story">0 条剧情记忆</b></div>
+                            <div class="csid-kpi"><i class="fa-solid fa-database"></i><span>数据库</span><b data-role="dash-db">DB 待连接</b></div>
+                            <div class="csid-kpi csid-wide-kpi"><i class="fa-solid fa-chart-simple"></i><span>索引状态</span><b data-role="story-stats">剧情记忆未索引</b></div>
                         </div>
-                        <label class="csid-label">长期剧情摘要</label>
-                        <textarea class="text_pole csid-memory-area" name="story.summary" placeholder="由插件自动整理，也可以手动修正。"></textarea>
-                        <label class="csid-label">关键设定 / 已发生事实</label>
-                        <textarea class="text_pole csid-memory-area" name="story.facts" placeholder="每行一条：身份、规则、重要事件、承诺、秘密等。"></textarea>
-                        <label class="csid-label">未解决伏笔 / 目标</label>
-                        <textarea class="text_pole csid-memory-area small" name="story.openThreads" placeholder="每行一条：尚未解决的疑问、目标、约定、危险。"></textarea>
-                        <label class="csid-label">人物关系</label>
-                        <textarea class="text_pole csid-memory-area small" name="story.relationships" placeholder="格式：角色A：与角色B的关系变化"></textarea>
-                        <label class="csid-label">持续状态</label>
-                        <textarea class="text_pole csid-memory-area small" name="story.characterStates" placeholder="格式：角色名：持续心理、立场、伤势、能力状态"></textarea>
+                        <div class="csid-switch-grid">
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.enabled"><span><b>启用记忆</b><em>长期剧情一致性</em></span></label>
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.autoIndex"><span><b>自动索引</b><em>新消息后台入库</em></span></label>
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.injectToPrompt"><span><b>正文注入</b><em>生成前带相关记忆</em></span></label>
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.prismMode"><span><b>PRISM 路径</b><em>摘要树检索</em></span></label>
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.includeOriginal"><span><b>原文片段</b><em>少量证据回填</em></span></label>
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.useIndexedDb"><span><b>本地 DB</b><em>保存完整原文</em></span></label>
+                            <label class="csid-switch-card"><input type="checkbox" name="storyMemory.useApiSummary"><span><b>API 整理</b><em>后台结构化摘要</em></span></label>
+                        </div>
+                        <details class="csid-advanced" open>
+                            <summary><i class="fa-solid fa-scroll"></i> 记忆内容</summary>
+                            <label class="csid-label">长期剧情摘要</label>
+                            <textarea class="text_pole csid-memory-area" name="story.summary" placeholder="由插件自动整理，也可以手动修正。"></textarea>
+                            <label class="csid-label">关键设定 / 已发生事实</label>
+                            <textarea class="text_pole csid-memory-area" name="story.facts" placeholder="每行一条：身份、规则、重要事件、承诺、秘密等。"></textarea>
+                            <label class="csid-label">未解决伏笔 / 目标</label>
+                            <textarea class="text_pole csid-memory-area small" name="story.openThreads" placeholder="每行一条：尚未解决的疑问、目标、约定、危险。"></textarea>
+                            <label class="csid-label">人物关系</label>
+                            <textarea class="text_pole csid-memory-area small" name="story.relationships" placeholder="格式：角色A：与角色B的关系变化"></textarea>
+                            <label class="csid-label">持续状态</label>
+                            <textarea class="text_pole csid-memory-area small" name="story.characterStates" placeholder="格式：角色名：持续心理、立场、伤势、能力状态"></textarea>
+                        </details>
+                        <details class="csid-advanced">
+                            <summary><i class="fa-solid fa-gauge-high"></i> 注入预算</summary>
+                            <div class="csid-grid two">
+                                <label>注入深度<input class="text_pole" type="number" name="storyMemory.injectDepth" min="0" max="20" step="1"></label>
+                                <label>检索条数<input class="text_pole" type="number" name="storyMemory.maxRetrieved" min="1" max="20" step="1"></label>
+                                <label>注入字数上限<input class="text_pole" type="number" name="storyMemory.maxInjectChars" min="400" max="6000" step="100"></label>
+                                <label>最多记忆条数<input class="text_pole" type="number" name="storyMemory.maxEntries" min="50" max="4000" step="50"></label>
+                                <label>原文片段数<input class="text_pole" type="number" name="storyMemory.maxOriginalSnippets" min="1" max="8" step="1"></label>
+                                <label>单段原文字数<input class="text_pole" type="number" name="storyMemory.maxOriginalSnippetChars" min="80" max="800" step="20"></label>
+                                <label>根摘要字数<input class="text_pole" type="number" name="storyMemory.rootSummaryChars" min="200" max="1600" step="50"></label>
+                            </div>
+                        </details>
                         <div class="csid-actions">
-                            <button class="menu_button result-control" data-action="save-story-memory">保存剧情记忆</button>
-                            <button class="menu_button" data-action="backfill-story">回溯索引当前聊天</button>
-                            <button class="menu_button" data-action="refresh-story-injection">刷新注入</button>
+                            <button class="menu_button result-control" data-action="save-story-memory"><i class="fa-solid fa-save"></i><span>保存剧情记忆</span></button>
+                            <button class="menu_button" data-action="backfill-story"><i class="fa-solid fa-clock-rotate-left"></i><span>回溯索引</span></button>
+                            <button class="menu_button" data-action="refresh-story-injection"><i class="fa-solid fa-arrows-rotate"></i><span>刷新注入</span></button>
                         </div>
-                        <div class="csid-memory-note" data-role="story-stats">剧情记忆未索引</div>
-                        <label class="csid-label">本次检索预览</label>
-                        <textarea class="text_pole csid-output" data-role="story-retrieval" readonly></textarea>
+                        <details class="csid-advanced">
+                            <summary><i class="fa-solid fa-magnifying-glass"></i> 本次检索预览</summary>
+                            <textarea class="text_pole csid-output" data-role="story-retrieval" readonly></textarea>
+                        </details>
                     </section>
 
                     <section class="csid-panel" data-panel="settings">
-                        <div class="csid-grid two">
-                            <label>世界名<input class="text_pole" name="world.name"></label>
-                            <label>世界类型<input class="text_pole" name="world.genre"></label>
+                        <div class="csid-section-head">
+                            <div>
+                                <b><i class="fa-solid fa-sliders"></i> 全局设置</b>
+                                <span>世界观、画风、API、智绘姬兼容</span>
+                            </div>
                         </div>
-                        <label class="csid-label">世界观限制</label>
-                        <textarea class="text_pole csid-memory-area" name="world.rules"></textarea>
-                        <label class="csid-label">视觉风格</label>
-                        <textarea class="text_pole csid-memory-area" name="world.visualStyle"></textarea>
-                        <label class="csid-label">世界负面限制</label>
-                        <textarea class="text_pole csid-memory-area small" name="world.negativeRules"></textarea>
-
-                        <div class="csid-grid two">
-                            <label>画风
-                                <select class="text_pole" name="prompt.stylePreset">
-                                    <option value="anime">二次元</option>
-                                    <option value="cinematic">电影感</option>
-                                    <option value="realistic">写实</option>
-                                    <option value="comic">漫画</option>
-                                    <option value="custom">自定义</option>
-                                </select>
-                            </label>
-                            <label>提示词语言
-                                <select class="text_pole" name="behavior.promptLanguage">
-                                    <option value="en">英文</option>
-                                    <option value="mixed">混合</option>
-                                    <option value="zh">中文</option>
-                                </select>
-                            </label>
+                        <div class="csid-module">
+                            <div class="csid-module-head"><b><i class="fa-solid fa-globe"></i> 世界与画风</b></div>
+                            <div class="csid-grid two">
+                                <label>世界名<input class="text_pole" name="world.name"></label>
+                                <label>世界类型<input class="text_pole" name="world.genre"></label>
+                                <label>画风
+                                    <select class="text_pole" name="prompt.stylePreset">
+                                        <option value="anime">二次元</option>
+                                        <option value="cinematic">电影感</option>
+                                        <option value="realistic">写实</option>
+                                        <option value="comic">漫画</option>
+                                        <option value="custom">自定义</option>
+                                    </select>
+                                </label>
+                                <label>提示词语言
+                                    <select class="text_pole" name="behavior.promptLanguage">
+                                        <option value="en">英文</option>
+                                        <option value="mixed">混合</option>
+                                        <option value="zh">中文</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <label class="csid-label">世界观限制</label>
+                            <textarea class="text_pole csid-memory-area" name="world.rules"></textarea>
+                            <label class="csid-label">视觉风格</label>
+                            <textarea class="text_pole csid-memory-area" name="world.visualStyle"></textarea>
+                            <label class="csid-label">世界负面限制</label>
+                            <textarea class="text_pole csid-memory-area small" name="world.negativeRules"></textarea>
                         </div>
-                        <label class="csid-label">质量词</label>
-                        <textarea class="text_pole csid-memory-area small" name="prompt.quality"></textarea>
-                        <label class="csid-label">固定前缀</label>
-                        <textarea class="text_pole csid-memory-area small" name="prompt.positivePrefix"></textarea>
-                        <label class="csid-label">默认镜头</label>
-                        <input class="text_pole" name="prompt.camera">
-                        <label class="csid-label">默认反向词</label>
-                        <textarea class="text_pole csid-memory-area" name="prompt.negative"></textarea>
-
-                        <div class="csid-toggles">
-                            <label><input type="checkbox" name="behavior.autoMemory"> 自动后台记忆</label>
-                            <label><input type="checkbox" name="behavior.preferClipboard"> 优先读取剪贴板</label>
-                            <label><input type="checkbox" name="behavior.syncTavernHelper"> 同步酒馆助手变量</label>
-                            <label><input type="checkbox" name="behavior.allowPermanentOverwrite"> 允许覆盖永久设定</label>
-                            <label><input type="checkbox" name="api.enabled"> 启用额外 API</label>
-                            <label><input type="checkbox" name="chatu8.enabled"> 输出智绘姬触发文本</label>
-                            <label><input type="checkbox" name="chatu8.insertToChatInput"> 生成后填入聊天框</label>
+                        <div class="csid-module">
+                            <div class="csid-module-head"><b><i class="fa-solid fa-tags"></i> 提示词预设</b></div>
+                            <label class="csid-label">质量词</label>
+                            <textarea class="text_pole csid-memory-area small" name="prompt.quality"></textarea>
+                            <label class="csid-label">固定前缀</label>
+                            <textarea class="text_pole csid-memory-area small" name="prompt.positivePrefix"></textarea>
+                            <label class="csid-label">默认镜头</label>
+                            <input class="text_pole" name="prompt.camera">
+                            <label class="csid-label">默认反向词</label>
+                            <textarea class="text_pole csid-memory-area" name="prompt.negative"></textarea>
                         </div>
-                        <div class="csid-grid two">
-                            <label>API 地址<input class="text_pole" name="api.url" placeholder="http://127.0.0.1:8000/v1"></label>
-                            <label>模型选择<select class="text_pole" name="api.modelSelect"></select></label>
-                            <label>手动模型<input class="text_pole" name="api.model" placeholder="刷新失败时手填，例如 gpt-4.1-mini"></label>
-                            <label>开始标记<input class="text_pole" name="chatu8.startTag" placeholder="["></label>
-                            <label>结束标记<input class="text_pole" name="chatu8.endTag" placeholder="]"></label>
-                            <label>超时 ms<input class="text_pole" type="number" name="api.timeoutMs" min="3000" step="500"></label>
-                            <label>温度<input class="text_pole" type="number" name="api.temperature" min="0" max="2" step="0.1"></label>
+                        <div class="csid-module">
+                            <div class="csid-module-head"><b><i class="fa-solid fa-plug-circle-bolt"></i> API 与模型</b><span data-role="dash-api">本地快速模式</span></div>
+                            <label class="csid-switch-card csid-inline-switch"><input type="checkbox" name="api.enabled"><span><b>启用额外 API</b><em>用于智能 prompt 与后台记忆整理</em></span></label>
+                            <div class="csid-grid two">
+                                <label>API 地址<input class="text_pole" name="api.url" placeholder="http://127.0.0.1:8000/v1"></label>
+                                <label>模型选择<select class="text_pole" name="api.modelSelect"></select></label>
+                                <label>手动模型<input class="text_pole" name="api.model" placeholder="刷新失败时手填，例如 gpt-4.1-mini"></label>
+                                <label>超时 ms<input class="text_pole" type="number" name="api.timeoutMs" min="3000" step="500"></label>
+                                <label>温度<input class="text_pole" type="number" name="api.temperature" min="0" max="2" step="0.1"></label>
+                            </div>
+                            <label class="csid-label">API Key</label>
+                            <input class="text_pole" type="password" name="api.key" autocomplete="off">
+                            <div class="csid-actions csid-secondary-actions">
+                                <button class="menu_button" data-action="refresh-models"><i class="fa-solid fa-cloud-arrow-down"></i><span>刷新模型</span></button>
+                                <button class="menu_button" data-action="test-api"><i class="fa-solid fa-vial"></i><span>测试 API</span></button>
+                            </div>
                         </div>
-                        <label class="csid-label">API Key</label>
-                        <input class="text_pole" type="password" name="api.key" autocomplete="off">
+                        <div class="csid-module">
+                            <div class="csid-module-head"><b><i class="fa-solid fa-wand-magic-sparkles"></i> 智绘姬兼容</b><span data-role="dash-chatu8">智绘姬标签开启</span></div>
+                            <div class="csid-switch-grid">
+                                <label class="csid-switch-card"><input type="checkbox" name="chatu8.enabled"><span><b>输出方括号标签</b><em>供智绘姬识别</em></span></label>
+                                <label class="csid-switch-card"><input type="checkbox" name="chatu8.insertToChatInput"><span><b>填入输入框</b><em>预览后可手动发送</em></span></label>
+                                <label class="csid-switch-card"><input type="checkbox" name="behavior.autoMemory"><span><b>自动视觉记忆</b><em>新回复后台更新</em></span></label>
+                                <label class="csid-switch-card"><input type="checkbox" name="behavior.preferClipboard"><span><b>优先剪贴板</b><em>粘贴片段优先</em></span></label>
+                                <label class="csid-switch-card"><input type="checkbox" name="behavior.syncTavernHelper"><span><b>同步酒馆助手</b><em>变量兼容</em></span></label>
+                                <label class="csid-switch-card"><input type="checkbox" name="behavior.allowPermanentOverwrite"><span><b>覆盖永久设定</b><em>谨慎启用</em></span></label>
+                            </div>
+                            <div class="csid-grid two">
+                                <label>开始标记<input class="text_pole" name="chatu8.startTag" placeholder="["></label>
+                                <label>结束标记<input class="text_pole" name="chatu8.endTag" placeholder="]"></label>
+                            </div>
+                        </div>
                         <div class="csid-actions">
-                            <button class="menu_button result-control" data-action="save-settings">保存设置</button>
-                            <button class="menu_button" data-action="refresh-models">刷新模型</button>
-                            <button class="menu_button" data-action="test-api">测试 API</button>
+                            <button class="menu_button result-control" data-action="save-settings"><i class="fa-solid fa-save"></i><span>保存全部设置</span></button>
                         </div>
                     </section>
                 </div>
@@ -3246,9 +3378,5 @@ function exposeDebugApi() {
     };
 }
 $(() => init());
-
-
-
-
 
 
