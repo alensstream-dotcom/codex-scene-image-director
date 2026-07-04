@@ -20,6 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
+const EXT_VERSION = '0.3.1';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -166,10 +167,21 @@ const CN_TO_TAG = [
     [/浴室|洗浴/g, 'bathroom'],
     [/厨房/g, 'kitchen'],
     [/街道|街上/g, 'street'],
+    [/走廊|回廊|廊道/g, 'corridor'],
+    [/教室/g, 'classroom'],
+    [/办公室/g, 'office'],
+    [/大厅|殿堂|宫殿/g, 'grand hall'],
+    [/屋顶|天台/g, 'rooftop'],
+    [/书包/g, 'school bag'],
+    [/旧钥匙/g, 'old key'],
+    [/钥匙/g, 'key'],
+    [/袖口/g, 'sleeve cuff'],
+    [/同伴|伙伴/g, 'companion'],
     [/雨/g, 'rain'],
     [/雪/g, 'snow'],
     [/夜晚|深夜|晚上/g, 'night'],
     [/黄昏|傍晚/g, 'dusk'],
+    [/夕阳|夕光|夕照|落日/g, 'sunset light'],
     [/清晨|早晨/g, 'morning'],
     [/阳光/g, 'sunlight'],
     [/月光/g, 'moonlight'],
@@ -179,9 +191,16 @@ const CN_TO_TAG = [
     [/蓝色/g, 'blue'],
     [/金色/g, 'golden'],
     [/银色/g, 'silver'],
+    [/银发|银色头发/g, 'silver hair'],
+    [/粉发|粉色头发/g, 'pink hair'],
+    [/黑发|黑色头发/g, 'black hair'],
+    [/白发|白色头发/g, 'white hair'],
+    [/少女|女孩/g, 'young woman'],
+    [/少年|男孩/g, 'young man'],
     [/连衣裙/g, 'dress'],
     [/睡裙/g, 'nightgown'],
     [/校服/g, 'school uniform'],
+    [/制服/g, 'uniform'],
     [/衬衫/g, 'shirt'],
     [/外套/g, 'coat'],
     [/长发/g, 'long hair'],
@@ -190,6 +209,10 @@ const CN_TO_TAG = [
     [/害羞/g, 'shy'],
     [/哭|泪/g, 'tears'],
     [/拥抱/g, 'hugging'],
+    [/握着|握住|拿着/g, 'holding'],
+    [/回头|回眸/g, 'looking back'],
+    [/追来|追赶|追逐/g, 'chasing scene'],
+    [/跑|奔跑/g, 'running'],
     [/坐/g, 'sitting'],
     [/站/g, 'standing'],
     [/躺/g, 'lying down'],
@@ -212,6 +235,38 @@ let state = {
     storyAnalyzerQueue: [],
     saveTimer: null,
 };
+
+let metadataVariableGuardTimer = null;
+
+function ensureChatMetadataVariables() {
+    chat_metadata.variables ||= {};
+    try {
+        const contextMetadata = getContext?.()?.chatMetadata;
+        if (contextMetadata) {
+            contextMetadata.variables ||= chat_metadata.variables;
+            chat_metadata.variables ||= contextMetadata.variables;
+        }
+    } catch (error) {
+        // getContext may not be ready during very early extension loading.
+    }
+    return chat_metadata.variables;
+}
+
+function startMetadataVariableGuard() {
+    if (metadataVariableGuardTimer) return;
+    let fastRuns = 0;
+    ensureChatMetadataVariables();
+    metadataVariableGuardTimer = setInterval(() => {
+        ensureChatMetadataVariables();
+        fastRuns += 1;
+        if (fastRuns >= 240) {
+            clearInterval(metadataVariableGuardTimer);
+            metadataVariableGuardTimer = setInterval(ensureChatMetadataVariables, 500);
+        }
+    }, 25);
+}
+
+startMetadataVariableGuard();
 
 function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -259,7 +314,7 @@ function migrateSettings(settings) {
 }
 
 function ensureChatMemory() {
-    chat_metadata.variables ||= {};
+    ensureChatMetadataVariables();
     if (!chat_metadata[EXT_ID]) {
         chat_metadata[EXT_ID] = deepClone(DEFAULT_CHAT_MEMORY);
     }
@@ -580,10 +635,17 @@ function getStoryConfig() {
 
 let storyDbPromise = null;
 
-function getStoryChatKey() {
+function getLegacyStoryChatKey() {
     const id = normalizeLine(getCurrentChatId?.() || '');
     const name = normalizeLine(getCurrentCharacterName?.() || '');
     return hashText([id, name, location?.pathname || 'st'].join('|'));
+}
+
+function getStoryChatKey() {
+    const id = normalizeLine(getCurrentChatId?.() || '');
+    if (id) return hashText(id);
+    const name = normalizeLine(getCurrentCharacterName?.() || '');
+    return hashText([name, location?.pathname || 'st'].join('|'));
 }
 
 function canUseStoryIndexedDb() {
@@ -680,6 +742,22 @@ async function readStoryDbByChat(storeName, chatId = getStoryChatKey()) {
     }
 }
 
+async function readStoryDbForCurrentChat(storeName) {
+    const primaryKey = getStoryChatKey();
+    const records = await readStoryDbByChat(storeName, primaryKey);
+    if (records.length) return records;
+    const legacyKey = getLegacyStoryChatKey();
+    if (!legacyKey || legacyKey === primaryKey) return records;
+    const legacyRecords = await readStoryDbByChat(storeName, legacyKey);
+    if (legacyRecords.length && storeName === 'messages') {
+        const migrated = legacyRecords.map(record => ({ ...record, chatId: primaryKey, migratedFromChatId: legacyKey, updatedAt: Date.now() }));
+        putStoryDbRecords('messages', migrated).then(count => {
+            if (count) updateStoryDbStats(count, null);
+        });
+    }
+    return legacyRecords;
+}
+
 function makeStoryDbMessageRecord(entry, fullText = '') {
     const chatId = getStoryChatKey();
     return {
@@ -757,7 +835,7 @@ async function hydrateStoryFromDbIfUseful() {
     const cfg = getStoryConfig();
     const story = ensureStoryMemory();
     if (!cfg.useIndexedDb || (story.entries || []).length) return 0;
-    const records = await readStoryDbByChat('messages');
+    const records = await readStoryDbForCurrentChat('messages');
     if (!records.length) return 0;
     story.entries = records
         .map(record => sanitizeStoryEntry({ ...record, text: record.text || record.fullText }))
@@ -930,11 +1008,20 @@ function applyStoryMemoryPatch(patch, sourceText = '', source = 'story', index =
 }
 
 
+function getStoryItemIndexRange(item) {
+    const points = [item?.index, item?.fromIndex, item?.toIndex]
+        .map(value => Number(value))
+        .filter(value => Number.isFinite(value) && value >= 0);
+    if (!points.length) return null;
+    return { from: Math.min(...points), to: Math.max(...points) };
+}
+
 function makeStorySummaryNode(level, items, index) {
     const cfg = getStoryConfig();
     const summaries = items.map(item => item.summary || item.preview || item.text).filter(Boolean);
     const max = level === 'L1' ? 260 : level === 'L2' ? 360 : 480;
-    const range = items.map(item => Number(item.index ?? -1)).filter(n => n >= 0);
+    const ranges = items.map(getStoryItemIndexRange).filter(Boolean);
+    const range = ranges.flatMap(item => [item.from, item.to]);
     const summary = compactJoin(summaries, Math.min(max, cfg.pathSummaryChars || max));
     return {
         id: level + '-' + index + '-' + hashText(summaries.join('\n')).slice(0, 8),
@@ -1149,10 +1236,35 @@ function retrieveStoryPrismPath(query = '', limit = getStoryConfig().maxRetrieve
     return path;
 }
 
-function retrieveStoryMemories(query = '', limit = getStoryConfig().maxRetrieved || 8) {
-    const path = getStoryConfig().prismMode
+function retrieveStoryFlatPath(query = '', limit = getStoryConfig().maxRetrieved || 8) {
+    const cfg = getStoryConfig();
+    const story = ensureStoryMemory();
+    const tree = story.summaryTree || {};
+    const tokens = memoryTokens(query, getCurrentCharacterName(), story.rootSummary, story.summary, (story.facts || []).slice(0, 12).join(' '));
+    const latestIndex = Math.max(0, (chat || []).length - 1);
+    const nodes = rankStoryItems([...(tree.l3 || []), ...(tree.l2 || []), ...(tree.l1 || [])], tokens, Math.max(3, Number(limit) || 8));
+    const entries = rankStoryItems((story.entries || []).filter(item => Number(item.index) !== latestIndex), tokens, Math.max(1, Number(cfg.maxOriginalSnippets) || 3), 0.04);
+    const path = {
+        root: story.rootSummary || compactPreview(story.summary, cfg.rootSummaryChars || 560),
+        l3: dedupeStoryItems(nodes.filter(item => item.level === 'L3')).slice(0, 1),
+        l2: dedupeStoryItems(nodes.filter(item => item.level === 'L2')).slice(0, 2),
+        l1: dedupeStoryItems(nodes.filter(item => item.level === 'L1')).slice(0, 3),
+        entries: dedupeStoryItems(entries).slice(0, Math.max(1, Number(cfg.maxOriginalSnippets) || 3)),
+        flat: true,
+        tokenHints: { queryTokens: tokens.size, maxInjectChars: cfg.maxInjectChars, maxOriginalSnippets: cfg.maxOriginalSnippets },
+    };
+    story.lastPrismPath = path;
+    return path;
+}
+
+function retrieveStoryPath(query = '', limit = getStoryConfig().maxRetrieved || 8) {
+    return getStoryConfig().prismMode
         ? retrieveStoryPrismPath(query, limit)
-        : retrieveStoryPrismPath(query, limit);
+        : retrieveStoryFlatPath(query, limit);
+}
+
+function retrieveStoryMemories(query = '', limit = getStoryConfig().maxRetrieved || 8) {
+    const path = retrieveStoryPath(query, limit);
     const items = dedupeStoryItems([
         ...path.l3.map(item => ({ ...item, kind: 'L3' })),
         ...path.l2.map(item => ({ ...item, kind: 'L2' })),
@@ -1187,7 +1299,7 @@ function buildStoryMemoryPrompt(query = '') {
     const story = ensureStoryMemory();
     const hasMemory = story.rootSummary || story.summary || (story.facts || []).length || (story.entries || []).length || Object.keys(story.relationships || {}).length;
     if (!hasMemory) return '';
-    const path = retrieveStoryPrismPath(query || getLatestStoryQuery(), cfg.maxRetrieved);
+    const path = retrieveStoryPath(query || getLatestStoryQuery(), cfg.maxRetrieved);
     const tokens = memoryTokens(query || getLatestStoryQuery(), getCurrentCharacterName());
     const lines = [
         '[剧情长期记忆]',
@@ -1207,7 +1319,7 @@ function buildStoryMemoryPrompt(query = '') {
         const range = item.fromIndex !== undefined ? '#' + item.fromIndex + (item.toIndex !== undefined && item.toIndex !== item.fromIndex ? '-' + item.toIndex : '') + ' ' : '';
         pathLines.push((item.level || 'L') + ' ' + range + compactPreview(item.summary, 220));
     }
-    if (pathLines.length) lines.push('命中摘要路径：\n- ' + dedupeStoryItems(pathLines.map(summary => ({ summary }))).map(item => item.summary).join('\n- '));
+    if (pathLines.length) lines.push((path.flat ? '命中记忆摘要' : '命中摘要路径') + '：\n- ' + dedupeStoryItems(pathLines.map(summary => ({ summary }))).map(item => item.summary).join('\n- '));
     if (cfg.includeOriginal && path.entries.length) {
         const snippets = path.entries.slice(0, Math.max(1, Number(cfg.maxOriginalSnippets) || 3)).map(item => {
             const prefix = item.index !== null && item.index !== undefined ? '#' + item.index + ' ' : '';
@@ -1441,8 +1553,9 @@ function englishTagsFromText(text) {
     return uniqueParts(tags).join(', ');
 }
 
-function englishSceneTags(scene) {
+function englishSceneTags(scene, sourceText = '') {
     return joinPrompt([
+        englishTagsFromText(sourceText),
         englishTagsFromText([scene.location, scene.time, scene.weather, scene.lighting, scene.outfit, scene.expression, scene.action, scene.props].join(' ')),
         scene.camera,
         scene.mood,
@@ -1492,7 +1605,7 @@ function extractSceneLocal(text) {
     const weatherMatch = clean.match(/(下雨|雨中|雨夜|暴雨|小雨|下雪|雪中|雪夜|大雪|雾|薄雾|晴朗|阴天|雷雨|风很大)/);
     if (weatherMatch) result.weather = normalizeWeatherFromText(weatherMatch[1]);
 
-    const lightingMatch = clean.match(/(阳光|月光|灯光|烛光|霓虹|昏暗|逆光|暖光|冷光|阴影|晨光|夕阳)/);
+    const lightingMatch = clean.match(/(阳光|月光|灯光|烛光|霓虹|昏暗|逆光|暖光|冷光|阴影|晨光|夕阳|夕光|夕照|落日)/);
     if (lightingMatch) result.lighting = lightingMatch[1];
 
     const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|低头|抬头|伸手|握住|亲吻|凝视|推开|拉住|转身|蜷缩|倚着|贴近)[^，。！？\n]{0,24}/g);
@@ -1561,7 +1674,7 @@ function compilePrompt(inputText) {
     const translatedInput = settings.behavior.promptLanguage === 'zh'
         ? inputText
         : englishOnly
-            ? englishSceneTags(localScene)
+            ? englishSceneTags(localScene, inputText)
             : translateKnownTags(inputText);
     const promptName = englishOnly && hasCjk(name) ? '' : name;
 
@@ -2892,8 +3005,7 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     if (triggerArea) triggerArea.value = state.lastTrigger;
     if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, sceneText, result.source || 'api');
     else updateMemoryFromSelectedScene(sceneText, result.localScene);
-    chat_metadata.variables ||= {};
-    chat_metadata.variables.zhihuiji = true;
+    ensureChatMetadataVariables().zhihuiji = true;
     syncTavernHelperMemory();
     renderMemoryFields();
     saveAll();
@@ -3112,7 +3224,7 @@ function init() {
 
 function exposeDebugApi() {
     globalThis.codexSceneImageDirector = {
-        version: '0.3.0',
+        version: EXT_VERSION,
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
@@ -3126,6 +3238,8 @@ function exposeDebugApi() {
         getSettings: () => structuredClone(ensureSettings()),
         getMemory: () => structuredClone(ensureChatMemory()),
         getStoryPrompt: () => buildStoryMemoryPrompt(getLatestStoryQuery()),
+        getStoryPath: (query = '') => structuredClone(retrieveStoryPath(query || getLatestStoryQuery(), getStoryConfig().maxRetrieved)),
+        getStoryDbStats: () => structuredClone(ensureStoryMemory().dbStats || {}),
         refreshStoryMemory: () => updateStoryMemoryInjection(getLatestStoryQuery()),
         indexStoryMemory: () => indexExistingStoryMemory(),
         writePromptToMessage,

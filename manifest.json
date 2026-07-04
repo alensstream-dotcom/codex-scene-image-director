@@ -1,6 +1,6 @@
 {
     "display_name": "剧情镜头导演",
-    "loading_order": 88,
+    "loading_order": 8,
     "requires": [],
     "optional": [
         "third-party/JS-Slash-Runner",
@@ -9,7 +9,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Codex",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "homePage": "https://github.com/alensstream-dotcom/codex-scene-image-director",
     "auto_update": true,
     "minimum_client_version": "1.12.0"
