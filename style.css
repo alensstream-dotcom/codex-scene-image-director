@@ -288,6 +288,33 @@
     color: var(--csid-danger);
 }
 
+.csid-debug-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.csid-debug-head b[data-state="success"] {
+    color: var(--csid-mint);
+}
+
+.csid-debug-head b[data-state="error"] {
+    color: var(--csid-danger);
+}
+
+.csid-debug-head b[data-state="submitted"],
+.csid-debug-head b[data-state="running"] {
+    color: var(--csid-warn);
+}
+
+.csid-debug-output {
+    min-height: 168px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+}
+
 .csid-tabs {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -671,6 +698,7 @@
     .csid-kpi-grid,
     .csid-quick-actions,
     .csid-diagnostics-list,
+    .csid-preview-meta,
     .csid-workflow,
     .csid-result-grid,
     .csid-grid.two,
@@ -706,6 +734,27 @@
 
     .csid-history-item {
         grid-template-columns: 1fr;
+    }
+
+    .csid-preview-backdrop {
+        padding: 8px;
+        place-items: stretch;
+    }
+
+    .csid-preview-dialog {
+        max-height: calc(100vh - 16px);
+    }
+
+    .csid-preview-head,
+    .csid-preview-actions,
+    .csid-debug-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .csid-preview-actions .menu_button,
+    .csid-debug-head .menu_button {
+        width: 100%;
     }
 }
 
@@ -772,6 +821,120 @@
 .csid-message-menu button:hover {
     border-color: rgba(255, 179, 64, 0.68);
     background: rgba(49, 91, 149, 0.94);
+}
+
+.csid-preview-backdrop {
+    --csid-border: rgba(177, 190, 210, 0.24);
+    --csid-bg: rgba(16, 18, 22, 0.42);
+    --csid-warn: #f2c36b;
+    --csid-muted: rgba(232, 238, 248, 0.68);
+    position: fixed;
+    inset: 0;
+    z-index: 10080;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.56);
+    display: grid;
+    place-items: center;
+}
+
+.csid-preview-dialog {
+    width: min(860px, 100%);
+    max-height: min(86vh, 860px);
+    border: 1px solid rgba(135, 214, 180, 0.42);
+    border-radius: 8px;
+    background: rgba(18, 22, 28, 0.98);
+    color: var(--SmartThemeBodyColor, #f4f6fb);
+    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.48);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+}
+
+.csid-preview-head,
+.csid-preview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(181, 203, 235, 0.18);
+}
+
+.csid-preview-head > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.csid-preview-head span,
+.csid-preview-mode,
+.csid-preview-warning {
+    color: var(--csid-muted);
+    font-size: 0.9em;
+}
+
+.csid-preview-body {
+    min-height: 0;
+    padding: 12px;
+    overflow: auto;
+    display: grid;
+    gap: 10px;
+}
+
+.csid-preview-text {
+    min-height: 92px;
+}
+
+.csid-preview-context {
+    min-height: 74px;
+}
+
+.csid-preview-prompt {
+    min-height: 150px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+}
+
+.csid-preview-meta {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.csid-preview-meta label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.csid-preview-mode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--csid-border);
+    border-radius: 8px;
+    background: var(--csid-bg);
+}
+
+.csid-preview-warning {
+    padding: 8px 10px;
+    border: 1px solid rgba(242, 195, 107, 0.46);
+    border-radius: 8px;
+    color: var(--csid-warn);
+    background: rgba(242, 195, 107, 0.10);
+}
+
+.csid-preview-actions {
+    border-top: 1px solid rgba(181, 203, 235, 0.18);
+    border-bottom: 0;
+    justify-content: flex-end;
+}
+
+.csid-preview-actions .menu_button {
+    min-height: 38px;
+    min-width: 126px;
+    writing-mode: horizontal-tb;
 }
 
 .csid-visible-trigger-wrap {

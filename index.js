@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.2';
+const EXT_VERSION = '0.4.4';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -172,9 +172,21 @@ const CN_TO_TAG = [
     [/办公室/g, 'office'],
     [/大厅|殿堂|宫殿/g, 'grand hall'],
     [/屋顶|天台/g, 'rooftop'],
+    [/餐桌|饭桌/g, 'dining table'],
+    [/甜品店|甜点店|蛋糕店/g, 'dessert shop'],
+    [/橱窗/g, 'shop window'],
+    [/校门口|学校门口|校门/g, 'school gate'],
     [/书包/g, 'school bag'],
     [/旧钥匙/g, 'old key'],
     [/钥匙/g, 'key'],
+    [/水蜜桃|蜜桃/g, 'honey peach'],
+    [/勺子|汤匙/g, 'spoon'],
+    [/草莓牛奶/g, 'strawberry milk'],
+    [/草莓大福/g, 'strawberry daifuku'],
+    [/礼物|送给|给樱/g, 'gift for Sakura'],
+    [/沙发/g, 'sofa'],
+    [/看书|读书/g, 'reading book'],
+    [/护在怀里|抱在怀里/g, 'holding protectively against chest'],
     [/袖口/g, 'sleeve cuff'],
     [/同伴|伙伴/g, 'companion'],
     [/雨/g, 'rain'],
@@ -199,6 +211,8 @@ const CN_TO_TAG = [
     [/少年|男孩/g, 'young man'],
     [/连衣裙/g, 'dress'],
     [/睡裙/g, 'nightgown'],
+    [/连帽衫|帽衫/g, 'hoodie'],
+    [/白色连帽衫|白色帽衫/g, 'loose white hoodie'],
     [/校服/g, 'school uniform'],
     [/制服/g, 'uniform'],
     [/衬衫/g, 'shirt'],
@@ -207,9 +221,11 @@ const CN_TO_TAG = [
     [/短发/g, 'short hair'],
     [/微笑/g, 'smile'],
     [/害羞/g, 'shy'],
+    [/脸红|红着脸|脸红得厉害/g, 'blushing'],
     [/哭|泪/g, 'tears'],
     [/拥抱/g, 'hugging'],
     [/握着|握住|拿着/g, 'holding'],
+    [/接过去|接过|收下/g, 'accepting'],
     [/回头|回眸/g, 'looking back'],
     [/追来|追赶|追逐/g, 'chasing scene'],
     [/跑|奔跑/g, 'running'],
@@ -229,6 +245,10 @@ let state = {
     lastShotCard: '',
     lastTrigger: '',
     lastImageDataUrl: '',
+    lastDebug: null,
+    lastSelectionContext: null,
+    pendingPreview: null,
+    generationStatus: 'idle',
     analyzerRunning: false,
     analyzerQueue: [],
     storyAnalyzerRunning: false,
@@ -890,8 +910,17 @@ const STORY_SCAFFOLD_TERMS = [
 
 function looksLikePromptScaffold(text) {
     const clean = normalizeMultiline(text);
+    if (!clean) return false;
+    if (/^\s*(?:prompt|negative_prompt|positive_prompt|scene_position)\s*[:：]/mi.test(clean)) return true;
+    const lines = clean.split(/\n+/).map(normalizeLine).filter(Boolean);
+    const scaffoldLines = lines.filter(line => isInstructionScaffoldLine(line)).length;
+    if (scaffoldLines >= 1 && (lines.length <= 3 || scaffoldLines / lines.length >= 0.35)) return true;
+    if (/^\s*(?:#{1,6}\s*)?(?:\d+(?:\.\d+)?(?:[.、)]|\s+))?(?:剧情要求|详略安排|文笔要求|补充要求|增项检查|生图处理|创作预备|变量更新|讨论内容|正文|格式|要求)\s*[:：]?/mi.test(clean)) return true;
     const hits = STORY_SCAFFOLD_TERMS.filter(term => clean.includes(term)).length;
-    return hits >= 2 || /^\s*(prompt|negative_prompt|scene_position)\s*:/mi.test(clean);
+    if (hits >= 2) return true;
+    const instructionHits = (clean.match(/(?:必须|禁止|要求|输出|JSON|prompt|模型|格式|变量|检查|详略|文笔|补充|基于历史对话|完整描写|图片标签)/gi) || []).length;
+    const narrativeMarks = (clean.match(/[。！？!?，“”"「」]/g) || []).length;
+    return instructionHits >= 3 && narrativeMarks <= 1;
 }
 
 function isInstructionScaffoldLine(line) {
@@ -941,8 +970,10 @@ function cleanStoryText(text) {
 }
 
 function prepareSceneText(text) {
-    const clean = cleanStoryText(text);
-    return clean || stripGeneratedPromptText(text);
+    const stripped = stripGeneratedPromptText(text);
+    const clean = stripPromptScaffoldSections(stripped);
+    if (clean) return clean;
+    return looksLikePromptScaffold(stripped) ? '' : stripped;
 }
 
 function isStoryIndexableText(text) {
@@ -1549,7 +1580,13 @@ function uniqueParts(parts) {
 }
 
 function joinPrompt(parts) {
-    return uniqueParts(parts).join(', ');
+    const expanded = [];
+    for (const part of parts) {
+        const clean = String(part || '').trim();
+        if (!clean) continue;
+        expanded.push(...clean.split(/\s*,\s*/).filter(Boolean));
+    }
+    return uniqueParts(expanded).join(', ');
 }
 
 function getSelectedText() {
@@ -1614,6 +1651,80 @@ function englishSceneTags(scene, sourceText = '') {
         englishTagsFromText([scene.location, scene.time, scene.weather, scene.lighting, scene.outfit, scene.expression, scene.action, scene.props].join(' ')),
         scene.camera,
         scene.mood,
+    ]);
+}
+
+const CHARACTER_ENGLISH_ALIASES = {
+    凛: 'Rin',
+    琳: 'Rin',
+    樱: 'Sakura',
+    櫻: 'Sakura',
+    蓝: 'Lan',
+    藍: 'Lan',
+    alens: 'alens',
+    Alens: 'alens',
+};
+
+function englishCharacterName(name) {
+    const clean = normalizeLine(name);
+    if (!clean) return '';
+    if (CHARACTER_ENGLISH_ALIASES[clean]) return CHARACTER_ENGLISH_ALIASES[clean];
+    if (!hasCjk(clean)) return clean;
+    return '';
+}
+
+function getKnownCharacterNames() {
+    const settings = ensureSettings();
+    const chatMemory = ensureChatMemory();
+    return uniqueParts([
+        getCurrentCharacterName(),
+        ...Object.keys(settings.memory.characters || {}),
+        ...Object.keys(chatMemory.characters || {}),
+        ...Object.keys(CHARACTER_ENGLISH_ALIASES),
+    ]).filter(Boolean);
+}
+
+function detectFocusCharacters(text) {
+    const clean = normalizeMultiline(text);
+    const found = [];
+    for (const name of getKnownCharacterNames()) {
+        if (!name || name === '角色') continue;
+        const pattern = hasCjk(name)
+            ? new RegExp(escapeRegExp(name), 'i')
+            : new RegExp('(^|[^A-Za-z0-9_])' + escapeRegExp(name) + '([^A-Za-z0-9_]|$)', 'i');
+        const match = clean.match(pattern);
+        if (match) found.push({ name, index: match.index ?? 0 });
+    }
+    return uniqueParts(found
+        .sort((a, b) => a.index - b.index || b.name.length - a.name.length)
+        .map(item => item.name));
+}
+
+function resolveFocusCharacter(text, requestedFocus = '') {
+    const candidates = detectFocusCharacters(text);
+    const requested = normalizeLine(requestedFocus);
+    const current = getCurrentCharacterName();
+    const name = requested || candidates[0] || current;
+    return {
+        name,
+        englishName: englishCharacterName(name),
+        candidates,
+        ambiguous: candidates.length > 1 && !requested,
+    };
+}
+
+function selectedTextCoreTags(inputText, localScene, focus) {
+    const clean = normalizeMultiline(inputText);
+    return joinPrompt([
+        focus?.englishName,
+        englishSceneTags(localScene, clean),
+        /接过|接过去|收下/.test(clean) && /草莓牛奶/.test(clean) ? 'accepting strawberry milk' : '',
+        /餐桌/.test(clean) && /水蜜桃|蜜桃/.test(clean) ? 'honey peach on dining table' : '',
+        /勺子/.test(clean) ? 'spoon in hand' : '',
+        /准备给樱|给樱|送给樱/.test(clean) ? 'meant for Sakura, gift for Sakura' : '',
+        /草莓大福/.test(clean) ? 'strawberry daifuku' : '',
+        /护在怀里|抱在怀里/.test(clean) ? 'holding protectively against chest' : '',
+        /另一边|另一侧/.test(clean) ? 'separate positions in the room' : '',
     ]);
 }
 
@@ -1689,13 +1800,14 @@ function inferMood(text) {
     return '';
 }
 
-function buildShotCard(inputText, localScene) {
+function buildShotCard(inputText, localScene, focus = resolveFocusCharacter(inputText)) {
     const settings = ensureSettings();
     const chatMemory = ensureChatMemory();
-    const name = getCurrentCharacterName();
+    const name = focus.name || getCurrentCharacterName();
     const charMemory = getCharacterMemory(name);
     const lines = [
         `人物: ${name}`,
+        `焦点候选: ${focus.candidates?.length ? focus.candidates.join(' / ') : '未检测到'}`,
         `固定外观: ${charMemory.appearance || '未填写'}`,
         `当前服装: ${localScene.outfit || charMemory.currentOutfit || '未填写'}`,
         `地点: ${localScene.location || chatMemory.scene.location || '未填写'}`,
@@ -1708,10 +1820,11 @@ function buildShotCard(inputText, localScene) {
     return lines.join('\n');
 }
 
-function compilePrompt(inputText) {
+function compilePrompt(inputText, options = {}) {
     const settings = ensureSettings();
     const chatMemory = ensureChatMemory();
-    const name = getCurrentCharacterName();
+    const focus = resolveFocusCharacter(inputText, options.focusCharacter);
+    const name = focus.name || getCurrentCharacterName();
     const charMemory = getCharacterMemory(name);
     const localScene = extractSceneLocal(inputText);
     const style = STYLE_PRESETS[settings.prompt.stylePreset] || '';
@@ -1731,16 +1844,18 @@ function compilePrompt(inputText) {
         : englishOnly
             ? englishSceneTags(localScene, inputText)
             : translateKnownTags(inputText);
-    const promptName = englishOnly && hasCjk(name) ? '' : name;
+    const promptName = englishOnly ? focus.englishName : name;
+    const coreSceneTags = selectedTextCoreTags(inputText, localScene, focus);
 
     const positive = joinPrompt([
         settings.prompt.positivePrefix,
         settings.prompt.quality,
         style,
+        coreSceneTags,
+        promptName,
         settings.memory.world.visualStyle,
         settings.memory.world.genre,
         settings.memory.world.rules,
-        promptName,
         promptPart(charMemory.appearance, englishOnly),
         promptPart(charMemory.accessories, englishOnly),
         promptPart(outfit, englishOnly),
@@ -1764,8 +1879,8 @@ function compilePrompt(inputText) {
         charMemory.negative,
     ]);
 
-    const shotCard = buildShotCard(inputText, localScene);
-    return { positive, negative, shotCard, localScene };
+    const shotCard = buildShotCard(inputText, localScene, focus);
+    return { positive, negative, shotCard, localScene, focus };
 }
 
 function updateMemoryFromSelectedScene(inputText, localScene) {
@@ -2664,7 +2779,7 @@ function buildSettingsHtml() {
                             </div>
                         </div>
                         <div class="csid-actions csid-secondary-actions">
-                            <button class="menu_button" data-action="copy-trigger"><i class="fa-solid fa-copy"></i><span>复制触发文本</span></button>
+                            <button class="menu_button" data-action="copy-trigger"><i class="fa-solid fa-copy"></i><span>备用复制</span></button>
                             <button class="menu_button" data-action="insert-trigger"><i class="fa-solid fa-keyboard"></i><span>填入输入框</span></button>
                             <button class="menu_button" data-action="analyze-input"><i class="fa-solid fa-brain"></i><span>更新视觉记忆</span></button>
                         </div>
@@ -2688,6 +2803,14 @@ function buildSettingsHtml() {
                                 <button class="menu_button" data-action="copy-positive"><i class="fa-solid fa-plus"></i><span>复制正向</span></button>
                                 <button class="menu_button" data-action="copy-negative"><i class="fa-solid fa-minus"></i><span>复制反向</span></button>
                             </div>
+                        </details>
+                        <details class="csid-advanced csid-debug-panel" open>
+                            <summary><i class="fa-solid fa-bug"></i> Debug 信息</summary>
+                            <div class="csid-debug-head">
+                                <span>generationStatus: <b data-role="generation-status" data-state="idle">idle</b></span>
+                                <button class="menu_button" data-action="copy-debug"><i class="fa-solid fa-copy"></i><span>复制 debug 信息</span></button>
+                            </div>
+                            <textarea class="text_pole csid-output csid-debug-output" data-role="debug-info" readonly></textarea>
                         </details>
                     </section>
 
@@ -2915,6 +3038,7 @@ function bindEvents() {
         if (action === 'compose') composeFromInput();
         if (action === 'auto-image') writePromptUnderLatestFromInput();
         if (action === 'copy-trigger') copyText(state.lastTrigger, '已复制智绘姬触发文本');
+        if (action === 'copy-debug') copyText(getDebugText(), '已复制 debug 信息');
         if (action === 'insert-trigger') insertTriggerIntoChat();
         if (action === 'send-trigger') sendTriggerToChat();
         if (action === 'copy-positive') copyText(state.lastPositive, '已复制正向提示词');
@@ -3129,7 +3253,247 @@ function getSelectionContext(event) {
     const rect = range.getBoundingClientRect();
     const x = rect.left || rect.right ? rect.left + rect.width / 2 : event?.clientX || window.innerWidth / 2;
     const y = rect.bottom || event?.clientY || window.innerHeight / 2;
-    return { messageId, text: selectedText, x, y, range: range.cloneRange() };
+    const context = { messageId, text: selectedText, x, y, range: range.cloneRange(), capturedAt: Date.now() };
+    state.lastSelectionContext = context;
+    return context;
+}
+
+function selectedParagraphIndex(fullText, selectedText) {
+    const range = findSelectedTextRange(fullText, selectedText);
+    if (!range) return null;
+    return normalizeMultiline(fullText.slice(0, range.start)).split(/\n{2,}|\n/).filter(Boolean).length;
+}
+
+function getSelectionSceneContext(messageId, selectedText) {
+    const message = chat?.[Number(messageId)];
+    const fullText = stripLastInlinePrompt(getMessageText(message), message);
+    const range = findSelectedTextRange(fullText, selectedText);
+    const start = range?.start ?? 0;
+    const end = range?.end ?? selectedText.length;
+    return {
+        fullText,
+        contextBefore: compactPreview(fullText.slice(Math.max(0, start - 420), start), 420),
+        contextAfter: compactPreview(fullText.slice(end, Math.min(fullText.length, end + 420)), 420),
+        paragraphIndex: range ? selectedParagraphIndex(fullText, selectedText) : null,
+        range,
+    };
+}
+
+function buildScenePreviewPayload(messageId, selectedText, options = {}) {
+    const raw = normalizeMultiline(selectedText || '').trim();
+    const sceneText = prepareSceneText(raw);
+    if (!sceneText || sceneText.length < 8) throw new Error('选中的剧情太短或为空，请重新选择一段真正剧情');
+    if (looksLikePromptScaffold(sceneText)) throw new Error('这段内容像预设/提示词，不适合直接生图，请只选真正剧情段落');
+    const sceneContext = getSelectionSceneContext(messageId, raw);
+    const focus = resolveFocusCharacter(sceneText, options.focusCharacter || '');
+    const result = compilePrompt(sceneText, { focusCharacter: options.focusCharacter || '' });
+    const finalPrompt = normalizePromptText(result.positive);
+    const trigger = buildChatu8Trigger(finalPrompt);
+    return {
+        id: 'csid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        messageId: Number(messageId),
+        selectedTextRaw: raw,
+        selectedText: sceneText,
+        contextBefore: sceneContext.contextBefore,
+        contextAfter: sceneContext.contextAfter,
+        insertTargetMessageId: Number(messageId),
+        insertTargetParagraphIndex: sceneContext.paragraphIndex,
+        selectionRange: options.selectionRange || null,
+        range: sceneContext.range,
+        focusCharacter: result.focus?.name || focus.name,
+        focusCandidates: focus.candidates,
+        focusRequired: focus.ambiguous && !options.focusCharacter,
+        detectedLocation: result.localScene.location || ensureChatMemory().scene.location || '',
+        detectedOutfit: result.localScene.outfit || getCharacterMemory(result.focus?.name || focus.name).currentOutfit || '',
+        detectedProps: result.localScene.props || '',
+        localScene: result.localScene,
+        result,
+        finalPrompt,
+        trigger,
+        negativePrompt: normalizePromptText(result.negative),
+        shotCard: result.shotCard,
+        mode: options.mode || 'insert',
+    };
+}
+
+function setPromptOutputsFromPayload(payload) {
+    state.lastPositive = normalizePromptText(payload.finalPrompt || payload.result?.positive || '');
+    state.lastNegative = normalizePromptText(payload.negativePrompt || payload.result?.negative || '');
+    state.lastShotCard = payload.shotCard || payload.result?.shotCard || '';
+    state.lastTrigger = payload.trigger || buildChatu8Trigger(state.lastPositive);
+    const root = document.querySelector(SETTINGS_SELECTOR);
+    if (!root) return;
+    const positiveArea = root.querySelector('[data-role="positive"]');
+    const negativeArea = root.querySelector('[data-role="negative"]');
+    const shotArea = root.querySelector('[data-role="shot-card"]');
+    const triggerArea = root.querySelector('[data-role="chatu8-trigger"]');
+    if (positiveArea) positiveArea.value = state.lastPositive;
+    if (negativeArea) negativeArea.value = state.lastNegative;
+    if (shotArea) shotArea.value = state.lastShotCard;
+    if (triggerArea) triggerArea.value = state.lastTrigger;
+}
+
+function setGenerationStatus(status, message = '') {
+    state.generationStatus = status;
+    if (message) setStatus(message);
+    renderDebugPanel();
+}
+
+function buildDebugInfo(patch = {}) {
+    const base = state.lastDebug || {};
+    return {
+        selectedText: '',
+        contextBefore: '',
+        contextAfter: '',
+        detectedFocusCharacter: '',
+        detectedLocation: '',
+        detectedOutfit: '',
+        detectedProps: '',
+        finalPrompt: '',
+        insertTargetMessageId: null,
+        insertTargetParagraphIndex: null,
+        actualButtonText: '',
+        actualPromptSentToZhihuiji: '',
+        calledZhihuijiFunction: '',
+        usedOfficialZhihuijiPipeline: false,
+        triggeredZhihuijiButton: false,
+        generationStatus: state.generationStatus || 'idle',
+        error: '',
+        ...base,
+        ...patch,
+    };
+}
+
+function setLastDebug(patch = {}) {
+    state.lastDebug = buildDebugInfo(patch);
+    renderDebugPanel();
+    console.log('[' + EXT_NAME + '] debug', structuredClone(state.lastDebug));
+    return state.lastDebug;
+}
+
+function getDebugText() {
+    return JSON.stringify(buildDebugInfo(), null, 2);
+}
+
+function renderDebugPanel() {
+    const area = document.querySelector(SETTINGS_SELECTOR + ' [data-role="debug-info"]');
+    if (area) area.value = getDebugText();
+    const status = document.querySelector(SETTINGS_SELECTOR + ' [data-role="generation-status"]');
+    if (status) {
+        status.textContent = state.generationStatus || 'idle';
+        status.dataset.state = state.generationStatus || 'idle';
+    }
+}
+
+function closeScenePreview() {
+    document.querySelectorAll('.csid-preview-backdrop').forEach(node => node.remove());
+}
+
+function renderScenePreviewModal(payload) {
+    closeScenePreview();
+    state.pendingPreview = payload;
+    setPromptOutputsFromPayload(payload);
+    const backdrop = document.createElement('div');
+    backdrop.className = 'csid-preview-backdrop';
+    const focusOptions = uniqueParts([...(payload.focusCandidates || []), payload.focusCharacter].filter(Boolean));
+    const mustChooseFocus = payload.focusRequired && focusOptions.length > 1;
+    backdrop.innerHTML = `
+        <div class="csid-preview-dialog" role="dialog" aria-modal="true">
+            <div class="csid-preview-head">
+                <div>
+                    <b><i class="fa-solid fa-clapperboard"></i> 确认这一幕</b>
+                    <span>先确认选段和 prompt，再选择插入或直接生图</span>
+                </div>
+                <button class="menu_button" data-csid-preview-action="cancel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="csid-preview-body">
+                <label class="csid-label">当前选中的剧情 selectedText</label>
+                <textarea class="text_pole csid-preview-text" readonly>${escapeHtml(payload.selectedTextRaw)}</textarea>
+                <div class="csid-preview-meta">
+                    <label>focusCharacter
+                        <select class="text_pole" data-csid-preview-focus>
+                            ${mustChooseFocus ? '<option value="">请选择焦点角色</option>' : ''}
+                            ${focusOptions.map(name => `<option value="${escapeHtml(name)}" ${name === payload.focusCharacter && !mustChooseFocus ? 'selected' : ''}>${escapeHtml(name)}${englishCharacterName(name) ? ' / ' + escapeHtml(englishCharacterName(name)) : ''}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label>location<input class="text_pole" value="${escapeHtml(payload.detectedLocation || '未检测到')}" readonly></label>
+                    <label>outfit<input class="text_pole" value="${escapeHtml(payload.detectedOutfit || '未检测到')}" readonly></label>
+                    <label>props<input class="text_pole" value="${escapeHtml(payload.detectedProps || '未检测到')}" readonly></label>
+                </div>
+                <details>
+                    <summary>contextBefore / contextAfter</summary>
+                    <label class="csid-label">contextBefore</label>
+                    <textarea class="text_pole csid-preview-context" readonly>${escapeHtml(payload.contextBefore)}</textarea>
+                    <label class="csid-label">contextAfter</label>
+                    <textarea class="text_pole csid-preview-context" readonly>${escapeHtml(payload.contextAfter)}</textarea>
+                </details>
+                <label class="csid-label">finalPrompt（完整可复制）</label>
+                <textarea class="text_pole csid-preview-prompt" data-csid-preview-prompt>${escapeHtml(payload.finalPrompt)}</textarea>
+                <div class="csid-preview-mode">
+                    <b>当前模式</b>
+                    <span>模式A：插入智绘姬可识别按钮</span>
+                    <span>模式B：直接调用智绘姬生成</span>
+                </div>
+                <div class="csid-preview-warning" ${mustChooseFocus ? '' : 'hidden'}>检测到多个角色，请先选择 focusCharacter，避免混脸或混衣服。</div>
+            </div>
+            <div class="csid-preview-actions">
+                <button class="menu_button" data-csid-preview-action="cancel">取消</button>
+                <button class="menu_button" data-csid-preview-action="insert" ${mustChooseFocus ? 'disabled' : ''}>仅插入 prompt 按钮</button>
+                <button class="menu_button result-control" data-csid-preview-action="generate" ${mustChooseFocus ? 'disabled' : ''}>立即调用智绘姬生图</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', event => {
+        const actionButton = event.target.closest('[data-csid-preview-action]');
+        if (actionButton) {
+            const action = actionButton.dataset.csidPreviewAction;
+            if (action === 'cancel') closeScenePreview();
+            if (action === 'insert' || action === 'generate') confirmScenePreview(action);
+            return;
+        }
+        if (event.target === backdrop) closeScenePreview();
+    });
+    const focusSelect = backdrop.querySelector('[data-csid-preview-focus]');
+    focusSelect?.addEventListener('change', () => {
+        try {
+            const next = buildScenePreviewPayload(payload.messageId, payload.selectedTextRaw, {
+                selectionRange: payload.selectionRange,
+                focusCharacter: focusSelect.value,
+            });
+            renderScenePreviewModal(next);
+        } catch (error) {
+            setStatus('切换焦点失败: ' + error.message);
+        }
+    });
+    setLastDebug({
+        selectedText: payload.selectedText,
+        contextBefore: payload.contextBefore,
+        contextAfter: payload.contextAfter,
+        detectedFocusCharacter: payload.focusCharacter,
+        detectedLocation: payload.detectedLocation,
+        detectedOutfit: payload.detectedOutfit,
+        detectedProps: payload.detectedProps,
+        finalPrompt: payload.finalPrompt,
+        insertTargetMessageId: payload.insertTargetMessageId,
+        insertTargetParagraphIndex: payload.insertTargetParagraphIndex,
+        actualPromptSentToZhihuiji: payload.finalPrompt,
+        generationStatus: 'idle',
+    });
+    return backdrop;
+}
+
+function openScenePreviewFromSelection(messageId, selectedText = '', selectionRange = null) {
+    try {
+        const fallback = state.lastSelectionContext;
+        const actualText = normalizeMultiline(selectedText || (fallback?.messageId === messageId ? fallback.text : '') || '').trim();
+        if (!actualText) throw new Error('没有读到选中的剧情。手机端如果选区丢失，请重新长按选择后再点图片生成');
+        const payload = buildScenePreviewPayload(messageId, actualText, { selectionRange });
+        renderScenePreviewModal(payload);
+    } catch (error) {
+        console.error('[' + EXT_NAME + '] preview failed', error);
+        setStatus('预览失败: ' + error.message);
+    }
 }
 
 function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRange = null) {
@@ -3149,7 +3513,7 @@ function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRa
     const imageButton = document.createElement('button');
     imageButton.type = 'button';
     imageButton.dataset.csidMessageAction = 'image';
-    imageButton.innerHTML = '<span class="fa-solid fa-image"></span><span>图片生成</span>';
+    imageButton.innerHTML = '<span class="fa-solid fa-image"></span><span>预览生图</span>';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.dataset.csidMessageAction = 'close';
@@ -3188,7 +3552,7 @@ function bindMessageMenu() {
             const selectedText = state.activeSelectionText || '';
             const selectionRange = state.activeSelectionRange || null;
             closeMessageMenu();
-            if (action === 'image') generatePromptUnderMessage(messageId, selectedText, selectionRange);
+            if (action === 'image') openScenePreviewFromSelection(messageId, selectedText, selectionRange);
             if (action === 'copy') copyMessageTrigger(messageId, selectedText);
             return;
         }
@@ -3280,10 +3644,17 @@ function rangeBelongsToElement(range, element) {
     return Boolean(start && end && element.contains(start) && element.contains(end));
 }
 
+function removeOwnVisibleTriggers(messageId) {
+    const mes = getMessageElementById(messageId);
+    if (!mes) return;
+    mes.querySelectorAll('.csid-visible-trigger-wrap[data-csid-owned="true"]').forEach(node => node.remove());
+}
+
 function insertTriggerIntoVisibleMessage(messageId, trigger, selectionRange = null) {
     const mes = getMessageElementById(messageId);
     const textNode = mes?.querySelector('.mes_text');
     if (!textNode || !trigger) return null;
+    removeOwnVisibleTriggers(messageId);
     const holder = document.createElement('span');
     holder.className = 'csid-visible-trigger-wrap';
     holder.dataset.csidOwned = 'true';
@@ -3313,6 +3684,115 @@ function renderInlinePrompt(messageId, trigger) {
 
 async function emitMessagePromptEvents(messageId) {
     try { await saveChatConditional?.(); } catch (error) { console.warn('[' + EXT_NAME + '] save chat failed', error); }
+    try { await eventSource.emit(event_types.MESSAGE_UPDATED, Number(messageId), 'codex-scene-image-director'); } catch (error) { console.warn('[' + EXT_NAME + '] message update event failed', error); }
+}
+
+function findChatu8GenerationButtons(messageId) {
+    const mes = getMessageElementById(messageId);
+    if (!mes) return [];
+    return [...mes.querySelectorAll('button, .menu_button, [role="button"]')]
+        .filter(button => !button.closest('.csid-message-menu') && !button.closest('.csid-preview-dialog'))
+        .filter(button => /生成图片|图片生成/.test(normalizeLine(button.textContent || button.title || '')));
+}
+
+async function waitForChatu8Button(messageId, timeoutMs = 3500) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const buttons = findChatu8GenerationButtons(messageId);
+        if (buttons.length) return buttons[buttons.length - 1];
+        await new Promise(resolve => setTimeout(resolve, 180));
+    }
+    return null;
+}
+
+function listenForChatu8Response(requestId, prompt) {
+    const responseEvent = 'generate-image-response';
+    const listener = payload => {
+        if (requestId && payload?.id && payload.id !== requestId) return;
+        eventSource.removeListener?.(responseEvent, listener);
+        const ok = Boolean(payload?.success);
+        setGenerationStatus(ok ? 'success' : 'error', ok ? '智绘姬生成成功' : '智绘姬生成失败: ' + (payload?.error || '未知错误'));
+        setLastDebug({
+            generationStatus: ok ? 'success' : 'error',
+            actualPromptSentToZhihuiji: payload?.prompt || prompt,
+            error: ok ? '' : payload?.error || '未知错误',
+        });
+    };
+    eventSource.on(responseEvent, listener);
+    setTimeout(() => {
+        if (state.generationStatus === 'submitted') {
+            setGenerationStatus('running', '已提交智绘姬，等待 ComfyUI 返回');
+            setLastDebug({ generationStatus: 'running' });
+        }
+    }, 900);
+    setTimeout(() => {
+        if (state.generationStatus === 'submitted' || state.generationStatus === 'running') {
+            eventSource.removeListener?.(responseEvent, listener);
+            setLastDebug({ generationStatus: state.generationStatus, error: '等待生成结果超时，但任务可能仍在智绘姬/ComfyUI 队列中' });
+            renderDebugPanel();
+        }
+    }, 120000);
+}
+
+async function invokeChatu8Generation(messageId, prompt) {
+    const requestEvent = 'generate-image-request';
+    setGenerationStatus('submitted', '正在提交到智绘姬生成链路');
+    const button = await waitForChatu8Button(messageId);
+    if (button) {
+        const requestId = button.dataset?.requestId || button.getAttribute('data-request-id') || '';
+        const actualPrompt = button.dataset?.prompt || button.dataset?.tag || prompt;
+        setLastDebug({
+            actualButtonText: normalizeLine(button.textContent || button.title || ''),
+            actualPromptSentToZhihuiji: actualPrompt,
+            calledZhihuijiFunction: 'HTMLElement.click() -> st-chatu8 triggerGeneration(button)',
+            usedOfficialZhihuijiPipeline: true,
+            triggeredZhihuijiButton: true,
+            generationStatus: 'submitted',
+        });
+        listenForChatu8Response(requestId, prompt);
+        button.click();
+        return { usedOfficialZhihuijiPipeline: true, triggeredZhihuijiButton: true, requestId, actualPrompt };
+    }
+    const requestId = 'csid-direct-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const listenerCount = typeof eventSource.listenerCount === 'function' ? eventSource.listenerCount(requestEvent) : null;
+    setLastDebug({
+        actualButtonText: '',
+        actualPromptSentToZhihuiji: prompt,
+        calledZhihuijiFunction: 'eventSource.emit("generate-image-request", { id, prompt })',
+        usedOfficialZhihuijiPipeline: Boolean(listenerCount === null || listenerCount > 0),
+        triggeredZhihuijiButton: false,
+        generationStatus: 'submitted',
+        error: listenerCount === 0 ? '未检测到智绘姬 generate-image-request 监听器' : '未找到智绘姬按钮，已改用事件提交',
+    });
+    listenForChatu8Response(requestId, prompt);
+    await eventSource.emit(requestEvent, { id: requestId, prompt });
+    return { usedOfficialZhihuijiPipeline: Boolean(listenerCount === null || listenerCount > 0), triggeredZhihuijiButton: false, requestId, actualPrompt: prompt };
+}
+
+async function confirmScenePreview(action) {
+    const payload = state.pendingPreview;
+    if (!payload) return;
+    const promptArea = document.querySelector('.csid-preview-dialog [data-csid-preview-prompt]');
+    const finalPrompt = normalizePromptText(promptArea?.value || payload.finalPrompt);
+    payload.finalPrompt = finalPrompt;
+    payload.trigger = buildChatu8Trigger(finalPrompt);
+    payload.mode = action;
+    try {
+        const writeResult = await writePromptToMessage(payload.messageId, payload.selectedTextRaw, {
+            selectedText: payload.selectedTextRaw,
+            selectionRange: payload.selectionRange,
+            preview: payload,
+            mode: action,
+        });
+        closeScenePreview();
+        if (action === 'generate') {
+            await invokeChatu8Generation(payload.messageId, writeResult.positive);
+        }
+    } catch (error) {
+        console.error('[' + EXT_NAME + '] confirm preview failed', error);
+        setGenerationStatus('error', '确认生图失败: ' + error.message);
+        setLastDebug({ generationStatus: 'error', error: error.message });
+    }
 }
 
 async function writePromptToMessage(messageId, sourceText, options = {}) {
@@ -3320,34 +3800,39 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     if (!message) throw new Error('没有找到这条消息');
     const fullText = stripLastInlinePrompt(getMessageText(message), message);
     const selectedText = normalizeMultiline(options.selectedText || sourceText || '').trim();
-    const sceneText = prepareSceneText(selectedText || fullText);
+    const sceneText = options.preview?.selectedText || prepareSceneText(selectedText || fullText);
     if (!sceneText || looksLikePromptScaffold(sceneText)) throw new Error('这段内容像预设/提示词，不适合直接生图，请只选真正剧情段落');
-    setStatus(selectedText ? '正在为选中剧情生成智绘姬提示词' : '正在为原文生成智绘姬提示词');
-    const result = await buildSmartPrompt(sceneText);
-    state.lastPositive = normalizePromptText(result.positive);
-    state.lastNegative = normalizePromptText(result.negative);
-    state.lastShotCard = result.shotCard;
-    state.lastTrigger = buildChatu8Trigger(state.lastPositive);
-    const positiveArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="positive"]');
-    const negativeArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="negative"]');
-    const shotArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="shot-card"]');
-    const triggerArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="chatu8-trigger"]');
-    if (positiveArea) positiveArea.value = state.lastPositive;
-    if (negativeArea) negativeArea.value = state.lastNegative;
-    if (shotArea) shotArea.value = state.lastShotCard;
-    if (triggerArea) triggerArea.value = state.lastTrigger;
-    if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, sceneText, result.source || 'api');
-    else updateMemoryFromSelectedScene(sceneText, result.localScene);
+    setStatus(selectedText ? '正在为选中剧情准备智绘姬提示词' : '正在为原文准备智绘姬提示词');
+    const payload = options.preview || buildScenePreviewPayload(messageId, selectedText || fullText, { selectionRange: options.selectionRange });
+    payload.finalPrompt = normalizePromptText(payload.finalPrompt || payload.result?.positive || '');
+    payload.trigger = buildChatu8Trigger(payload.finalPrompt);
+    setPromptOutputsFromPayload(payload);
+    updateMemoryFromSelectedScene(sceneText, payload.localScene || payload.result?.localScene || extractSceneLocal(sceneText));
     ensureChatMetadataVariables().zhihuiji = true;
     syncTavernHelperMemory();
     renderMemoryFields();
     saveAll();
     const nextText = insertTriggerAfterSelectedText(fullText, selectedText, state.lastTrigger);
     setMessageRawText(messageId, nextText, state.lastTrigger);
+    removeOwnVisibleTriggers(messageId);
     const promptAnchor = insertTriggerIntoVisibleMessage(messageId, state.lastTrigger, options.selectionRange || null);
     await emitMessagePromptEvents(messageId);
-    setStatus('已写到选中剧情下方；请点击出现的智绘姬图片按钮生成');
-    return { ...result, trigger: state.lastTrigger, insertedAtSelection: Boolean(selectedText && findSelectedTextRange(fullText, selectedText)), clicked: false };
+    setGenerationStatus(options.mode === 'generate' ? 'submitted' : 'idle', options.mode === 'generate' ? '已插入 prompt，正在寻找智绘姬生成按钮' : '已写到选中剧情下方；可点击智绘姬图片按钮生成');
+    setLastDebug({
+        selectedText: sceneText,
+        contextBefore: payload.contextBefore || '',
+        contextAfter: payload.contextAfter || '',
+        detectedFocusCharacter: payload.focusCharacter || payload.result?.focus?.name || '',
+        detectedLocation: payload.detectedLocation || '',
+        detectedOutfit: payload.detectedOutfit || '',
+        detectedProps: payload.detectedProps || '',
+        finalPrompt: state.lastPositive,
+        insertTargetMessageId: Number(messageId),
+        insertTargetParagraphIndex: payload.insertTargetParagraphIndex ?? selectedParagraphIndex(fullText, selectedText),
+        actualPromptSentToZhihuiji: state.lastPositive,
+        generationStatus: state.generationStatus,
+    });
+    return { ...payload.result, positive: state.lastPositive, negative: state.lastNegative, shotCard: state.lastShotCard, trigger: state.lastTrigger, promptAnchor, insertedAtSelection: Boolean(selectedText && findSelectedTextRange(fullText, selectedText)), clicked: false };
 }
 
 async function generatePromptUnderMessage(messageId, selectedText = '', selectionRange = null) {
@@ -3366,7 +3851,7 @@ async function copyMessageTrigger(messageId, selectedText = '') {
         const text = prepareSceneText(normalizeMultiline(selectedText || '').trim() || fullText);
         if (!text) throw new Error('没有可复制的剧情正文');
         setStatus(selectedText ? '正在生成选中剧情的触发文本' : '正在生成这条消息的触发文本');
-        const result = await buildSmartPrompt(text);
+        const result = compilePrompt(text);
         state.lastPositive = normalizePromptText(result.positive);
         state.lastNegative = normalizePromptText(result.negative);
         state.lastShotCard = result.shotCard;
@@ -3403,8 +3888,8 @@ async function composeFromInput(options = {}) {
         return;
     }
     if (inputArea) inputArea.value = input;
-    setStatus('正在分析剧情并生成英文提示词');
-    const result = await buildSmartPrompt(input);
+    setStatus('正在按选段生成英文提示词');
+    const result = compilePrompt(input);
     state.lastPositive = normalizePromptText(result.positive);
     state.lastNegative = normalizePromptText(result.negative);
     state.lastShotCard = result.shotCard;
@@ -3414,8 +3899,7 @@ async function composeFromInput(options = {}) {
     document.querySelector(SETTINGS_SELECTOR + ' [data-role="shot-card"]').value = state.lastShotCard;
     const triggerArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="chatu8-trigger"]');
     if (triggerArea) triggerArea.value = state.lastTrigger;
-    if (result.memoryPatch) applyMemoryPatch(result.memoryPatch, input, result.source || 'api');
-    else updateMemoryFromSelectedScene(input, result.localScene);
+    updateMemoryFromSelectedScene(input, result.localScene);
     syncTavernHelperMemory();
     renderMemoryFields();
     if (!options.skipInsert && (ensureSettings().chatu8.insertToChatInput || options.sendToChat)) insertTriggerIntoChat();
@@ -3560,15 +4044,18 @@ function exposeDebugApi() {
         version: EXT_VERSION,
         extractSceneLocal,
         compilePrompt,
-        async composeText(text, { updateMemory = false, smart = true } = {}) {
+        async composeText(text, { updateMemory = false, smart = false, focusCharacter = '' } = {}) {
             const sceneText = prepareSceneText(String(text || ''));
-            const result = smart ? await buildSmartPrompt(sceneText) : compilePrompt(sceneText);
+            const result = smart ? await buildSmartPrompt(sceneText) : compilePrompt(sceneText, { focusCharacter });
             if (updateMemory) {
                 updateMemoryFromSelectedScene(sceneText, result.localScene);
                 syncTavernHelperMemory();
             }
             return { ...result, trigger: buildChatu8Trigger(result.positive) };
         },
+        buildScenePreviewPayload,
+        resolveFocusCharacter,
+        getDebugText,
         getSettings: () => structuredClone(ensureSettings()),
         getMemory: () => structuredClone(ensureChatMemory()),
         getStoryPrompt: () => buildStoryMemoryPrompt(getLatestStoryQuery()),
