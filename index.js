@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.9';
+const EXT_VERSION = '0.5.0';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -149,6 +149,71 @@ const STYLE_PRESETS = {
     comic: 'comic illustration, sharp silhouette, expressive panel composition',
     custom: '',
 };
+
+const ANIMA_QUALITY_PREFIX = 'masterpiece, best quality, score_7, safe, highres';
+const ANIMA_BASE_NEGATIVE = 'worst quality, low quality, score_1, score_2, score_3, blurry, lowres, bad anatomy, bad hands, malformed hands, extra fingers, missing fingers, watermark, signature, text, logo, cropped, out of frame, photorealistic, 3d render';
+const ANIMA_DEFAULT_CAMERA = 'cinematic composition, dynamic angle';
+
+const ANIMA_STYLE_PROFILES = [
+    {
+        id: 'cyberpunk',
+        pattern: /赛博朋克|霓虹|义体|黑客|都市夜景|夜晚|雨夜|街道|巷子|灯牌|反光|玻璃幕墙/i,
+        tags: 'anime cyberpunk illustration, neon rim lighting, rainy reflections, detailed urban background, cinematic color grading, crisp lineart',
+    },
+    {
+        id: 'fantasy',
+        pattern: /魔法|魔女|精灵|龙|骑士|王国|城堡|异世界|神殿|森林|冒险|法术|咒文/i,
+        tags: 'fantasy anime illustration, luminous magic, ornate costume details, painterly background, dramatic atmosphere, elegant composition',
+    },
+    {
+        id: 'dark',
+        pattern: /恶魔|天使|诅咒|血|阴影|地下|禁忌|恐怖|怪物|深渊|审判|囚禁|锁链|黑暗/i,
+        tags: 'dark fantasy anime illustration, moody lighting, high contrast shadows, gothic atmosphere, sharp highlights, cinematic composition',
+    },
+    {
+        id: 'action',
+        pattern: /战斗|冲刺|追逐|奔跑|挥刀|刀|剑|枪|爆炸|破碎|闪避|攻击|格斗|魔法阵/i,
+        tags: 'dynamic anime action illustration, dramatic perspective, motion blur, impact lighting, energetic composition, sharp lineart',
+    },
+    {
+        id: 'romance',
+        pattern: /脸红|心跳|告白|靠近|牵手|拥抱|亲吻|暧昧|温柔|约会|恋爱|羞涩/i,
+        tags: 'romantic anime key visual, soft bloom, delicate eyelashes, luminous eyes, warm gentle lighting, subtle color harmony',
+    },
+    {
+        id: 'school',
+        pattern: /学校|学院|教室|走廊|校门|制服|校服|书包|社团|学生|风纪委员|图书馆/i,
+        tags: 'polished school anime key visual, clean cel shading, crisp lineart, expressive eyes, soft daylight, tidy background detail',
+    },
+    {
+        id: 'slice',
+        pattern: /日常|房间|客厅|餐桌|甜品|咖啡|清晨|午后|阳光|散步|家里|便利店/i,
+        tags: 'slice of life anime illustration, soft natural lighting, clean lineart, cozy atmosphere, gentle color palette, detailed everyday background',
+    },
+    {
+        id: 'mystery',
+        pattern: /秘密|谜|调查|侦探|线索|禁书|档案|监视|阴谋|真相|风纪|检查/i,
+        tags: 'mystery anime illustration, suspenseful lighting, cinematic framing, focused composition, subtle shadows, refined details',
+    },
+];
+
+const ANIMA_CHARACTER_STYLE_PROFILES = [
+    {
+        id: 'cute-girl',
+        pattern: /少女|女孩|女学生|公主|女仆|粉色|长发|猫耳|狐耳|可爱|害羞|脸红/i,
+        tags: 'cute anime character design, luminous eyes, delicate facial features, soft hair highlights',
+    },
+    {
+        id: 'elegant',
+        pattern: /优雅|大小姐|贵族|女王|礼服|长裙|银发|金发|冷淡|端庄/i,
+        tags: 'elegant anime character art, refined silhouette, graceful pose, ornate details, controlled expression',
+    },
+    {
+        id: 'cool-boy',
+        pattern: /少年|男孩|男人|青年|骑士|执事|冷峻|沉默|黑发|西装/i,
+        tags: 'otome visual novel character art, sharp eyes, elegant lineart, cool lighting, handsome character design',
+    },
+];
 
 const FIELD_LABELS = {
     appearance: '固定外观',
@@ -2038,6 +2103,30 @@ function selectedTextCoreTags(inputText, localScene, focus, sceneAnchor = null) 
     ]);
 }
 
+function buildAnimaStyleTags(inputText, focus = {}, charMemory = {}) {
+    const story = ensureStoryMemory();
+    const hintText = normalizeMultiline([
+        inputText,
+        focus?.name || '',
+        charMemory.appearance || '',
+        charMemory.currentOutfit || '',
+        story.summary || '',
+        Array.isArray(story.facts) ? story.facts.slice(0, 12).join(' ') : '',
+    ].join('\n'));
+    const worldTags = ANIMA_STYLE_PROFILES
+        .filter(profile => regexHit(profile.pattern, hintText))
+        .slice(0, 2)
+        .map(profile => profile.tags);
+    const characterTags = ANIMA_CHARACTER_STYLE_PROFILES
+        .filter(profile => regexHit(profile.pattern, hintText))
+        .slice(0, 1)
+        .map(profile => profile.tags);
+    return joinPrompt([
+        worldTags.length ? worldTags.join(', ') : 'polished anime key visual, clean lineart, expressive eyes, refined color design',
+        characterTags.join(', '),
+    ]);
+}
+
 function promptPart(value, englishOnly = false) {
     const clean = normalizeLine(value);
     if (!clean) return '';
@@ -2113,7 +2202,6 @@ function inferMood(text) {
 }
 
 function buildShotCard(inputText, localScene, focus = resolveFocusCharacter(inputText)) {
-    const settings = ensureSettings();
     const chatMemory = ensureChatMemory();
     const name = focus.name || getCurrentCharacterName();
     const charMemory = getCharacterMemory(name);
@@ -2128,7 +2216,7 @@ function buildShotCard(inputText, localScene, focus = resolveFocusCharacter(inpu
         `时间/光线: ${localScene.time || chatMemory.scene.time || ''} ${localScene.lighting || chatMemory.scene.lighting || ''}`.trim(),
         `动作: ${localScene.action || charMemory.pose || '未填写'}`,
         `表情/氛围: ${localScene.expression || charMemory.expression || ''} ${localScene.mood || chatMemory.scene.mood || ''}`.trim(),
-        `镜头: ${localScene.camera || settings.prompt.camera}`,
+        `镜头: ${localScene.camera || ANIMA_DEFAULT_CAMERA}`,
         `剧情段落: ${compactPreview(inputText, 220)}`,
     ];
     return lines.join('\n');
@@ -2141,7 +2229,6 @@ function compilePrompt(inputText, options = {}) {
     const name = focus.name || getCurrentCharacterName();
     const charMemory = getCharacterMemory(name);
     const localScene = extractSceneLocal(inputText);
-    const style = STYLE_PRESETS[settings.prompt.stylePreset] || '';
     const sceneAnchor = buildSceneAnchor(inputText, localScene, focus);
     const selectedHasDynamicAnchor = Boolean(sceneAnchor.hasStrongAnchor || localScene.action || localScene.props);
     const sceneLocation = localScene.location || (selectedHasDynamicAnchor ? '' : chatMemory.scene.location);
@@ -2156,24 +2243,18 @@ function compilePrompt(inputText, options = {}) {
     const visualNotes = Array.isArray(longTerm.visualNotes) ? longTerm.visualNotes.slice(0, 6).join(', ') : '';
     const englishOnly = true;
     const visualNotesForPrompt = selectedHasDynamicAnchor ? '' : visualNotes;
-    const worldVisualStyle = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.visualStyle, englishOnly);
-    const worldGenre = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.genre, englishOnly);
-    const worldRules = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.rules, englishOnly);
     const translatedInput = englishSceneTags(localScene, inputText);
     const promptName = characterIdentityName(focus);
     const identityTags = characterIdentityTags(focus, charMemory);
+    const styleTags = buildAnimaStyleTags(inputText, focus, charMemory);
     const coreSceneTags = selectedTextCoreTags(inputText, localScene, focus, sceneAnchor);
 
     const positive = cleanEnglishPrompt(joinPrompt([
-        settings.prompt.positivePrefix,
-        settings.prompt.quality,
-        style,
+        ANIMA_QUALITY_PREFIX,
+        styleTags,
         coreSceneTags,
         promptName,
         identityTags,
-        worldVisualStyle,
-        worldGenre,
-        worldRules,
         promptPart(charMemory.appearance, englishOnly),
         promptPart(charMemory.accessories, englishOnly),
         promptPart(outfit, englishOnly),
@@ -2187,14 +2268,13 @@ function compilePrompt(inputText, options = {}) {
         promptPart(localScene.props, englishOnly),
         promptPart(expression, englishOnly),
         promptPart(pose, englishOnly),
-        localScene.camera || settings.prompt.camera,
+        localScene.camera || ANIMA_DEFAULT_CAMERA,
         translatedInput,
     ]));
 
     const negative = cleanEnglishPrompt(joinPrompt([
-        settings.prompt.negative,
+        ANIMA_BASE_NEGATIVE,
         sceneAnchor.negative,
-        settings.memory.world.negativeRules,
         charMemory.negative,
     ]));
 
@@ -2463,7 +2543,16 @@ async function analyzeScenePrompt(text) {
             },
             {
                 role: 'user',
-                content: JSON.stringify({ selectedText: text, currentCharacter: getCurrentCharacterName(), localScene, currentMemory, stylePreset: settings.prompt.stylePreset, quality: settings.prompt.quality, camera: settings.prompt.camera, positivePrefix: settings.prompt.positivePrefix, baseNegative: settings.prompt.negative }),
+                content: JSON.stringify({
+                    selectedText: text,
+                    currentCharacter: getCurrentCharacterName(),
+                    localScene,
+                    currentMemory,
+                    animaQualityPrefix: ANIMA_QUALITY_PREFIX,
+                    animaStyleTags: buildAnimaStyleTags(text, resolveFocusCharacter(text), getCharacterMemory(resolveFocusCharacter(text).name)),
+                    camera: localScene.camera || ANIMA_DEFAULT_CAMERA,
+                    baseNegative: ANIMA_BASE_NEGATIVE,
+                }),
             },
         ],
     };
@@ -2479,8 +2568,8 @@ async function analyzeScenePrompt(text) {
         const content = data?.choices?.[0]?.message?.content ?? data?.content ?? data?.text ?? data;
         const parsed = parsePatchContent(content);
         return {
-            positive: normalizePromptText(parsed.positive_prompt || parsed.positive || ''),
-            negative: normalizePromptText(parsed.negative_prompt || parsed.negative || ''),
+            positive: cleanEnglishPrompt(parsed.positive_prompt || parsed.positive || ''),
+            negative: cleanEnglishPrompt(parsed.negative_prompt || parsed.negative || ''),
             shotCard: String(parsed.shot_card || parsed.shotCard || '').trim(),
             localScene,
             memoryPatch: parsed.memory_patch || parsed.memoryPatch || parsed.patch || null,
@@ -2671,23 +2760,18 @@ function readFormToSettings() {
     settings.behavior.autoMemory = root.querySelector('[name="behavior.autoMemory"]').checked;
     settings.behavior.syncTavernHelper = root.querySelector('[name="behavior.syncTavernHelper"]').checked;
     settings.behavior.allowPermanentOverwrite = root.querySelector('[name="behavior.allowPermanentOverwrite"]').checked;
-    settings.behavior.promptLanguage = root.querySelector('[name="behavior.promptLanguage"]').value;
+    settings.behavior.promptLanguage = 'en';
     settings.behavior.preferClipboard = root.querySelector('[name="behavior.preferClipboard"]')?.checked ?? true;
     settings.chatu8.enabled = root.querySelector('[name="chatu8.enabled"]')?.checked ?? true;
     settings.chatu8.insertToChatInput = root.querySelector('[name="chatu8.insertToChatInput"]')?.checked ?? true;
     settings.chatu8.startTag = root.querySelector('[name="chatu8.startTag"]')?.value || '[';
     settings.chatu8.endTag = root.querySelector('[name="chatu8.endTag"]')?.value || ']';
     readStorySettingsFromForm(root);
-    settings.prompt.stylePreset = root.querySelector('[name="prompt.stylePreset"]').value;
-    settings.prompt.quality = root.querySelector('[name="prompt.quality"]').value.trim();
-    settings.prompt.positivePrefix = root.querySelector('[name="prompt.positivePrefix"]').value.trim();
-    settings.prompt.negative = root.querySelector('[name="prompt.negative"]').value.trim();
-    settings.prompt.camera = root.querySelector('[name="prompt.camera"]').value.trim();
-    settings.memory.world.name = root.querySelector('[name="world.name"]').value.trim();
-    settings.memory.world.genre = root.querySelector('[name="world.genre"]').value.trim();
-    settings.memory.world.rules = root.querySelector('[name="world.rules"]').value.trim();
-    settings.memory.world.visualStyle = root.querySelector('[name="world.visualStyle"]').value.trim();
-    settings.memory.world.negativeRules = root.querySelector('[name="world.negativeRules"]').value.trim();
+    settings.prompt.stylePreset = 'anime';
+    settings.prompt.quality = ANIMA_QUALITY_PREFIX;
+    settings.prompt.positivePrefix = '';
+    settings.prompt.negative = ANIMA_BASE_NEGATIVE;
+    settings.prompt.camera = ANIMA_DEFAULT_CAMERA;
     saveAll();
 }
 
@@ -2994,7 +3078,6 @@ function fillFormFromSettings() {
     root.querySelector('[name="behavior.autoMemory"]').checked = settings.behavior.autoMemory;
     root.querySelector('[name="behavior.syncTavernHelper"]').checked = settings.behavior.syncTavernHelper;
     root.querySelector('[name="behavior.allowPermanentOverwrite"]').checked = settings.behavior.allowPermanentOverwrite;
-    root.querySelector('[name="behavior.promptLanguage"]').value = settings.behavior.promptLanguage;
     const preferClipboard = root.querySelector('[name="behavior.preferClipboard"]');
     if (preferClipboard) preferClipboard.checked = settings.behavior.preferClipboard;
     const chatu8Enabled = root.querySelector('[name="chatu8.enabled"]');
@@ -3003,11 +3086,6 @@ function fillFormFromSettings() {
     if (chatu8Insert) chatu8Insert.checked = settings.chatu8.insertToChatInput;
     setValue(root, 'chatu8.startTag', settings.chatu8.startTag);
     setValue(root, 'chatu8.endTag', settings.chatu8.endTag);
-    root.querySelector('[name="prompt.stylePreset"]').value = settings.prompt.stylePreset;
-    root.querySelector('[name="prompt.quality"]').value = settings.prompt.quality;
-    root.querySelector('[name="prompt.positivePrefix"]').value = settings.prompt.positivePrefix;
-    root.querySelector('[name="prompt.negative"]').value = settings.prompt.negative;
-    root.querySelector('[name="prompt.camera"]').value = settings.prompt.camera;
     renderMemoryFields();
 }
 
@@ -3260,48 +3338,8 @@ function buildSettingsHtml() {
                         <div class="csid-section-head">
                             <div>
                                 <b><i class="fa-solid fa-sliders"></i> 全局设置</b>
-                                <span>世界观、画风、API、智绘姬兼容</span>
+                                <span>API、智绘姬兼容、后台记忆</span>
                             </div>
-                        </div>
-                        <div class="csid-module">
-                            <div class="csid-module-head"><b><i class="fa-solid fa-globe"></i> 世界与画风</b></div>
-                            <div class="csid-grid two">
-                                <label>世界名<input class="text_pole" name="world.name"></label>
-                                <label>世界类型<input class="text_pole" name="world.genre"></label>
-                                <label>画风
-                                    <select class="text_pole" name="prompt.stylePreset">
-                                        <option value="anime">二次元</option>
-                                        <option value="cinematic">电影感</option>
-                                        <option value="realistic">写实</option>
-                                        <option value="comic">漫画</option>
-                                        <option value="custom">自定义</option>
-                                    </select>
-                                </label>
-                                <label>提示词语言
-                                    <select class="text_pole" name="behavior.promptLanguage">
-                                        <option value="en">英文</option>
-                                        <option value="mixed">混合</option>
-                                        <option value="zh">中文</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <label class="csid-label">世界观限制</label>
-                            <textarea class="text_pole csid-memory-area" name="world.rules"></textarea>
-                            <label class="csid-label">视觉风格</label>
-                            <textarea class="text_pole csid-memory-area" name="world.visualStyle"></textarea>
-                            <label class="csid-label">世界负面限制</label>
-                            <textarea class="text_pole csid-memory-area small" name="world.negativeRules"></textarea>
-                        </div>
-                        <div class="csid-module">
-                            <div class="csid-module-head"><b><i class="fa-solid fa-tags"></i> 提示词预设</b></div>
-                            <label class="csid-label">质量词</label>
-                            <textarea class="text_pole csid-memory-area small" name="prompt.quality"></textarea>
-                            <label class="csid-label">固定前缀</label>
-                            <textarea class="text_pole csid-memory-area small" name="prompt.positivePrefix"></textarea>
-                            <label class="csid-label">默认镜头</label>
-                            <input class="text_pole" name="prompt.camera">
-                            <label class="csid-label">默认反向词</label>
-                            <textarea class="text_pole csid-memory-area" name="prompt.negative"></textarea>
                         </div>
                         <div class="csid-module">
                             <div class="csid-module-head"><b><i class="fa-solid fa-plug-circle-bolt"></i> API 与模型</b><span data-role="dash-api">本地快速模式</span></div>

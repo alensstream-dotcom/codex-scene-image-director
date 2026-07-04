@@ -181,6 +181,23 @@ function promptOf(api, text, focusCharacter) {
 }
 
 {
+    assert.doesNotMatch(source, /name="behavior\.promptLanguage"/, 'test2c3b prompt language setting should be removed from UI');
+    assert.doesNotMatch(source, /name="world\.visualStyle"/, 'test2c3b world visual style setting should be removed from UI');
+    assert.doesNotMatch(source, /name="prompt\.quality"/, 'test2c3b quality prompt setting should be removed from UI');
+}
+
+{
+    const { api, settings, memory } = createContext();
+    setCharacter(memory, settings, '樱', 'pink long hair', 'school uniform');
+    const school = api.compilePrompt('樱背着书包走在学校走廊里。', { focusCharacter: '樱' }).positive;
+    assert.match(school, /polished school anime key visual/i, `test2c3c school profile missing: ${school}`);
+    const cyberpunk = api.compilePrompt('樱站在雨夜的霓虹街道里，玻璃幕墙映出她的影子。', { focusCharacter: '樱' }).positive;
+    assert.match(cyberpunk, /anime cyberpunk illustration|neon rim lighting/i, `test2c3c cyberpunk profile missing: ${cyberpunk}`);
+    const fantasy = api.compilePrompt('樱举起法杖，森林里的魔法阵发出光芒。', { focusCharacter: '樱' }).positive;
+    assert.match(fantasy, /fantasy anime illustration|luminous magic/i, `test2c3c fantasy profile missing: ${fantasy}`);
+}
+
+{
     const { api, context, settings, memory } = createContext();
     setCharacter(memory, settings, '神原樱', '', 'school uniform');
     const selected = '神原樱背着书包走在前面，小皮鞋踩得啪啪响。她头也不回，樱粉色的长发随着步伐一甩一甩。';
