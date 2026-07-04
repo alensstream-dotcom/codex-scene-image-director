@@ -471,7 +471,8 @@
 }
 
 .csid-actions,
-.csid-action-strip {
+.csid-action-strip,
+.csid-capture-strip {
     display: grid;
     gap: 7px;
     margin: 0;
@@ -483,6 +484,23 @@
 
 .csid-action-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.csid-capture-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+}
+
+.csid-capture-status {
+    grid-column: 1 / -1;
+    min-height: 32px;
+    padding: 7px 10px;
+    border: 1px solid var(--csid-border);
+    border-radius: 8px;
+    background: var(--csid-bg);
+    color: var(--csid-muted);
+    font-size: 0.88em;
+    line-height: 1.35;
 }
 
 .csid-hero-action {
@@ -704,7 +722,8 @@
     .csid-grid.two,
     .csid-switch-grid,
     .csid-primary-actions,
-    .csid-action-strip {
+    .csid-action-strip,
+    .csid-capture-strip {
         grid-template-columns: 1fr;
     }
 

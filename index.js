@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.4';
+const EXT_VERSION = '0.4.5';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -247,6 +247,8 @@ let state = {
     lastImageDataUrl: '',
     lastDebug: null,
     lastSelectionContext: null,
+    sceneCaptureStart: null,
+    sceneCaptureEnd: null,
     pendingPreview: null,
     generationStatus: 'idle',
     analyzerRunning: false,
@@ -2765,6 +2767,12 @@ function buildSettingsHtml() {
                             <button class="menu_button" data-action="use-latest"><i class="fa-solid fa-clock-rotate-left"></i><span>最新回复</span></button>
                             <button class="menu_button" data-action="use-recent"><i class="fa-solid fa-list-check"></i><span>勾选消息</span></button>
                         </div>
+                        <div class="csid-capture-strip">
+                            <button class="menu_button" data-action="capture-start"><i class="fa-solid fa-location-crosshairs"></i><span>开始取景</span></button>
+                            <button class="menu_button" data-action="capture-end"><i class="fa-solid fa-flag-checkered"></i><span>结束取景</span></button>
+                            <button class="menu_button result-control" data-action="capture-preview"><i class="fa-solid fa-clapperboard"></i><span>生成这一幕</span></button>
+                            <div class="csid-capture-status" data-role="capture-status">取景点未设置</div>
+                        </div>
                         <div class="csid-module">
                             <div class="csid-module-head">
                                 <b><i class="fa-solid fa-comments"></i> 最近消息</b>
@@ -3032,6 +3040,9 @@ function bindEvents() {
         if (!button) return;
         const action = button.dataset.action;
         if (action === 'read-selection') readSelectionIntoInput();
+        if (action === 'capture-start') captureScenePoint('start');
+        if (action === 'capture-end') captureScenePoint('end');
+        if (action === 'capture-preview') openScenePreviewFromCapture();
         if (action === 'read-clipboard') readClipboardIntoInput();
         if (action === 'use-recent') useRecentIntoInput();
         if (action === 'use-latest') useLatestIntoInput();
@@ -3253,9 +3264,111 @@ function getSelectionContext(event) {
     const rect = range.getBoundingClientRect();
     const x = rect.left || rect.right ? rect.left + rect.width / 2 : event?.clientX || window.innerWidth / 2;
     const y = rect.bottom || event?.clientY || window.innerHeight / 2;
-    const context = { messageId, text: selectedText, x, y, range: range.cloneRange(), capturedAt: Date.now() };
+    const fullText = stripLastInlinePrompt(getMessageText(chat?.[messageId]), chat?.[messageId]);
+    const sourceRange = findSelectedTextRange(fullText, selectedText);
+    const context = {
+        messageId,
+        text: selectedText,
+        x,
+        y,
+        range: range.cloneRange(),
+        sourceRange,
+        paragraphIndex: sourceRange ? selectedParagraphIndex(fullText, selectedText) : null,
+        capturedAt: Date.now(),
+    };
     state.lastSelectionContext = context;
     return context;
+}
+
+function getCurrentOrCachedSelectionContext(maxAgeMs = 10 * 60 * 1000) {
+    const live = getSelectionContext();
+    if (live) return live;
+    const cached = state.lastSelectionContext;
+    if (!cached?.text) return null;
+    if (Date.now() - Number(cached.capturedAt || 0) > maxAgeMs) return null;
+    return cached;
+}
+
+function capturePointLabel(point) {
+    if (!point) return '未设置';
+    const line = compactPreview(point.text, 42);
+    return '#' + point.messageId + ' 第' + ((point.paragraphIndex ?? 0) + 1) + '段 ' + line;
+}
+
+function renderCaptureStatus() {
+    const area = document.querySelector(SETTINGS_SELECTOR + ' [data-role="capture-status"]');
+    if (!area) return;
+    area.textContent = '开始: ' + capturePointLabel(state.sceneCaptureStart) + ' | 结束: ' + capturePointLabel(state.sceneCaptureEnd);
+}
+
+function captureScenePoint(kind) {
+    const context = getCurrentOrCachedSelectionContext();
+    if (!context?.text) {
+        setStatus('没有可记录的选中剧情，请先在正文里选中一小段');
+        renderCaptureStatus();
+        return;
+    }
+    const point = {
+        messageId: Number(context.messageId),
+        text: context.text,
+        sourceRange: context.sourceRange ? { ...context.sourceRange } : null,
+        paragraphIndex: context.paragraphIndex,
+        capturedAt: Date.now(),
+    };
+    if (kind === 'start') state.sceneCaptureStart = point;
+    else state.sceneCaptureEnd = point;
+    renderCaptureStatus();
+    setStatus((kind === 'start' ? '已记录开始取景点: ' : '已记录结束取景点: ') + compactPreview(point.text, 64));
+}
+
+function resolveCapturePointRange(fullText, point) {
+    if (!point?.text) return null;
+    if (point.sourceRange && Number.isInteger(point.sourceRange.start) && Number.isInteger(point.sourceRange.end)) {
+        return point.sourceRange;
+    }
+    return findSelectedTextRange(fullText, point.text);
+}
+
+function buildCaptureSelectionFromPoints(startPoint, endPoint) {
+    if (!startPoint?.text || !endPoint?.text) throw new Error('请先设置开始取景和结束取景');
+    if (Number(startPoint.messageId) !== Number(endPoint.messageId)) throw new Error('开始取景和结束取景必须在同一条消息里');
+    const messageId = Number(startPoint.messageId);
+    const message = chat?.[messageId];
+    if (!message) throw new Error('没有找到取景所在消息');
+    const fullText = stripLastInlinePrompt(getMessageText(message), message);
+    const startRange = resolveCapturePointRange(fullText, startPoint);
+    const endRange = resolveCapturePointRange(fullText, endPoint);
+    if (!startRange || !endRange) throw new Error('无法在消息正文中定位取景点，请重新选中起止片段');
+    const start = Math.min(startRange.start, endRange.start);
+    const end = Math.max(startRange.end, endRange.end);
+    const text = normalizeMultiline(fullText.slice(start, end));
+    if (!text || text.length < 8) throw new Error('取景范围太短，请扩大选段');
+    return {
+        messageId,
+        text,
+        sourceRange: { start, end, exact: Boolean(startRange.exact && endRange.exact) },
+        paragraphIndex: normalizeMultiline(fullText.slice(0, start)).split(/\n{2,}|\n/).filter(Boolean).length,
+    };
+}
+
+function openScenePreviewFromCapture() {
+    try {
+        const capture = buildCaptureSelectionFromPoints(state.sceneCaptureStart, state.sceneCaptureEnd);
+        state.activeMessageId = capture.messageId;
+        state.activeSelectionText = capture.text;
+        state.activeSelectionRange = null;
+        state.lastSelectionContext = {
+            messageId: capture.messageId,
+            text: capture.text,
+            sourceRange: capture.sourceRange,
+            paragraphIndex: capture.paragraphIndex,
+            capturedAt: Date.now(),
+        };
+        openScenePreviewFromSelection(capture.messageId, capture.text, null);
+    } catch (error) {
+        setStatus('生成这一幕失败: ' + error.message);
+        setLastDebug({ generationStatus: 'error', error: error.message });
+    }
 }
 
 function selectedParagraphIndex(fullText, selectedText) {
@@ -4026,6 +4139,7 @@ function init() {
     bindStEvents();
     bindMessageMenu();
     fillFormFromSettings();
+    renderCaptureStatus();
     setTimeout(() => {
         hydrateStoryFromDbIfUseful().finally(() => {
             indexExistingStoryMemory({ silent: true });
@@ -4055,6 +4169,7 @@ function exposeDebugApi() {
         },
         buildScenePreviewPayload,
         resolveFocusCharacter,
+        buildCaptureSelectionFromPoints,
         getDebugText,
         getSettings: () => structuredClone(ensureSettings()),
         getMemory: () => structuredClone(ensureChatMemory()),

@@ -17,6 +17,7 @@ globalThis.__csidTest = {
   prepareSceneText,
   buildChatu8Trigger,
   writePromptToMessage,
+  buildCaptureSelectionFromPoints,
 };
 `;
 
@@ -212,6 +213,31 @@ function promptOf(api, text, focusCharacter) {
     assert.equal(second.insertedAtSelection, true, 'test8 repeated write should still find selected segment');
     assert.equal((context.chat[0].mes.match(/\n\n\[/g) || []).length, 1, 'test8 repeated write should not stack duplicate trigger blocks');
     assert.notEqual(context.chat[0].mes, once + '\n\n' + second.trigger, 'test8 should replace previous trigger instead of appending');
+}
+
+{
+    const { api, context } = createContext();
+    const full = [
+        '前面还有别的剧情。',
+        '凛坐在餐桌前，盯着那颗水蜜桃看了很久。',
+        '她拿着勺子的手停在半空，像是在犹豫。',
+        '窗外的晨光落在白色连帽衫上。',
+        '后面继续说话。'
+    ].join('\n');
+    context.chat[0] = { mes: full };
+    const startText = '凛坐在餐桌前';
+    const endText = '白色连帽衫上';
+    const startRange = full.indexOf(startText);
+    const endRange = full.indexOf(endText);
+    const capture = api.buildCaptureSelectionFromPoints(
+        { messageId: 0, text: startText, sourceRange: { start: startRange, end: startRange + startText.length, exact: true } },
+        { messageId: 0, text: endText, sourceRange: { start: endRange, end: endRange + endText.length, exact: true } },
+    );
+    assert.match(capture.text, /凛坐在餐桌前/, 'test9 capture should include start text');
+    assert.match(capture.text, /勺子的手停在半空/, 'test9 capture should include middle narrative');
+    assert.match(capture.text, /白色连帽衫上/, 'test9 capture should include end text');
+    assert.doesNotMatch(capture.text, /前面还有别的剧情|后面继续说话/, 'test9 capture should not include outside text');
+    assert.equal(capture.messageId, 0);
 }
 
 console.log('prompt-chain tests passed');

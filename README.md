@@ -33,13 +33,15 @@
 - 不依赖智绘姬或 st-chatu8。
 - 如果安装了“酒馆助手 / JS-Slash-Runner”，可以在插件中开启变量同步。
 
-## 0.4.4 确认生图链路
+## 0.4.5 确认生图链路
 
-0.4.4 起选中剧情后先弹出确认框，显示 selectedText、contextBefore/contextAfter、focusCharacter、location、outfit、props 和 finalPrompt。确认后可以选择“仅插入 prompt 按钮”或“立即调用智绘姬生图”。直接生图会优先等待并点击智绘姬生成按钮，复用 `generate-image-request / generate-image-response` 正式链路；找不到按钮时会退回事件提交，并在 debug 面板写明原因和状态。
+0.4.5 起选中剧情后先弹出确认框，显示 selectedText、contextBefore/contextAfter、focusCharacter、location、outfit、props 和 finalPrompt。确认后可以选择“仅插入 prompt 按钮”或“立即调用智绘姬生图”。直接生图会优先等待并点击智绘姬生成按钮，复用 `generate-image-request / generate-image-response` 正式链路；找不到按钮时会退回事件提交，并在 debug 面板写明原因和状态。
 
 本版同时强化 selectedText 优先级：主角、动作、情绪、关键道具和构图核心优先来自选中剧情，角色/场景记忆只补固定外观、当前服装、地点时间和持续道具。选段生图链路只走本地规则，不额外调用 LLM/API。
 
-0.4.4 额外修复了两类误触发：像“剧情要求 / 详略安排 / 文笔要求 / prompt / negative_prompt”的预设或世界书输出会被拒绝，不再被当作剧情生图；重复点击同一条消息时会先清理本插件上一次插入的可见 prompt，避免按钮和触发文本越堆越多。
+0.4.5 额外修复了两类误触发：像“剧情要求 / 详略安排 / 文笔要求 / prompt / negative_prompt”的预设或世界书输出会被拒绝，不再被当作剧情生图；重复点击同一条消息时会先清理本插件上一次插入的可见 prompt，避免按钮和触发文本越堆越多。
+
+手机选区丢失时可以使用“开始取景 / 结束取景 / 生成这一幕”：先在同一条消息里选起点片段并记录，再选终点片段并记录，最后会截取两点之间的完整剧情进入同一个预览确认框。
 
 Debug 面板在“生图工作台”底部，点击“复制 debug 信息”可复制 selectedText、上下文、finalPrompt、实际发给智绘姬的 prompt、调用入口和生成状态。
 
