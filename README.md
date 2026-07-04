@@ -33,6 +33,12 @@
 - 不依赖智绘姬或 st-chatu8。
 - 如果安装了“酒馆助手 / JS-Slash-Runner”，可以在插件中开启变量同步。
 
+## 0.4.6 精确选段与智绘姬按钮识别
+
+0.4.6 修复同一条消息里相同剧情句子出现多次时可能插到第一处的问题：插件会记录选段在正文里的出现序号和 sourceRange，预览、切换焦点、插入 prompt 和直接生图都使用同一个位置。手机端也会在 selectionchange 时缓存最近正文选区，减少点开扩展后选区丢失。
+
+智绘姬按钮识别现在同时匹配 `.st-chatu8-image-button` / `.image-tag-button` 官方 class、按钮文案和 prompt/tag 数据；debug 额外显示 `zhihuijiPipelineRoute`，区分 `official-button-click` 和 `official-event-fallback`。
+
 ## 0.4.5 确认生图链路
 
 0.4.5 起选中剧情后先弹出确认框，显示 selectedText、contextBefore/contextAfter、focusCharacter、location、outfit、props 和 finalPrompt。确认后可以选择“仅插入 prompt 按钮”或“立即调用智绘姬生图”。直接生图会优先等待并点击智绘姬生成按钮，复用 `generate-image-request / generate-image-response` 正式链路；找不到按钮时会退回事件提交，并在 debug 面板写明原因和状态。

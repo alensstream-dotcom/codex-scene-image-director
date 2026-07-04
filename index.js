@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.5';
+const EXT_VERSION = '0.4.6';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -247,6 +247,7 @@ let state = {
     lastImageDataUrl: '',
     lastDebug: null,
     lastSelectionContext: null,
+    activeSelectionSourceRange: null,
     sceneCaptureStart: null,
     sceneCaptureEnd: null,
     pendingPreview: null,
@@ -256,6 +257,7 @@ let state = {
     storyAnalyzerRunning: false,
     storyAnalyzerQueue: [],
     saveTimer: null,
+    selectionCacheTimer: null,
     lastDiagnostics: [],
 };
 
@@ -3247,6 +3249,35 @@ function nodeToElement(node) {
     return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
 }
 
+function countCollapsedOccurrences(sourceText, selectedText) {
+    const source = buildCollapsedSearchIndex(sourceText).value;
+    const selected = buildCollapsedSearchIndex(selectedText).value.trim();
+    if (!source || !selected) return 0;
+    let count = 0;
+    let from = 0;
+    while (true) {
+        const index = source.indexOf(selected, from);
+        if (index < 0) break;
+        count += 1;
+        from = index + Math.max(1, selected.length);
+    }
+    return count;
+}
+
+function getSelectionOccurrenceIndex(range, root, selectedText) {
+    if (!range || !root || !selectedText || !rangeBelongsToElement(range, root)) return 0;
+    try {
+        const beforeRange = document.createRange();
+        beforeRange.selectNodeContents(root);
+        beforeRange.setEnd(range.startContainer, range.startOffset);
+        const beforeText = beforeRange.toString();
+        beforeRange.detach?.();
+        return countCollapsedOccurrences(beforeText, selectedText);
+    } catch {
+        return 0;
+    }
+}
+
 function getSelectionContext(event) {
     const selection = window.getSelection?.();
     if (!selection || selection.rangeCount < 1 || selection.isCollapsed) return null;
@@ -3265,7 +3296,9 @@ function getSelectionContext(event) {
     const x = rect.left || rect.right ? rect.left + rect.width / 2 : event?.clientX || window.innerWidth / 2;
     const y = rect.bottom || event?.clientY || window.innerHeight / 2;
     const fullText = stripLastInlinePrompt(getMessageText(chat?.[messageId]), chat?.[messageId]);
-    const sourceRange = findSelectedTextRange(fullText, selectedText);
+    const textRoot = mes.querySelector?.('.mes_text') || mes;
+    const occurrenceIndex = getSelectionOccurrenceIndex(range, textRoot, selectedText);
+    const sourceRange = findSelectedTextRange(fullText, selectedText, occurrenceIndex);
     const context = {
         messageId,
         text: selectedText,
@@ -3273,7 +3306,8 @@ function getSelectionContext(event) {
         y,
         range: range.cloneRange(),
         sourceRange,
-        paragraphIndex: sourceRange ? selectedParagraphIndex(fullText, selectedText) : null,
+        occurrenceIndex,
+        paragraphIndex: sourceRange ? selectedParagraphIndex(fullText, selectedText, sourceRange) : null,
         capturedAt: Date.now(),
     };
     state.lastSelectionContext = context;
@@ -3364,30 +3398,30 @@ function openScenePreviewFromCapture() {
             paragraphIndex: capture.paragraphIndex,
             capturedAt: Date.now(),
         };
-        openScenePreviewFromSelection(capture.messageId, capture.text, null);
+        openScenePreviewFromSelection(capture.messageId, capture.text, null, capture.sourceRange);
     } catch (error) {
         setStatus('生成这一幕失败: ' + error.message);
         setLastDebug({ generationStatus: 'error', error: error.message });
     }
 }
 
-function selectedParagraphIndex(fullText, selectedText) {
-    const range = findSelectedTextRange(fullText, selectedText);
+function selectedParagraphIndex(fullText, selectedText, preferredRange = null) {
+    const range = resolveSelectedTextRange(fullText, selectedText, preferredRange);
     if (!range) return null;
     return normalizeMultiline(fullText.slice(0, range.start)).split(/\n{2,}|\n/).filter(Boolean).length;
 }
 
-function getSelectionSceneContext(messageId, selectedText) {
+function getSelectionSceneContext(messageId, selectedText, preferredRange = null) {
     const message = chat?.[Number(messageId)];
     const fullText = stripLastInlinePrompt(getMessageText(message), message);
-    const range = findSelectedTextRange(fullText, selectedText);
+    const range = resolveSelectedTextRange(fullText, selectedText, preferredRange);
     const start = range?.start ?? 0;
     const end = range?.end ?? selectedText.length;
     return {
         fullText,
         contextBefore: compactPreview(fullText.slice(Math.max(0, start - 420), start), 420),
         contextAfter: compactPreview(fullText.slice(end, Math.min(fullText.length, end + 420)), 420),
-        paragraphIndex: range ? selectedParagraphIndex(fullText, selectedText) : null,
+        paragraphIndex: range ? selectedParagraphIndex(fullText, selectedText, range) : null,
         range,
     };
 }
@@ -3397,7 +3431,10 @@ function buildScenePreviewPayload(messageId, selectedText, options = {}) {
     const sceneText = prepareSceneText(raw);
     if (!sceneText || sceneText.length < 8) throw new Error('选中的剧情太短或为空，请重新选择一段真正剧情');
     if (looksLikePromptScaffold(sceneText)) throw new Error('这段内容像预设/提示词，不适合直接生图，请只选真正剧情段落');
-    const sceneContext = getSelectionSceneContext(messageId, raw);
+    const cached = state.lastSelectionContext;
+    const cachedMatches = cached?.messageId === Number(messageId) && normalizeMultiline(cached.text || '').trim() === raw;
+    const preferredRange = options.sourceRange || (cachedMatches ? cached.sourceRange : null);
+    const sceneContext = getSelectionSceneContext(messageId, raw, preferredRange);
     const focus = resolveFocusCharacter(sceneText, options.focusCharacter || '');
     const result = compilePrompt(sceneText, { focusCharacter: options.focusCharacter || '' });
     const finalPrompt = normalizePromptText(result.positive);
@@ -3412,6 +3449,7 @@ function buildScenePreviewPayload(messageId, selectedText, options = {}) {
         insertTargetMessageId: Number(messageId),
         insertTargetParagraphIndex: sceneContext.paragraphIndex,
         selectionRange: options.selectionRange || null,
+        sourceRange: sceneContext.range,
         range: sceneContext.range,
         focusCharacter: result.focus?.name || focus.name,
         focusCandidates: focus.candidates,
@@ -3470,6 +3508,7 @@ function buildDebugInfo(patch = {}) {
         calledZhihuijiFunction: '',
         usedOfficialZhihuijiPipeline: false,
         triggeredZhihuijiButton: false,
+        zhihuijiPipelineRoute: '',
         generationStatus: state.generationStatus || 'idle',
         error: '',
         ...base,
@@ -3572,6 +3611,7 @@ function renderScenePreviewModal(payload) {
         try {
             const next = buildScenePreviewPayload(payload.messageId, payload.selectedTextRaw, {
                 selectionRange: payload.selectionRange,
+                sourceRange: payload.sourceRange,
                 focusCharacter: focusSelect.value,
             });
             renderScenePreviewModal(next);
@@ -3596,12 +3636,13 @@ function renderScenePreviewModal(payload) {
     return backdrop;
 }
 
-function openScenePreviewFromSelection(messageId, selectedText = '', selectionRange = null) {
+function openScenePreviewFromSelection(messageId, selectedText = '', selectionRange = null, sourceRange = null) {
     try {
         const fallback = state.lastSelectionContext;
         const actualText = normalizeMultiline(selectedText || (fallback?.messageId === messageId ? fallback.text : '') || '').trim();
         if (!actualText) throw new Error('没有读到选中的剧情。手机端如果选区丢失，请重新长按选择后再点图片生成');
-        const payload = buildScenePreviewPayload(messageId, actualText, { selectionRange });
+        const fallbackRange = fallback?.messageId === Number(messageId) && normalizeMultiline(fallback.text || '').trim() === actualText ? fallback.sourceRange : null;
+        const payload = buildScenePreviewPayload(messageId, actualText, { selectionRange, sourceRange: sourceRange || fallbackRange });
         renderScenePreviewModal(payload);
     } catch (error) {
         console.error('[' + EXT_NAME + '] preview failed', error);
@@ -3609,11 +3650,12 @@ function openScenePreviewFromSelection(messageId, selectedText = '', selectionRa
     }
 }
 
-function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRange = null) {
+function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRange = null, sourceRange = null) {
     closeMessageMenu();
     state.activeMessageId = messageId;
     state.activeSelectionText = normalizeMultiline(selectedText || '').trim();
     state.activeSelectionRange = selectionRange;
+    state.activeSelectionSourceRange = sourceRange;
     state.messageMenuOpenedAt = Date.now();
     const menu = document.createElement('div');
     menu.className = 'csid-message-menu';
@@ -3648,13 +3690,17 @@ function openMenuFromSelection(event, delay = 0) {
     setTimeout(() => {
         const context = getSelectionContext(event);
         if (!context) return;
-        showMessageMenu({ clientX: context.x, clientY: context.y }, context.messageId, context.text, context.range);
+        showMessageMenu({ clientX: context.x, clientY: context.y }, context.messageId, context.text, context.range, context.sourceRange);
     }, delay);
 }
 
 function bindMessageMenu() {
     if (state.messageMenuBound) return;
     state.messageMenuBound = true;
+    document.addEventListener('selectionchange', () => {
+        clearTimeout(state.selectionCacheTimer);
+        state.selectionCacheTimer = setTimeout(() => getSelectionContext(), 80);
+    }, true);
     document.addEventListener('mouseup', event => openMenuFromSelection(event, 0), true);
     document.addEventListener('touchend', event => openMenuFromSelection(event, 120), true);
     document.addEventListener('click', event => {
@@ -3664,8 +3710,9 @@ function bindMessageMenu() {
             const messageId = Number(state.activeMessageId);
             const selectedText = state.activeSelectionText || '';
             const selectionRange = state.activeSelectionRange || null;
+            const sourceRange = state.activeSelectionSourceRange || null;
             closeMessageMenu();
-            if (action === 'image') openScenePreviewFromSelection(messageId, selectedText, selectionRange);
+            if (action === 'image') openScenePreviewFromSelection(messageId, selectedText, selectionRange, sourceRange);
             if (action === 'copy') copyMessageTrigger(messageId, selectedText);
             return;
         }
@@ -3710,15 +3757,27 @@ function buildCollapsedSearchIndex(text) {
     return { value, map, source };
 }
 
-function findSelectedTextRange(sourceText, selectedText) {
+function nthIndexOf(source, needle, occurrenceIndex = 0) {
+    const target = Math.max(0, Number(occurrenceIndex) || 0);
+    let from = 0;
+    let index = -1;
+    for (let i = 0; i <= target; i++) {
+        index = source.indexOf(needle, from);
+        if (index < 0) return -1;
+        from = index + Math.max(1, needle.length);
+    }
+    return index;
+}
+
+function findSelectedTextRange(sourceText, selectedText, occurrenceIndex = 0) {
     const source = normalizeMultiline(sourceText || '');
     const selected = normalizeMultiline(selectedText || '').trim();
     if (!source || !selected) return null;
-    const exactStart = source.indexOf(selected);
+    const exactStart = nthIndexOf(source, selected, occurrenceIndex);
     if (exactStart >= 0) return { start: exactStart, end: exactStart + selected.length, exact: true };
     const sourceIndex = buildCollapsedSearchIndex(source);
     const selectedIndex = buildCollapsedSearchIndex(selected);
-    const collapsedStart = sourceIndex.value.indexOf(selectedIndex.value);
+    const collapsedStart = nthIndexOf(sourceIndex.value, selectedIndex.value, occurrenceIndex);
     if (collapsedStart < 0) return null;
     const collapsedEnd = collapsedStart + selectedIndex.value.length - 1;
     const start = sourceIndex.map[collapsedStart];
@@ -3727,10 +3786,36 @@ function findSelectedTextRange(sourceText, selectedText) {
     return { start, end, exact: false };
 }
 
-function insertTriggerAfterSelectedText(fullText, selectedText, trigger) {
+function sameCollapsedText(a, b) {
+    return buildCollapsedSearchIndex(a).value.trim() === buildCollapsedSearchIndex(b).value.trim();
+}
+
+function rangeMatchesSelectedText(fullText, selectedText, sourceRange) {
+    const source = normalizeMultiline(fullText || '');
+    const selected = normalizeMultiline(selectedText || '').trim();
+    if (!selected || !sourceRange) return false;
+    const start = Number(sourceRange.start);
+    const end = Number(sourceRange.end);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > source.length) return false;
+    const slice = normalizeMultiline(source.slice(start, end)).trim();
+    return slice === selected || sameCollapsedText(slice, selected);
+}
+
+function resolveSelectedTextRange(fullText, selectedText, preferredRange = null) {
+    if (rangeMatchesSelectedText(fullText, selectedText, preferredRange)) {
+        return {
+            start: Number(preferredRange.start),
+            end: Number(preferredRange.end),
+            exact: Boolean(preferredRange.exact),
+        };
+    }
+    return findSelectedTextRange(fullText, selectedText);
+}
+
+function insertTriggerAfterSelectedText(fullText, selectedText, trigger, preferredRange = null) {
     const base = normalizeMultiline(fullText || '').trimEnd();
     const selected = normalizeMultiline(selectedText || '').trim();
-    const range = selected ? findSelectedTextRange(base, selected) : null;
+    const range = selected ? resolveSelectedTextRange(base, selected, preferredRange) : null;
     if (!range) return base + '\n\n' + trigger;
     const head = base.slice(0, range.end).trimEnd();
     const tail = base.slice(range.end).trimStart();
@@ -3803,9 +3888,16 @@ async function emitMessagePromptEvents(messageId) {
 function findChatu8GenerationButtons(messageId) {
     const mes = getMessageElementById(messageId);
     if (!mes) return [];
-    return [...mes.querySelectorAll('button, .menu_button, [role="button"]')]
+    return [...mes.querySelectorAll('button, .menu_button, [role="button"], .st-chatu8-image-button, .image-tag-button')]
         .filter(button => !button.closest('.csid-message-menu') && !button.closest('.csid-preview-dialog'))
-        .filter(button => /生成图片|图片生成/.test(normalizeLine(button.textContent || button.title || '')));
+        .filter(button => {
+            const label = normalizeLine([button.textContent, button.title, button.getAttribute?.('aria-label')].filter(Boolean).join(' '));
+            return button.classList?.contains('st-chatu8-image-button')
+                || button.classList?.contains('image-tag-button')
+                || button.dataset?.prompt
+                || button.dataset?.tag
+                || /生成图片|图片生成/.test(label);
+        });
 }
 
 async function waitForChatu8Button(messageId, timeoutMs = 3500) {
@@ -3860,6 +3952,7 @@ async function invokeChatu8Generation(messageId, prompt) {
             calledZhihuijiFunction: 'HTMLElement.click() -> st-chatu8 triggerGeneration(button)',
             usedOfficialZhihuijiPipeline: true,
             triggeredZhihuijiButton: true,
+            zhihuijiPipelineRoute: 'official-button-click',
             generationStatus: 'submitted',
         });
         listenForChatu8Response(requestId, prompt);
@@ -3874,6 +3967,7 @@ async function invokeChatu8Generation(messageId, prompt) {
         calledZhihuijiFunction: 'eventSource.emit("generate-image-request", { id, prompt })',
         usedOfficialZhihuijiPipeline: Boolean(listenerCount === null || listenerCount > 0),
         triggeredZhihuijiButton: false,
+        zhihuijiPipelineRoute: listenerCount === 0 ? 'missing-chatu8-listener' : 'official-event-fallback',
         generationStatus: 'submitted',
         error: listenerCount === 0 ? '未检测到智绘姬 generate-image-request 监听器' : '未找到智绘姬按钮，已改用事件提交',
     });
@@ -3894,6 +3988,7 @@ async function confirmScenePreview(action) {
         const writeResult = await writePromptToMessage(payload.messageId, payload.selectedTextRaw, {
             selectedText: payload.selectedTextRaw,
             selectionRange: payload.selectionRange,
+            sourceRange: payload.sourceRange,
             preview: payload,
             mode: action,
         });
@@ -3916,7 +4011,7 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     const sceneText = options.preview?.selectedText || prepareSceneText(selectedText || fullText);
     if (!sceneText || looksLikePromptScaffold(sceneText)) throw new Error('这段内容像预设/提示词，不适合直接生图，请只选真正剧情段落');
     setStatus(selectedText ? '正在为选中剧情准备智绘姬提示词' : '正在为原文准备智绘姬提示词');
-    const payload = options.preview || buildScenePreviewPayload(messageId, selectedText || fullText, { selectionRange: options.selectionRange });
+    const payload = options.preview || buildScenePreviewPayload(messageId, selectedText || fullText, { selectionRange: options.selectionRange, sourceRange: options.sourceRange });
     payload.finalPrompt = normalizePromptText(payload.finalPrompt || payload.result?.positive || '');
     payload.trigger = buildChatu8Trigger(payload.finalPrompt);
     setPromptOutputsFromPayload(payload);
@@ -3925,7 +4020,8 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     syncTavernHelperMemory();
     renderMemoryFields();
     saveAll();
-    const nextText = insertTriggerAfterSelectedText(fullText, selectedText, state.lastTrigger);
+    const preferredRange = payload.sourceRange || options.sourceRange || null;
+    const nextText = insertTriggerAfterSelectedText(fullText, selectedText, state.lastTrigger, preferredRange);
     setMessageRawText(messageId, nextText, state.lastTrigger);
     removeOwnVisibleTriggers(messageId);
     const promptAnchor = insertTriggerIntoVisibleMessage(messageId, state.lastTrigger, options.selectionRange || null);
@@ -3941,11 +4037,11 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
         detectedProps: payload.detectedProps || '',
         finalPrompt: state.lastPositive,
         insertTargetMessageId: Number(messageId),
-        insertTargetParagraphIndex: payload.insertTargetParagraphIndex ?? selectedParagraphIndex(fullText, selectedText),
+        insertTargetParagraphIndex: payload.insertTargetParagraphIndex ?? selectedParagraphIndex(fullText, selectedText, preferredRange),
         actualPromptSentToZhihuiji: state.lastPositive,
         generationStatus: state.generationStatus,
     });
-    return { ...payload.result, positive: state.lastPositive, negative: state.lastNegative, shotCard: state.lastShotCard, trigger: state.lastTrigger, promptAnchor, insertedAtSelection: Boolean(selectedText && findSelectedTextRange(fullText, selectedText)), clicked: false };
+    return { ...payload.result, positive: state.lastPositive, negative: state.lastNegative, shotCard: state.lastShotCard, trigger: state.lastTrigger, promptAnchor, insertedAtSelection: Boolean(selectedText && resolveSelectedTextRange(fullText, selectedText, preferredRange)), clicked: false };
 }
 
 async function generatePromptUnderMessage(messageId, selectedText = '', selectionRange = null) {

@@ -9,7 +9,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Codex",
-    "version": "0.4.5",
+    "version": "0.4.6",
     "homePage": "https://github.com/alensstream-dotcom/codex-scene-image-director",
     "auto_update": true,
     "minimum_client_version": "1.12.0"

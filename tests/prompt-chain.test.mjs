@@ -240,4 +240,21 @@ function promptOf(api, text, focusCharacter) {
     assert.equal(capture.messageId, 0);
 }
 
+{
+    const { api, context, settings, memory } = createContext();
+    setCharacter(memory, settings, '凛', 'silver hair', 'loose white hoodie');
+    const selected = '凛坐在餐桌前，盯着那颗水蜜桃看了很久，拿着勺子的手停在半空。';
+    const full = [selected, '中间有别的剧情。', selected, '后面继续说话。'].join('\n\n');
+    const secondStart = full.lastIndexOf(selected);
+    context.chat[0] = { mes: full, swipes: [] };
+    const result = await api.writePromptToMessage(0, selected, {
+        selectedText: selected,
+        sourceRange: { start: secondStart, end: secondStart + selected.length, exact: true },
+    });
+    assert.equal(result.insertedAtSelection, true, 'test10 should accept explicit sourceRange');
+    const triggerIndex = context.chat[0].mes.indexOf(result.trigger);
+    assert.ok(triggerIndex > secondStart, 'test10 trigger should be inserted after the second matching selectedText');
+    assert.equal(context.chat[0].mes.indexOf(result.trigger), context.chat[0].mes.lastIndexOf(result.trigger), 'test10 should insert only one trigger');
+}
+
 console.log('prompt-chain tests passed');
