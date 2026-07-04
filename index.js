@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.0';
+const EXT_VERSION = '0.4.2';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -234,6 +234,7 @@ let state = {
     storyAnalyzerRunning: false,
     storyAnalyzerQueue: [],
     saveTimer: null,
+    lastDiagnostics: [],
 };
 
 let metadataVariableGuardTimer = null;
@@ -881,18 +882,71 @@ function stripGeneratedPromptText(text) {
         .trim();
 }
 
+const STORY_SCAFFOLD_TERMS = [
+    '剧情要求', '详略安排', '文笔要求', '补充要求', '增项检查', '创作预备',
+    '生图处理', '正文模型禁止输出', 'JSON 格式', 'positive_prompt', 'negative_prompt',
+    'scene_position', '不要输出任何图片标签', '基于历史对话', '变量更新',
+];
+
 function looksLikePromptScaffold(text) {
     const clean = normalizeMultiline(text);
-    const hits = [
-        '剧情要求', '详略安排', '文笔要求', '补充要求', '增项检查', '创作预备',
-        '生图处理', '正文模型禁止输出', 'JSON 格式', 'positive_prompt', 'negative_prompt',
-        'scene_position', '不要输出任何图片标签', '基于历史对话',
-    ].filter(term => clean.includes(term)).length;
+    const hits = STORY_SCAFFOLD_TERMS.filter(term => clean.includes(term)).length;
     return hits >= 2 || /^\s*(prompt|negative_prompt|scene_position)\s*:/mi.test(clean);
 }
 
-function isStoryIndexableText(text) {
+function isInstructionScaffoldLine(line) {
+    const clean = normalizeLine(line);
+    if (!clean) return true;
+    if (/^\s*(?:#{1,6}\s*)?(?:\d+(?:\.\d+)?(?:[.、)]|\s+))?(?:剧情要求|详略安排|文笔要求|补充要求|增项检查|生图处理|创作预备|变量更新|讨论内容|正文|格式|要求)\s*[:：]?\s*$/i.test(clean)) return true;
+    if (/^\s*(?:[-*•]|\d+[.、)]|[一二三四五六七八九十]+[、.])\s*(?:讨论内容|正文|变量更新|根据|分析|要求|禁止|输出|检查|基于历史对话)/i.test(clean)) return true;
+    if (/^\s*(?:Time passed|Dramatic updates|Faction standing|Relationship updates|Memory updates|Scene position|generation_ended|message_received)\s*[:：]/i.test(clean)) return true;
+    if (/^\s*(?:prompt|negative_prompt|positive_prompt|scene_position)\s*[:：]/i.test(clean)) return true;
+    if (/(?:基于历史对话|正文模型|禁止输出|图片标签|英文绘图提示词|内嵌配图请求|严格 JSON|JSON 格式|变量更新|完整描写|当前未触发|所有角色使用)/i.test(clean)) return true;
+    const hits = STORY_SCAFFOLD_TERMS.filter(term => clean.includes(term)).length;
+    return hits >= 2;
+}
+
+function looksLikeNarrativeLine(line) {
+    const clean = normalizeLine(line);
+    if (clean.length < 8 || isInstructionScaffoldLine(clean)) return false;
+    if (/^\s*(?:[-*•]|\d+[.、)]|[一二三四五六七八九十]+[、.])/.test(clean)) return false;
+    if (!/[\u4e00-\u9fff]/.test(clean)) return false;
+    if (/(?:必须|禁止|要求|输出|JSON|prompt|模型|格式|变量|检查|详略|文笔|补充|基于历史对话|完整描写)/i.test(clean) && clean.length < 140) return false;
+    return /[。！？!?，,“”"「」]/.test(clean);
+}
+
+function stripPromptScaffoldSections(text) {
     const clean = stripGeneratedPromptText(text);
+    if (!looksLikePromptScaffold(clean)) return clean;
+    const lines = clean.split(/\n+/);
+    const start = lines.findIndex(looksLikeNarrativeLine);
+    if (start < 0) return '';
+    const output = [];
+    for (let i = start; i < lines.length; i++) {
+        const line = lines[i];
+        const normalized = normalizeLine(line);
+        if (!normalized) {
+            output.push('');
+            continue;
+        }
+        if (/^\s*(?:[-*•]\s*)?(?:Time passed|Dramatic updates|Faction standing|Relationship updates|Memory updates|Scene position|generation_ended|message_received)\s*[:：]/i.test(normalized)) break;
+        if (isInstructionScaffoldLine(normalized)) continue;
+        output.push(line);
+    }
+    return normalizeMultiline(output.join('\n')).trim();
+}
+
+function cleanStoryText(text) {
+    return stripPromptScaffoldSections(text);
+}
+
+function prepareSceneText(text) {
+    const clean = cleanStoryText(text);
+    return clean || stripGeneratedPromptText(text);
+}
+
+function isStoryIndexableText(text) {
+    const clean = cleanStoryText(text);
     if (clean.length < 12) return false;
     if (looksLikePromptScaffold(clean)) return false;
     return true;
@@ -919,7 +973,7 @@ function extractImportantStoryLines(text, pattern, limit = 5) {
 
 function createStoryEntry(text, source = 'message', index = null, patch = {}) {
     const cfg = getStoryConfig();
-    const clean = stripGeneratedPromptText(text);
+    const clean = cleanStoryText(text);
     const message = Number.isInteger(Number(index)) ? chat?.[Number(index)] : null;
     const id = patch.id || hashText([getCurrentChatId?.() || '', Number.isInteger(Number(index)) ? Number(index) : '', clean].join('\n'));
     const summary = normalizeLine(patch.summary || patch.entrySummary || compactPreview(clean, 260));
@@ -938,7 +992,7 @@ function createStoryEntry(text, source = 'message', index = null, patch = {}) {
 }
 
 function storyPatchFromLocal(text, source = 'message', index = null) {
-    const clean = stripGeneratedPromptText(text);
+    const clean = cleanStoryText(text);
     const factPattern = /(设定|身份|名字|叫|来自|属于|规则|不能|必须|曾经|过去|契约|秘密|真相|目标|任务|约定|承诺|关系|喜欢|讨厌|害怕|信任|背叛|死亡|受伤|发现|知道|记得|忘记|原因|因为|所以|世界|组织|地点|家族|能力|魔法|天使|恶魔|决定|选择)/;
     const threadPattern = /(还没|尚未|准备|打算|决定|将要|之后|接下来|寻找|调查|等待|疑问|为什么|怎么办|是否|能否|没有解决|留下|伏笔|\?|？)/;
     return {
@@ -992,7 +1046,7 @@ function applyStoryMemoryPatch(patch, sourceText = '', source = 'story', index =
     mergeNamedMemoryMap(story.relationships, patch.relationships || {});
     mergeNamedMemoryMap(story.characterStates, patch.characterStates || patch.characters || {});
 
-    const clean = stripGeneratedPromptText(sourceText);
+    const clean = cleanStoryText(sourceText);
     if (clean || patch.entry) {
         const entry = sanitizeStoryEntry({ ...createStoryEntry(clean, source, index, patch.entry || {}), ...(patch.entry || {}) });
         story.entries = (story.entries || []).filter(item => item.id !== entry.id);
@@ -1084,7 +1138,7 @@ async function analyzeStoryMemoryPatch(text, source = 'message', index = null) {
     const settings = ensureSettings();
     const cfg = getStoryConfig();
     if (!settings.api.enabled || !settings.api.url || !cfg.useApiSummary) return null;
-    const clean = stripGeneratedPromptText(text);
+    const clean = cleanStoryText(text);
     if (!isStoryIndexableText(clean)) return null;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.max(2500, settings.api.timeoutMs || 12000));
@@ -1137,7 +1191,7 @@ async function analyzeStoryMemoryPatch(text, source = 'message', index = null) {
 function enqueueStoryIndex(text, source = 'message', index = null) {
     const settings = ensureSettings();
     const cfg = getStoryConfig();
-    const clean = stripGeneratedPromptText(text);
+    const clean = cleanStoryText(text);
     if (!cfg.enabled || !cfg.autoIndex || !isStoryIndexableText(clean)) return;
     const hash = hashText([getCurrentChatId?.() || '', Number.isInteger(Number(index)) ? Number(index) : source, clean].join('\n'));
     const memory = ensureChatMemory();
@@ -1286,7 +1340,7 @@ function retrieveStoryMemories(query = '', limit = getStoryConfig().maxRetrieved
 function getLatestStoryQuery() {
     const recent = (chat || [])
         .slice(-6)
-        .map(message => stripGeneratedPromptText(getMessageText(message)))
+        .map(message => cleanStoryText(getMessageText(message)))
         .filter(Boolean)
         .join('\n\n');
     return recent || getCurrentCharacterName();
@@ -1370,7 +1424,7 @@ function indexExistingStoryMemory(options = {}) {
     const story = ensureStoryMemory();
     const existing = new Map((story.entries || []).map(item => [item.id, item]));
     const rows = (chat || [])
-        .map((message, index) => ({ message, index, text: stripGeneratedPromptText(getMessageText(message)) }))
+        .map((message, index) => ({ message, index, text: cleanStoryText(getMessageText(message)) }))
         .filter(item => item.text && !item.message?.is_system && isStoryIndexableText(item.text));
     for (const item of rows) {
         const entry = createStoryEntry(item.text, 'backfill', item.index);
@@ -2343,6 +2397,146 @@ function refreshDashboard() {
     setTextByRole(root, 'dash-db', settings.storyMemory?.useIndexedDb ? 'DB ' + (db.enabled ? '已连接' : '待连接') : 'DB 关闭');
     setTextByRole(root, 'dash-chatu8', settings.chatu8?.enabled ? '智绘姬标签开启' : '仅生成提示词');
     setTextByRole(root, 'dash-visual', summarizeValue([chatMemory.scene?.time, chatMemory.scene?.lighting].filter(Boolean).join(' / '), '时间光线待识别', 24));
+    renderDiagnostics(buildDiagnostics());
+}
+
+function isChatu8Detected() {
+    return Boolean(
+        extension_settings?.['st-chatu8']
+        || document.querySelector('#st-chatu8-settings')
+        || [...document.scripts].some(script => String(script.src || '').includes('/st-chatu8/')),
+    );
+}
+
+function diagnosticItem(state, icon, title, detail, action = '') {
+    return { state, icon, title, detail, action };
+}
+
+function buildDiagnostics() {
+    const settings = ensureSettings();
+    const story = ensureStoryMemory();
+    const db = story.dbStats || {};
+    const chatu8Detected = isChatu8Detected();
+    const apiReady = settings.api.enabled && settings.api.url && settings.api.model;
+    const storyReady = settings.storyMemory?.enabled && settings.storyMemory?.autoIndex && settings.storyMemory?.injectToPrompt;
+    const tagReady = Boolean(settings.chatu8?.enabled && settings.chatu8?.startTag && settings.chatu8?.endTag);
+    return [
+        diagnosticItem(
+            chatu8Detected && settings.chatu8?.enabled ? 'ok' : settings.chatu8?.enabled ? 'warn' : 'bad',
+            'fa-wand-magic-sparkles',
+            '智绘姬识别',
+            chatu8Detected ? '已检测到智绘姬，方括号标签可被接管。' : '未检测到智绘姬，仍可复制提示词。',
+            chatu8Detected ? '' : '确认已安装 st-chatu8',
+        ),
+        diagnosticItem(
+            tagReady ? 'ok' : 'bad',
+            'fa-code',
+            '触发标签',
+            tagReady ? `${settings.chatu8.startTag} prompt ${settings.chatu8.endTag}` : '开始/结束标记缺失。',
+            tagReady ? '' : '使用推荐配置',
+        ),
+        diagnosticItem(
+            storyReady ? 'ok' : 'warn',
+            'fa-book-open',
+            '剧情记忆',
+            storyReady ? `${(story.entries || []).length} 条已索引，生成正文会注入相关记忆。` : '长期剧情记忆未完全开启。',
+            storyReady ? '' : '开启记忆/自动索引/正文注入',
+        ),
+        diagnosticItem(
+            settings.storyMemory?.useIndexedDb && typeof indexedDB !== 'undefined' ? 'ok' : 'warn',
+            'fa-database',
+            '本地数据库',
+            settings.storyMemory?.useIndexedDb ? (db.enabled ? `IndexedDB 已连接，${db.messages || 0} 条原文。` : 'IndexedDB 将在索引后连接。') : '本地数据库关闭，长篇记忆会变弱。',
+            settings.storyMemory?.useIndexedDb ? '' : '开启本地 DB',
+        ),
+        diagnosticItem(
+            apiReady ? 'ok' : settings.api.enabled ? 'warn' : 'ok',
+            'fa-plug-circle-bolt',
+            '额外 API',
+            apiReady ? `模型：${settings.api.model}` : settings.api.enabled ? 'API 已启用但地址或模型不完整。' : '当前使用本地快速抽取，不阻塞正文。',
+            apiReady || !settings.api.enabled ? '' : '填写地址并刷新模型',
+        ),
+        diagnosticItem(
+            state.messageMenuBound ? 'ok' : 'warn',
+            'fa-hand-pointer',
+            '选段入口',
+            state.messageMenuBound ? '正文选段菜单已绑定，可直接选一段生成。' : '选段菜单尚未绑定。',
+            state.messageMenuBound ? '' : '刷新页面',
+        ),
+        diagnosticItem(
+            settings.behavior?.preferClipboard ? 'ok' : 'warn',
+            'fa-clipboard',
+            '剪贴板取材',
+            settings.behavior?.preferClipboard ? '优先读取剪贴板，适合手机复制段落。' : '剪贴板优先关闭。',
+            settings.behavior?.preferClipboard ? '' : '使用推荐配置',
+        ),
+    ];
+}
+
+function renderDiagnostics(items = state.lastDiagnostics.length ? state.lastDiagnostics : buildDiagnostics()) {
+    state.lastDiagnostics = items;
+    const root = document.querySelector(SETTINGS_SELECTOR);
+    if (!root) return items;
+    const list = root.querySelector('[data-role="diagnostics-list"]');
+    const summary = root.querySelector('[data-role="diagnostics-summary"]');
+    const okCount = items.filter(item => item.state === 'ok').length;
+    const badCount = items.filter(item => item.state === 'bad').length;
+    const warnCount = items.filter(item => item.state === 'warn').length;
+    if (summary) {
+        summary.textContent = badCount ? `${okCount}/${items.length} 就绪，${badCount} 项需处理` : warnCount ? `${okCount}/${items.length} 就绪，${warnCount} 项可优化` : '全部就绪';
+        summary.dataset.state = badCount ? 'bad' : warnCount ? 'warn' : 'ok';
+    }
+    if (list) {
+        list.innerHTML = items.map(item => `
+            <div class="csid-diagnostic is-${item.state}">
+                <i class="fa-solid ${item.icon}"></i>
+                <div>
+                    <b>${escapeHtml(item.title)}</b>
+                    <span>${escapeHtml(item.detail)}</span>
+                    ${item.action ? `<em>${escapeHtml(item.action)}</em>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+    return items;
+}
+
+function runDiagnostics() {
+    updateStoryMemoryInjection(getLatestStoryQuery());
+    refreshDashboard();
+    const items = renderDiagnostics(buildDiagnostics());
+    const badCount = items.filter(item => item.state === 'bad').length;
+    const warnCount = items.filter(item => item.state === 'warn').length;
+    setStatus(badCount ? `体检完成：${badCount} 项需要处理` : warnCount ? `体检完成：${warnCount} 项可以优化` : '体检完成：全部就绪');
+    return items;
+}
+
+function applyRecommendedSettings() {
+    const settings = ensureSettings();
+    settings.behavior.autoMemory = true;
+    settings.behavior.preferClipboard = true;
+    settings.behavior.syncTavernHelper = Boolean(getTavernHelper());
+    settings.behavior.allowPermanentOverwrite = false;
+    settings.behavior.promptLanguage = 'en';
+    settings.chatu8.enabled = true;
+    settings.chatu8.insertToChatInput = false;
+    settings.chatu8.startTag = '[';
+    settings.chatu8.endTag = ']';
+    settings.storyMemory.enabled = true;
+    settings.storyMemory.autoIndex = true;
+    settings.storyMemory.injectToPrompt = true;
+    settings.storyMemory.includeOriginal = true;
+    settings.storyMemory.useIndexedDb = true;
+    settings.storyMemory.prismMode = true;
+    settings.storyMemory.useApiSummary = Boolean(settings.api.enabled && settings.api.url);
+    settings.storyMemory.maxRetrieved = Math.max(8, Number(settings.storyMemory.maxRetrieved) || 8);
+    settings.storyMemory.maxInjectChars = Math.max(1600, Number(settings.storyMemory.maxInjectChars) || 1600);
+    settings.storyMemory.maxOriginalSnippets = Math.max(3, Number(settings.storyMemory.maxOriginalSnippets) || 3);
+    fillFormFromSettings();
+    renderMemoryFields();
+    renderDiagnostics(buildDiagnostics());
+    saveAll();
+    setStatus('已应用推荐配置：手选生图 + 智绘姬接管 + 长期剧情记忆');
 }
 
 function fillFormFromSettings() {
@@ -2414,6 +2608,15 @@ function buildSettingsHtml() {
                             <span class="csid-pill"><i class="fa-solid fa-plug"></i><span data-role="dash-api">本地快速模式</span></span>
                             <span class="csid-pill"><i class="fa-solid fa-sun"></i><span data-role="dash-visual">时间光线待识别</span></span>
                         </div>
+                        <div class="csid-quick-actions">
+                            <button class="menu_button result-control" data-action="run-diagnostics"><i class="fa-solid fa-stethoscope"></i><span>一键体检</span></button>
+                            <button class="menu_button" data-action="apply-recommended"><i class="fa-solid fa-bolt"></i><span>推荐配置</span></button>
+                            <span class="csid-diagnostic-summary" data-role="diagnostics-summary" data-state="warn">等待体检</span>
+                        </div>
+                        <details class="csid-diagnostics">
+                            <summary><i class="fa-solid fa-list-check"></i> 就绪清单</summary>
+                            <div class="csid-diagnostics-list" data-role="diagnostics-list"></div>
+                        </details>
                     </div>
 
                     <div class="csid-tabs">
@@ -2717,6 +2920,8 @@ function bindEvents() {
         if (action === 'copy-positive') copyText(state.lastPositive, '已复制正向提示词');
         if (action === 'copy-negative') copyText(state.lastNegative, '已复制反向提示词');
         if (action === 'analyze-input') analyzeInputNow();
+        if (action === 'run-diagnostics') runDiagnostics();
+        if (action === 'apply-recommended') applyRecommendedSettings();
         if (action === 'backfill-story') indexExistingStoryMemory();
         if (action === 'refresh-story-injection') {
             readFormToSettings();
@@ -2945,15 +3150,11 @@ function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRa
     imageButton.type = 'button';
     imageButton.dataset.csidMessageAction = 'image';
     imageButton.innerHTML = '<span class="fa-solid fa-image"></span><span>图片生成</span>';
-    const copyButton = document.createElement('button');
-    copyButton.type = 'button';
-    copyButton.dataset.csidMessageAction = 'copy';
-    copyButton.innerHTML = '<span class="fa-solid fa-copy"></span><span>复制触发文本</span>';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.dataset.csidMessageAction = 'close';
     closeButton.innerHTML = '<span class="fa-solid fa-xmark"></span><span>取消</span>';
-    menu.append(imageButton, copyButton, closeButton);
+    menu.append(imageButton, closeButton);
     document.body.appendChild(menu);
     const rect = menu.getBoundingClientRect();
     const clientX = eventOrPoint?.clientX ?? eventOrPoint?.x ?? window.innerWidth / 2;
@@ -3119,8 +3320,8 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     if (!message) throw new Error('没有找到这条消息');
     const fullText = stripLastInlinePrompt(getMessageText(message), message);
     const selectedText = normalizeMultiline(options.selectedText || sourceText || '').trim();
-    const sceneText = selectedText || fullText;
-    if (!sceneText) throw new Error('这条消息没有可用于生图的正文');
+    const sceneText = prepareSceneText(selectedText || fullText);
+    if (!sceneText || looksLikePromptScaffold(sceneText)) throw new Error('这段内容像预设/提示词，不适合直接生图，请只选真正剧情段落');
     setStatus(selectedText ? '正在为选中剧情生成智绘姬提示词' : '正在为原文生成智绘姬提示词');
     const result = await buildSmartPrompt(sceneText);
     state.lastPositive = normalizePromptText(result.positive);
@@ -3162,7 +3363,7 @@ async function copyMessageTrigger(messageId, selectedText = '') {
     try {
         const message = chat?.[Number(messageId)];
         const fullText = stripLastInlinePrompt(getMessageText(message), message);
-        const text = normalizeMultiline(selectedText || '').trim() || fullText;
+        const text = prepareSceneText(normalizeMultiline(selectedText || '').trim() || fullText);
         if (!text) throw new Error('没有可复制的剧情正文');
         setStatus(selectedText ? '正在生成选中剧情的触发文本' : '正在生成这条消息的触发文本');
         const result = await buildSmartPrompt(text);
@@ -3360,9 +3561,10 @@ function exposeDebugApi() {
         extractSceneLocal,
         compilePrompt,
         async composeText(text, { updateMemory = false, smart = true } = {}) {
-            const result = smart ? await buildSmartPrompt(String(text || '')) : compilePrompt(String(text || ''));
+            const sceneText = prepareSceneText(String(text || ''));
+            const result = smart ? await buildSmartPrompt(sceneText) : compilePrompt(sceneText);
             if (updateMemory) {
-                updateMemoryFromSelectedScene(String(text || ''), result.localScene);
+                updateMemoryFromSelectedScene(sceneText, result.localScene);
                 syncTavernHelperMemory();
             }
             return { ...result, trigger: buildChatu8Trigger(result.positive) };
@@ -3372,11 +3574,13 @@ function exposeDebugApi() {
         getStoryPrompt: () => buildStoryMemoryPrompt(getLatestStoryQuery()),
         getStoryPath: (query = '') => structuredClone(retrieveStoryPath(query || getLatestStoryQuery(), getStoryConfig().maxRetrieved)),
         getStoryDbStats: () => structuredClone(ensureStoryMemory().dbStats || {}),
+        cleanStoryText,
+        prepareSceneText,
+        runDiagnostics,
+        applyRecommendedSettings,
         refreshStoryMemory: () => updateStoryMemoryInjection(getLatestStoryQuery()),
         indexStoryMemory: () => indexExistingStoryMemory(),
         writePromptToMessage,
     };
 }
 $(() => init());
-
-

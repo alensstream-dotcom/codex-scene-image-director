@@ -149,6 +149,145 @@
     color: var(--csid-warn);
 }
 
+.csid-quick-actions {
+    display: grid;
+    grid-template-columns: minmax(132px, 0.8fr) minmax(132px, 0.8fr) minmax(160px, 1.2fr);
+    gap: 7px;
+    align-items: center;
+}
+
+.csid-quick-actions .menu_button {
+    width: 100%;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0;
+    writing-mode: horizontal-tb;
+}
+
+.csid-diagnostic-summary {
+    min-height: 38px;
+    padding: 7px 10px;
+    border: 1px solid var(--csid-border);
+    border-radius: 8px;
+    background: var(--csid-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--csid-muted);
+}
+
+.csid-diagnostic-summary[data-state="ok"] {
+    border-color: rgba(135, 214, 180, 0.52);
+    color: var(--csid-mint);
+}
+
+.csid-diagnostic-summary[data-state="warn"] {
+    border-color: rgba(242, 195, 107, 0.52);
+    color: var(--csid-warn);
+}
+
+.csid-diagnostic-summary[data-state="bad"] {
+    border-color: rgba(239, 126, 134, 0.58);
+    color: var(--csid-danger);
+}
+
+.csid-diagnostics {
+    border: 1px solid var(--csid-border);
+    border-radius: 8px;
+    background: var(--csid-bg);
+    overflow: hidden;
+}
+
+.csid-diagnostics > summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    color: var(--csid-mint);
+    font-weight: 700;
+    list-style: none;
+}
+
+.csid-diagnostics > summary::-webkit-details-marker {
+    display: none;
+}
+
+.csid-diagnostics > summary i {
+    margin-right: 8px;
+}
+
+.csid-diagnostics-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 10px 10px;
+}
+
+.csid-diagnostic {
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--csid-border);
+    border-radius: 8px;
+    background: var(--csid-surface);
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 8px;
+}
+
+.csid-diagnostic > i {
+    margin-top: 2px;
+}
+
+.csid-diagnostic div {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.csid-diagnostic b,
+.csid-diagnostic span,
+.csid-diagnostic em {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.csid-diagnostic span,
+.csid-diagnostic em {
+    color: var(--csid-muted);
+    font-size: 0.86em;
+    line-height: 1.35;
+}
+
+.csid-diagnostic em {
+    color: var(--csid-warn);
+    font-style: normal;
+}
+
+.csid-diagnostic.is-ok {
+    border-color: rgba(135, 214, 180, 0.32);
+}
+
+.csid-diagnostic.is-ok > i {
+    color: var(--csid-mint);
+}
+
+.csid-diagnostic.is-warn {
+    border-color: rgba(242, 195, 107, 0.38);
+}
+
+.csid-diagnostic.is-warn > i {
+    color: var(--csid-warn);
+}
+
+.csid-diagnostic.is-bad {
+    border-color: rgba(239, 126, 134, 0.44);
+}
+
+.csid-diagnostic.is-bad > i {
+    color: var(--csid-danger);
+}
+
 .csid-tabs {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -530,6 +669,8 @@
 
     .csid-tabs,
     .csid-kpi-grid,
+    .csid-quick-actions,
+    .csid-diagnostics-list,
     .csid-workflow,
     .csid-result-grid,
     .csid-grid.two,
