@@ -67,6 +67,12 @@ node tests/prompt-chain.test.mjs
 
 0.4.8 修复选段已有明确动作时，旧的地点/光线/姿势/世界风格仍然混入 prompt 的问题。现在像“背着书包走在前面、跺地板、头也不回、粉色长发甩动”这类句子会优先生成 walking away、not looking back、stomping footsteps、leather shoes、swaying pink long hair 等锚点，并禁止旧的 sitting、school gate、sunlight、赛博朋克视觉风格污染该选段。
 
+## 0.4.9 Anima 英文与人物固定
+
+0.4.9 起最终写给智绘姬/Anima 的方括号 prompt 强制英文：即使界面里旧设置选过中文/混合，或质量词、世界观里有中文，也会在 finalPrompt 和 Chatu8 trigger 前清掉中文片段。
+
+人物一致性改成“固定外观”和“当前服装”分离：插件会用角色英文名/稳定身份标签 + 固定外观锁同一人物的脸、发色、瞳色等；换衣服、当前服装仍按选段和视觉记忆变化，不会写进固定外观。
+
 ## 0.4.2 选段净化
 
 0.4.2 起聊天正文悬浮菜单只保留“图片生成/取消”，主流程不再显示容易误解的复制按钮。选中大段文本时会自动过滤预设结构、思考/要求块、旧世界书 prompt 字段和英文状态摘要，只把真正剧情段落用于生成 prompt 和长期剧情记忆。

@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.8';
+const EXT_VERSION = '0.4.9';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -439,9 +439,9 @@ function getCharacterMemory(name = getCurrentCharacterName()) {
 
 function updateCharacterMemory(name, patch, options = {}) {
     if (!name || !patch || typeof patch !== 'object') return;
+    getCharacterMemory(name);
     const settings = ensureSettings();
     const chatMemory = ensureChatMemory();
-    getCharacterMemory(name);
     const permanentKeys = ['appearance', 'negative'];
     const globalTarget = settings.memory.characters[name];
     const chatTarget = chatMemory.characters[name] || {};
@@ -1695,12 +1695,15 @@ function englishSceneTags(scene, sourceText = '') {
 }
 
 const CHARACTER_ENGLISH_ALIASES = {
+    神原樱: 'Kanbara Sakura',
     凛: 'Rin',
     琳: 'Rin',
     樱: 'Sakura',
     櫻: 'Sakura',
     蓝: 'Lan',
     藍: 'Lan',
+    诗织: 'Shiori',
+    詩織: 'Shiori',
     alens: 'alens',
     Alens: 'alens',
 };
@@ -1711,6 +1714,27 @@ function englishCharacterName(name) {
     if (CHARACTER_ENGLISH_ALIASES[clean]) return CHARACTER_ENGLISH_ALIASES[clean];
     if (!hasCjk(clean)) return clean;
     return '';
+}
+
+function characterIdentityName(focus = {}) {
+    const name = normalizeLine(focus.name || '');
+    const english = normalizeLine(focus.englishName || englishCharacterName(name));
+    if (english) return english;
+    if (!name) return '';
+    if (!hasCjk(name)) return name;
+    return 'original character csid ' + hashText(name).slice(0, 6);
+}
+
+function characterIdentityTags(focus, charMemory = {}) {
+    const identityName = characterIdentityName(focus);
+    if (!identityName) return '';
+    const hasAppearance = Boolean(promptPart(charMemory.appearance, true));
+    return joinPrompt([
+        identityName,
+        hasAppearance ? `(consistent ${identityName} identity:1.2)` : '',
+        hasAppearance ? 'same face, consistent face' : '',
+        'original character design',
+    ]);
 }
 
 function getKnownCharacterNames() {
@@ -1735,9 +1759,14 @@ function detectFocusCharacters(text) {
         const match = clean.match(pattern);
         if (match) found.push({ name, index: match.index ?? 0 });
     }
-    return uniqueParts(found
-        .sort((a, b) => a.index - b.index || b.name.length - a.name.length)
-        .map(item => item.name));
+    const filtered = [];
+    for (const item of found.sort((a, b) => a.index - b.index || b.name.length - a.name.length)) {
+        const start = item.index;
+        const end = item.index + item.name.length;
+        const insideExisting = filtered.some(prev => start >= prev.index && end <= prev.index + prev.name.length);
+        if (!insideExisting) filtered.push(item);
+    }
+    return uniqueParts(filtered.map(item => item.name));
 }
 
 function resolveFocusCharacter(text, requestedFocus = '') {
@@ -1859,6 +1888,27 @@ const VISUAL_EXPRESSION_RULES = [
     { pattern: /跺脚|跺地板|头也不回|气冲冲|生气|不满/, tags: ['annoyed expression'] },
 ];
 
+const FIXED_APPEARANCE_RULES = [
+    { pattern: /樱粉色[^，。！？\n]{0,8}(?:长发|头发)|粉色[^，。！？\n]{0,8}(?:长发|头发)|粉发/, tags: ['pink hair'] },
+    { pattern: /银色[^，。！？\n]{0,8}(?:长发|短发|头发)|银发/, tags: ['silver hair'] },
+    { pattern: /白色[^，。！？\n]{0,8}(?:长发|短发|头发)|白发/, tags: ['white hair'] },
+    { pattern: /黑色[^，。！？\n]{0,8}(?:长发|短发|头发)|黑发/, tags: ['black hair'] },
+    { pattern: /蓝色[^，。！？\n]{0,8}(?:长发|短发|头发)|蓝发/, tags: ['blue hair'] },
+    { pattern: /金色[^，。！？\n]{0,8}(?:长发|短发|头发)|金发/, tags: ['blonde hair'] },
+    { pattern: /红色[^，。！？\n]{0,8}(?:长发|短发|头发)|红发/, tags: ['red hair'] },
+    { pattern: /长发/, tags: ['long hair'] },
+    { pattern: /短发/, tags: ['short hair'] },
+    { pattern: /蓝色眼睛|蓝眼睛|蓝瞳/, tags: ['blue eyes'] },
+    { pattern: /绿色眼睛|绿眼睛|绿瞳/, tags: ['green eyes'] },
+    { pattern: /金色眼睛|金眼睛|金瞳/, tags: ['golden eyes'] },
+    { pattern: /红色眼睛|红眼睛|红瞳/, tags: ['red eyes'] },
+    { pattern: /紫色眼睛|紫眼睛|紫瞳/, tags: ['purple eyes'] },
+    { pattern: /黑色眼睛|黑眼睛|黑瞳/, tags: ['black eyes'] },
+    { pattern: /兽耳|猫耳|狐耳/, tags: ['animal ears'] },
+    { pattern: /翅膀/, tags: ['wings'] },
+    { pattern: /龙角|恶魔角|头上有角|长着角/, tags: ['horns'] },
+];
+
 function regexHit(pattern, text) {
     const hit = pattern.test(text);
     pattern.lastIndex = 0;
@@ -1873,6 +1923,26 @@ function collectSceneRuleValues(rules, text, key = 'tags') {
         output.push(...values.filter(Boolean));
     }
     return uniqueParts(output);
+}
+
+function extractFixedAppearanceTags(text) {
+    return collectSceneRuleValues(FIXED_APPEARANCE_RULES, normalizeMultiline(text), 'tags');
+}
+
+function rememberFixedAppearanceFromScene(name, text) {
+    const cleanName = normalizeLine(name);
+    if (!cleanName) return '';
+    const tags = extractFixedAppearanceTags(text);
+    if (!tags.length) return '';
+    getCharacterMemory(cleanName);
+    const settings = ensureSettings();
+    const target = settings.memory.characters[cleanName];
+    const existing = cleanEnglishPrompt(target.appearance || '');
+    const next = joinPrompt([existing, tags.join(', ')]);
+    if (next && next !== existing) {
+        target.appearance = next;
+    }
+    return target.appearance || '';
 }
 
 function detectScenePersonCount(text, candidates = []) {
@@ -2084,25 +2154,23 @@ function compilePrompt(inputText, options = {}) {
     const pose = localScene.action || (selectedHasDynamicAnchor ? '' : charMemory.pose);
     const longTerm = chatMemory.longTerm || {};
     const visualNotes = Array.isArray(longTerm.visualNotes) ? longTerm.visualNotes.slice(0, 6).join(', ') : '';
-    const englishOnly = settings.behavior.promptLanguage === 'en';
+    const englishOnly = true;
     const visualNotesForPrompt = selectedHasDynamicAnchor ? '' : visualNotes;
     const worldVisualStyle = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.visualStyle, englishOnly);
     const worldGenre = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.genre, englishOnly);
     const worldRules = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.rules, englishOnly);
-    const translatedInput = settings.behavior.promptLanguage === 'zh'
-        ? inputText
-        : englishOnly
-            ? englishSceneTags(localScene, inputText)
-            : translateKnownTags(inputText);
-    const promptName = englishOnly ? focus.englishName : name;
+    const translatedInput = englishSceneTags(localScene, inputText);
+    const promptName = characterIdentityName(focus);
+    const identityTags = characterIdentityTags(focus, charMemory);
     const coreSceneTags = selectedTextCoreTags(inputText, localScene, focus, sceneAnchor);
 
-    const positive = joinPrompt([
+    const positive = cleanEnglishPrompt(joinPrompt([
         settings.prompt.positivePrefix,
         settings.prompt.quality,
         style,
         coreSceneTags,
         promptName,
+        identityTags,
         worldVisualStyle,
         worldGenre,
         worldRules,
@@ -2121,27 +2189,28 @@ function compilePrompt(inputText, options = {}) {
         promptPart(pose, englishOnly),
         localScene.camera || settings.prompt.camera,
         translatedInput,
-    ]);
+    ]));
 
-    const negative = joinPrompt([
+    const negative = cleanEnglishPrompt(joinPrompt([
         settings.prompt.negative,
         sceneAnchor.negative,
         settings.memory.world.negativeRules,
         charMemory.negative,
-    ]);
+    ]));
 
     const shotCard = buildShotCard(inputText, localScene, focus);
     return { positive, negative, shotCard, localScene, focus, sceneAnchor };
 }
 
-function updateMemoryFromSelectedScene(inputText, localScene) {
+function updateMemoryFromSelectedScene(inputText, localScene, focusName = getCurrentCharacterName()) {
     const chatMemory = ensureChatMemory();
-    const name = getCurrentCharacterName();
+    const name = normalizeLine(focusName) || getCurrentCharacterName();
     if (localScene.location) chatMemory.scene.location = localScene.location;
     if (localScene.time) chatMemory.scene.time = localScene.time;
     if (localScene.weather) chatMemory.scene.weather = localScene.weather;
     if (localScene.lighting) chatMemory.scene.lighting = localScene.lighting;
     if (localScene.mood) chatMemory.scene.mood = localScene.mood;
+    rememberFixedAppearanceFromScene(name, inputText);
     updateCharacterMemory(name, {
         currentOutfit: localScene.outfit,
         expression: localScene.expression,
@@ -2448,7 +2517,7 @@ function patchSceneWithSourceFacts(scene, sourceText) {
 
 function buildChatu8Trigger(positive) {
     const settings = ensureSettings();
-    const clean = (settings.behavior.promptLanguage === 'en' ? cleanEnglishPrompt(positive) : normalizePromptText(positive)).trim();
+    const clean = cleanEnglishPrompt(positive).trim();
     if (!settings.chatu8?.enabled) return clean;
     const start = String(settings.chatu8?.startTag || '[').trim() || '[';
     const end = String(settings.chatu8?.endTag || ']').trim() || ']';
@@ -2626,9 +2695,10 @@ function readFormToMemory() {
     const root = document.querySelector(SETTINGS_SELECTOR);
     if (!root) return;
     const name = getCurrentCharacterName();
-    const settings = ensureSettings();
+    let settings = ensureSettings();
     const chatMemory = ensureChatMemory();
     getCharacterMemory(name);
+    settings = ensureSettings();
     settings.memory.characters[name].appearance = root.querySelector('[name="char.appearance"]').value.trim();
     settings.memory.characters[name].accessories = root.querySelector('[name="char.accessories"]').value.trim();
     settings.memory.characters[name].negative = root.querySelector('[name="char.negative"]').value.trim();
@@ -4268,7 +4338,7 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
     payload.finalPrompt = normalizePromptText(payload.finalPrompt || payload.result?.positive || '');
     payload.trigger = buildChatu8Trigger(payload.finalPrompt);
     setPromptOutputsFromPayload(payload);
-    updateMemoryFromSelectedScene(sceneText, payload.localScene || payload.result?.localScene || extractSceneLocal(sceneText));
+    updateMemoryFromSelectedScene(sceneText, payload.localScene || payload.result?.localScene || extractSceneLocal(sceneText), payload.focusCharacter || payload.result?.focus?.name || getCurrentCharacterName());
     ensureChatMetadataVariables().zhihuiji = true;
     syncTavernHelperMemory();
     renderMemoryFields();
@@ -4361,7 +4431,7 @@ async function composeFromInput(options = {}) {
     document.querySelector(SETTINGS_SELECTOR + ' [data-role="shot-card"]').value = state.lastShotCard;
     const triggerArea = document.querySelector(SETTINGS_SELECTOR + ' [data-role="chatu8-trigger"]');
     if (triggerArea) triggerArea.value = state.lastTrigger;
-    updateMemoryFromSelectedScene(input, result.localScene);
+    updateMemoryFromSelectedScene(input, result.localScene, result.focus?.name || getCurrentCharacterName());
     syncTavernHelperMemory();
     renderMemoryFields();
     if (!options.skipInsert && (ensureSettings().chatu8.insertToChatInput || options.sendToChat)) insertTriggerIntoChat();
@@ -4511,7 +4581,7 @@ function exposeDebugApi() {
             const sceneText = prepareSceneText(String(text || ''));
             const result = smart ? await buildSmartPrompt(sceneText) : compilePrompt(sceneText, { focusCharacter });
             if (updateMemory) {
-                updateMemoryFromSelectedScene(sceneText, result.localScene);
+                updateMemoryFromSelectedScene(sceneText, result.localScene, result.focus?.name || focusCharacter || getCurrentCharacterName());
                 syncTavernHelperMemory();
             }
             return { ...result, trigger: buildChatu8Trigger(result.positive) };

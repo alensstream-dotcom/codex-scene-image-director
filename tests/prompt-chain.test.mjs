@@ -161,8 +161,40 @@ function promptOf(api, text, focusCharacter) {
     for (const stale of ['sitting', 'school gate', 'sunlight', 'cyberpunk', 'neon', '赛博朋克', '霓虹']) {
         assert.doesNotMatch(result.positive, new RegExp(stale, 'i'), `test2c2 should not leak stale memory/style ${stale}: ${result.positive}`);
     }
+    assert.doesNotMatch(result.positive, /duo|two character composition/i, `test2c2 should not split full name and given name into two people: ${result.positive}`);
     assert.doesNotMatch(result.positive, /(^|, )book(,|$)/i, `test2c2 should not misread school bag as a book: ${result.positive}`);
     assert.match(result.negative, /looking back|looking at viewer|sitting/i, `test2c2 should counter wrong pose/view: ${result.negative}`);
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    settings.behavior.promptLanguage = 'zh';
+    settings.prompt.positivePrefix = '超清, sharp focus';
+    settings.memory.world.visualStyle = '赛博朋克美学, neon lights';
+    settings.memory.world.rules = '学院, secret conspiracy';
+    setCharacter(memory, settings, '神原樱', 'pink long hair, green eyes', 'school uniform');
+    context.chat[0] = { mes: '神原樱背着书包走在前面，小皮鞋踩得啪啪响。她头也不回，樱粉色的长发随着步伐一甩一甩。' };
+    const payload = api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '神原樱' });
+    assert.doesNotMatch(payload.finalPrompt, /[\u4e00-\u9fff]/, `test2c3 final prompt must be English only: ${payload.finalPrompt}`);
+    assert.doesNotMatch(payload.trigger, /[\u4e00-\u9fff]/, `test2c3 Chatu8 trigger must be English only: ${payload.trigger}`);
+    assert.match(payload.finalPrompt, /Kanbara Sakura|walking ahead|school bag/i, `test2c3 should keep English scene anchors: ${payload.finalPrompt}`);
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    setCharacter(memory, settings, '神原樱', '', 'school uniform');
+    const selected = '神原樱背着书包走在前面，小皮鞋踩得啪啪响。她头也不回，樱粉色的长发随着步伐一甩一甩。';
+    context.chat[0] = { mes: selected, swipes: [] };
+    const payload = api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱' });
+    await api.writePromptToMessage(0, selected, { selectedText: selected, preview: payload });
+    const fixed = api.ensureSettings().memory.characters['神原樱'].appearance;
+    assert.match(fixed, /pink hair/i, `test2c4 should remember fixed hair color: ${fixed}`);
+    assert.match(fixed, /long hair/i, `test2c4 should remember fixed hair length: ${fixed}`);
+    assert.doesNotMatch(fixed, /school uniform|leather shoes|shoe/i, `test2c4 fixed appearance should not lock clothing: ${fixed}`);
+    const changed = api.compilePrompt('神原樱换上黑色外套，站在走廊里。', { focusCharacter: '神原樱' }).positive;
+    assert.match(changed, /pink hair|long hair/i, `test2c4 later prompt should keep fixed appearance: ${changed}`);
+    assert.match(changed, /black|coat/i, `test2c4 later prompt should use changed outfit: ${changed}`);
+    assert.doesNotMatch(changed, /school uniform/i, `test2c4 changed outfit should not be overwritten by stale outfit: ${changed}`);
 }
 
 {
