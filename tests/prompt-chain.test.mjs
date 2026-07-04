@@ -127,6 +127,37 @@ function promptOf(api, text, focusCharacter) {
 
 {
     const { api, settings, memory } = createContext();
+    setCharacter(memory, settings, '诗织', 'short silver hair, blue eyes', 'school uniform');
+    const result = api.compilePrompt('诗织低头检查书包，侧袋里露出一角漫画书封。', { focusCharacter: '诗织' });
+    for (const term of ['book cover peeking out of school bag side pocket', 'school bag side pocket', 'searching through belongings', 'partly peeking out']) {
+        assert.match(result.positive, new RegExp(term, 'i'), `test2b missing ${term}: ${result.positive}`);
+    }
+    assert.match(result.negative, /unrelated portrait|wrong scene/i, `test2b should guard against generic portrait: ${result.negative}`);
+}
+
+{
+    const { api, settings, memory } = createContext();
+    setCharacter(memory, settings, '樱', 'soft brown hair', 'school uniform');
+    const result = api.compilePrompt('樱咬着嘴唇，眼眶发红，却把那封信藏到身后。', { focusCharacter: '樱' });
+    for (const term of ['letter hidden behind the back', 'biting lip', 'teary eyes', 'hiding something behind back']) {
+        assert.match(result.positive, new RegExp(term, 'i'), `test2c missing ${term}: ${result.positive}`);
+    }
+    assert.match(result.negative, /generic standing pose|wrong scene/i, `test2c should penalize generic poses: ${result.negative}`);
+}
+
+{
+    const { api, settings, memory } = createContext();
+    setCharacter(memory, settings, '凛', 'silver hair', 'loose white hoodie');
+    setCharacter(memory, settings, '蓝', 'blue hair', 'blue cardigan');
+    const result = api.compilePrompt('蓝伸手拉住凛的袖口，凛回过头看她。', { focusCharacter: '凛' });
+    for (const term of ['duo', 'two character composition', 'grabbing sleeve cuff', 'looking back', 'visual focus on Rin']) {
+        assert.match(result.positive, new RegExp(term, 'i'), `test2d missing ${term}: ${result.positive}`);
+    }
+    assert.match(result.negative, /solo portrait|merged faces|mixed outfits/i, `test2d should guard multi-character images: ${result.negative}`);
+}
+
+{
+    const { api, settings, memory } = createContext();
     setCharacter(memory, settings, 'alens', 'young man', 'casual clothes');
     const prompt = promptOf(api, 'alens站在甜品店橱窗前，手里拿着准备给樱的草莓大福。', 'alens');
     for (const term of ['alens', 'dessert shop', 'shop window', 'strawberry daifuku']) {
@@ -159,6 +190,7 @@ function promptOf(api, text, focusCharacter) {
     assert.match(payload.finalPrompt, /Sakura/i);
     assert.match(source, /generate-image-request/, 'test5 official Chatu8 request event should be wired in source');
     assert.match(source, /usedOfficialZhihuijiPipeline/, 'test5 debug should expose official pipeline flag');
+    assert.match(source, /确认生图/, 'test5 selection popup should expose a confirm image button');
 }
 
 {

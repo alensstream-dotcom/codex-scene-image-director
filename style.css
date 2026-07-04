@@ -842,6 +842,12 @@
     background: rgba(49, 91, 149, 0.94);
 }
 
+.csid-message-menu .csid-confirm-image-button {
+    border-color: rgba(255, 185, 72, 0.72);
+    background: rgba(56, 97, 157, 0.94);
+    box-shadow: inset 0 0 0 1px rgba(255, 185, 72, 0.18);
+}
+
 .csid-preview-backdrop {
     --csid-border: rgba(177, 190, 210, 0.24);
     --csid-bg: rgba(16, 18, 22, 0.42);

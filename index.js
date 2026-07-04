@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.6';
+const EXT_VERSION = '0.4.7';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -169,6 +169,9 @@ const CN_TO_TAG = [
     [/街道|街上/g, 'street'],
     [/走廊|回廊|廊道/g, 'corridor'],
     [/教室/g, 'classroom'],
+    [/风纪委员室|委员会办公室/g, 'disciplinary committee room'],
+    [/图书馆|阅览室/g, 'library'],
+    [/教学楼/g, 'school building'],
     [/办公室/g, 'office'],
     [/大厅|殿堂|宫殿/g, 'grand hall'],
     [/屋顶|天台/g, 'rooftop'],
@@ -176,7 +179,16 @@ const CN_TO_TAG = [
     [/甜品店|甜点店|蛋糕店/g, 'dessert shop'],
     [/橱窗/g, 'shop window'],
     [/校门口|学校门口|校门/g, 'school gate'],
+    [/书包侧袋|侧袋/g, 'school bag side pocket'],
     [/书包/g, 'school bag'],
+    [/书封|封面/g, 'book cover'],
+    [/漫画/g, 'manga book'],
+    [/书本|书/g, 'book'],
+    [/信封/g, 'envelope'],
+    [/信件|一封信|那封信|这封信|把信|信藏|信递|纸条/g, 'letter'],
+    [/雨伞|伞/g, 'umbrella'],
+    [/自行车|单车/g, 'bicycle'],
+    [/手机/g, 'phone'],
     [/旧钥匙/g, 'old key'],
     [/钥匙/g, 'key'],
     [/水蜜桃|蜜桃/g, 'honey peach'],
@@ -213,20 +225,39 @@ const CN_TO_TAG = [
     [/睡裙/g, 'nightgown'],
     [/连帽衫|帽衫/g, 'hoodie'],
     [/白色连帽衫|白色帽衫/g, 'loose white hoodie'],
+    [/斗篷/g, 'cloak'],
+    [/披肩/g, 'shawl'],
     [/校服/g, 'school uniform'],
     [/制服/g, 'uniform'],
     [/衬衫/g, 'shirt'],
     [/外套/g, 'coat'],
+    [/领带/g, 'tie'],
+    [/丝带|缎带/g, 'ribbon'],
+    [/眼镜/g, 'glasses'],
+    [/皮鞋/g, 'leather shoes'],
     [/长发/g, 'long hair'],
     [/短发/g, 'short hair'],
     [/微笑/g, 'smile'],
     [/害羞/g, 'shy'],
     [/脸红|红着脸|脸红得厉害/g, 'blushing'],
+    [/眼眶发红|泪眼|含泪/g, 'teary eyes'],
+    [/咬唇|咬着嘴唇/g, 'biting lip'],
+    [/皱眉/g, 'frowning'],
+    [/惊讶|愣住/g, 'surprised expression'],
+    [/紧张|慌张|不安/g, 'nervous expression'],
     [/哭|泪/g, 'tears'],
     [/拥抱/g, 'hugging'],
     [/握着|握住|拿着/g, 'holding'],
+    [/伸手/g, 'reaching hand'],
+    [/拉住|抓住/g, 'grabbing'],
+    [/袖口/g, 'sleeve cuff'],
+    [/递给|交给|送给/g, 'offering'],
     [/接过去|接过|收下/g, 'accepting'],
-    [/回头|回眸/g, 'looking back'],
+    [/藏到身后|藏在身后/g, 'hiding behind back'],
+    [/翻找|搜查|检查/g, 'searching'],
+    [/露出|露出来/g, 'peeking out'],
+    [/掉在地上|落在地上/g, 'falling to the floor'],
+    [/回头|回过头|回眸/g, 'looking back'],
     [/追来|追赶|追逐/g, 'chasing scene'],
     [/跑|奔跑/g, 'running'],
     [/坐/g, 'sitting'],
@@ -1717,9 +1748,190 @@ function resolveFocusCharacter(text, requestedFocus = '') {
     };
 }
 
-function selectedTextCoreTags(inputText, localScene, focus) {
+const VISUAL_SUBJECT_RULES = [
+    {
+        pattern: /书包[^。！？\n]{0,32}(?:书封|封面|漫画|书)|(?:书封|封面|漫画|书)[^。！？\n]{0,32}(?:书包|侧袋)/,
+        tags: ['(book cover peeking out of school bag side pocket:1.45)', '(school bag side pocket close-up:1.25)'],
+        support: ['forbidden item reveal'],
+        camera: 'close-up of the school bag and book cover',
+    },
+    {
+        pattern: /(?:水蜜桃|蜜桃)[^，。！？\n]{0,18}(?:餐桌|勺子)|(?:餐桌|勺子)[^，。！？\n]{0,18}(?:水蜜桃|蜜桃)/,
+        tags: ['(honey peach as the main foreground subject:1.45)', '(spoon paused beside the peach:1.25)'],
+        support: ['still-life tension on dining table'],
+        camera: 'object-focused medium close-up',
+    },
+    {
+        pattern: /草莓牛奶/,
+        tags: ['(strawberry milk being handed over:1.35)'],
+        support: ['hands exchanging a drink'],
+    },
+    {
+        pattern: /草莓大福/,
+        tags: ['(strawberry daifuku in hand:1.35)'],
+        support: ['small dessert as visual subject'],
+    },
+    {
+        pattern: /信封|信件|一封信|那封信|这封信|把信|纸条|藏到身后|藏在身后/,
+        tags: ['(letter hidden behind the back:1.35)'],
+        support: ['secretive hand pose'],
+        camera: 'waist-up composition showing the hidden letter',
+    },
+    {
+        pattern: /雨伞|伞/,
+        tags: ['(umbrella as visible prop:1.25)'],
+        support: ['rainy scene prop'],
+    },
+    {
+        pattern: /自行车|单车|骑车/,
+        tags: ['(bicycle scene:1.3)'],
+        support: ['character with bicycle'],
+        camera: 'full body shot with bicycle',
+    },
+    {
+        pattern: /钥匙/,
+        tags: ['(key held in hand:1.25)'],
+        support: ['small key prop close to hand'],
+    },
+    {
+        pattern: /手机/,
+        tags: ['(phone in hand:1.2)'],
+        support: ['phone screen prop'],
+    },
+];
+
+const VISUAL_ACTION_RULES = [
+    { pattern: /停在半空|僵在半空|顿在半空/, tags: ['(hand paused in midair:1.3)'] },
+    { pattern: /盯着|凝视|注视|看着|望着/, tags: ['(staring at the visual subject:1.25)'] },
+    { pattern: /伸手/, tags: ['(reaching hand:1.25)'] },
+    { pattern: /拉住|抓住|攥住/, tags: ['(grabbing gesture:1.25)'] },
+    { pattern: /袖口/, tags: ['(grabbing sleeve cuff:1.3)'] },
+    { pattern: /递给|交给|送给/, tags: ['(offering an item:1.25)'] },
+    { pattern: /接过|接过去|收下/, tags: ['(accepting an item:1.25)'] },
+    { pattern: /护在怀里|抱在怀里/, tags: ['(holding protectively against chest:1.35)'] },
+    { pattern: /抱住|拥抱/, tags: ['(hugging:1.25)'] },
+    { pattern: /牵手|牵着/, tags: ['(holding hands:1.25)'] },
+    { pattern: /推开/, tags: ['(pushing away:1.25)'] },
+    { pattern: /藏到身后|藏在身后/, tags: ['(hiding something behind back:1.35)'] },
+    { pattern: /翻找|搜查|检查/, tags: ['(searching through belongings:1.3)'] },
+    { pattern: /露出|露出来|探出/, tags: ['(partly peeking out:1.25)'] },
+    { pattern: /掉在地上|落在地上|跌落/, tags: ['(object falling to the floor:1.25)'] },
+    { pattern: /回头|回过头|回眸|转头/, tags: ['(looking back:1.25)'] },
+    { pattern: /转身/, tags: ['(turning away:1.2)'] },
+    { pattern: /低头/, tags: ['looking down'] },
+    { pattern: /抬头/, tags: ['looking up'] },
+    { pattern: /跑|奔跑|冲向/, tags: ['running'] },
+    { pattern: /坐|坐在/, tags: ['sitting'] },
+    { pattern: /站|站在/, tags: ['standing'] },
+    { pattern: /跪|跪下/, tags: ['kneeling'] },
+    { pattern: /躺|躺下/, tags: ['lying down'] },
+];
+
+const VISUAL_EXPRESSION_RULES = [
+    { pattern: /眼眶发红|泪眼|含泪|流泪|哭/, tags: ['(teary eyes:1.25)'] },
+    { pattern: /咬唇|咬着嘴唇/, tags: ['(biting lip:1.25)'] },
+    { pattern: /脸红|红着脸|羞红/, tags: ['(blushing:1.2)'] },
+    { pattern: /皱眉/, tags: ['frowning'] },
+    { pattern: /惊讶|愣住|怔住/, tags: ['surprised expression'] },
+    { pattern: /紧张|慌张|不安|局促/, tags: ['nervous expression'] },
+    { pattern: /冷淡|冷冷|冰冷/, tags: ['cold expression'] },
+    { pattern: /认真|专注/, tags: ['serious expression'] },
+    { pattern: /微笑|笑了|笑着/, tags: ['smile'] },
+];
+
+function regexHit(pattern, text) {
+    const hit = pattern.test(text);
+    pattern.lastIndex = 0;
+    return hit;
+}
+
+function collectSceneRuleValues(rules, text, key = 'tags') {
+    const output = [];
+    for (const rule of rules) {
+        if (!regexHit(rule.pattern, text)) continue;
+        const values = Array.isArray(rule[key]) ? rule[key] : [rule[key]];
+        output.push(...values.filter(Boolean));
+    }
+    return uniqueParts(output);
+}
+
+function detectScenePersonCount(text, candidates = []) {
+    const clean = normalizeMultiline(text);
+    let count = uniqueParts(candidates || []).length;
+    if (/三人|三个人|三位|众人|大家|一群|几个人|几名|多人/.test(clean)) count = Math.max(count, 3);
+    if (/两人|两个人|二人|双方|彼此|互相|对方/.test(clean)) count = Math.max(count, 2);
+    if (/(递给|交给|送给|从[^，。！？\n]{1,24}手里|牵着|对视|看向|望向|推开|靠近|贴近)/.test(clean)) {
+        count = Math.max(count, 2);
+    }
+    if (/(?:拉住|抓住|攥住)[^，。！？\n]{0,12}(?:袖口|衣角|手|手腕|胳膊|肩膀|他|她|你|我)/.test(clean)) {
+        count = Math.max(count, 2);
+    }
+    if (/抱住(?:他|她|你|我|[^，。！？\n]{1,8}(?:肩|腰|身体))/.test(clean)) {
+        count = Math.max(count, 2);
+    }
+    if (!count && /(她|他|你|我|少女|少年|女人|男人|女孩|男孩)/.test(clean)) count = 1;
+    return Math.min(Math.max(count, 0), 4);
+}
+
+function buildPeopleCompositionTags(count, focus) {
+    if (count >= 3) return ['group scene', 'multiple characters visible', 'clear separation between characters'];
+    if (count >= 2) {
+        return uniqueParts([
+            'duo',
+            'two character composition',
+            'character interaction',
+            focus?.englishName ? 'visual focus on ' + focus.englishName : '',
+            'clear separation between characters',
+        ]);
+    }
+    if (count === 1) return ['solo', 'single character composition'];
+    return [];
+}
+
+function buildSceneAnchor(inputText, localScene, focus) {
     const clean = normalizeMultiline(inputText);
+    const subjectTags = collectSceneRuleValues(VISUAL_SUBJECT_RULES, clean, 'tags');
+    const actionTags = collectSceneRuleValues(VISUAL_ACTION_RULES, clean, 'tags');
+    const expressionTags = collectSceneRuleValues(VISUAL_EXPRESSION_RULES, clean, 'tags');
+    const supportTags = collectSceneRuleValues(VISUAL_SUBJECT_RULES, clean, 'support');
+    const cameraTags = collectSceneRuleValues(VISUAL_SUBJECT_RULES, clean, 'camera');
+    const peopleCount = detectScenePersonCount(clean, focus?.candidates || []);
+    const peopleTags = buildPeopleCompositionTags(peopleCount, focus);
+    const hasStrongAnchor = Boolean(subjectTags.length || actionTags.length || expressionTags.length);
+    const camera = cameraTags[0] || localScene.camera || inferCamera(clean);
+    const negativeTags = uniqueParts([
+        hasStrongAnchor ? 'unrelated portrait' : '',
+        hasStrongAnchor ? 'generic standing pose' : '',
+        hasStrongAnchor ? 'wrong scene' : '',
+        peopleCount >= 2 ? 'solo portrait' : '',
+        peopleCount >= 2 ? 'merged faces' : '',
+        peopleCount >= 2 ? 'mixed outfits' : '',
+    ]);
+    return {
+        positive: joinPrompt([
+            subjectTags.join(', '),
+            actionTags.join(', '),
+            expressionTags.join(', '),
+            peopleTags.join(', '),
+            supportTags.join(', '),
+            camera,
+        ]),
+        negative: joinPrompt(negativeTags),
+        peopleCount,
+        hasStrongAnchor,
+        subjectTags,
+        actionTags,
+        expressionTags,
+        supportTags,
+        camera,
+    };
+}
+
+function selectedTextCoreTags(inputText, localScene, focus, sceneAnchor = null) {
+    const clean = normalizeMultiline(inputText);
+    const anchor = sceneAnchor || buildSceneAnchor(clean, localScene, focus);
     return joinPrompt([
+        anchor.positive,
         focus?.englishName,
         englishSceneTags(localScene, clean),
         /接过|接过去|收下/.test(clean) && /草莓牛奶/.test(clean) ? 'accepting strawberry milk' : '',
@@ -1760,13 +1972,13 @@ function extractSceneLocal(text) {
         props: '',
     };
 
-    const locationMatch = clean.match(/(?:在|来到|走进|进入|回到|躲进|站在|坐在)([^，。！？\n]{1,18}(?:房间|卧室|客厅|浴室|厨房|街道|巷子|教室|办公室|森林|旅馆|酒店|床边|窗边|门口|走廊|屋顶|车里|沙发|浴缸|庭院|阳台))/);
+    const locationMatch = clean.match(/(?:在|来到|走进|进入|回到|躲进|站在|坐在)([^，。！？\n]{1,24}(?:房间|卧室|客厅|浴室|厨房|街道|巷子|教室|办公室|风纪委员室|委员会办公室|图书馆|阅览室|教学楼|森林|旅馆|酒店|床边|窗边|门口|走廊|屋顶|车里|沙发|浴缸|庭院|阳台))/);
     if (locationMatch) result.location = locationMatch[1];
 
     const outfitMatch = clean.match(/(?:穿着|换上|披着|脱下|套着|裹着|身上是|衣服是)([^，。！？\n]{1,32})/);
     if (outfitMatch) result.outfit = outfitMatch[1];
 
-    const expressionMatch = clean.match(/(微笑|笑了|脸红|害羞|哭|流泪|皱眉|惊讶|愤怒|温柔|冷淡|紧张|迷茫|疲惫|兴奋|委屈|认真|羞涩)/);
+    const expressionMatch = clean.match(/(微笑|笑了|脸红|害羞|哭|流泪|眼眶发红|含泪|咬唇|咬着嘴唇|皱眉|惊讶|愣住|怔住|愤怒|温柔|冷淡|紧张|慌张|不安|迷茫|疲惫|兴奋|委屈|认真|羞涩)/);
     if (expressionMatch) result.expression = expressionMatch[1];
 
     const timeMatch = clean.match(/(清晨|早晨|上午|中午|下午|黄昏|傍晚|夜晚|深夜|凌晨|雨夜|雪夜)/);
@@ -1778,10 +1990,10 @@ function extractSceneLocal(text) {
     const lightingMatch = clean.match(/(阳光|月光|灯光|烛光|霓虹|昏暗|逆光|暖光|冷光|阴影|晨光|夕阳|夕光|夕照|落日)/);
     if (lightingMatch) result.lighting = lightingMatch[1];
 
-    const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|低头|抬头|伸手|握住|亲吻|凝视|推开|拉住|转身|蜷缩|倚着|贴近)[^，。！？\n]{0,24}/g);
+    const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|回过头|低头|抬头|伸手|握住|抓住|亲吻|凝视|注视|盯着|看着|推开|拉住|转身|蜷缩|倚着|贴近|递给|接过|收下|藏到|藏在|翻找|搜查|检查|露出|甩开|骑着|奔跑|停在半空|顿在半空|掉在地上|落在地上)[^，。！？\n]{0,28}/g);
     if (actionMatches?.length) result.action = actionMatches.slice(-2).join(', ');
 
-    const propMatch = clean.match(/(?:拿着|握着|抱着|捧着|戴着)([^，。！？\n]{1,20})/);
+    const propMatch = clean.match(/(?:拿着|握着|抱着|捧着|戴着|递给|接过|收下|藏着|藏到身后|藏在身后|露出|翻找)([^，。！？\n]{1,24})/);
     if (propMatch) result.props = propMatch[1];
 
     result.camera = inferCamera(clean);
@@ -1809,9 +2021,11 @@ function buildShotCard(inputText, localScene, focus = resolveFocusCharacter(inpu
     const chatMemory = ensureChatMemory();
     const name = focus.name || getCurrentCharacterName();
     const charMemory = getCharacterMemory(name);
+    const sceneAnchor = buildSceneAnchor(inputText, localScene, focus);
     const lines = [
         `人物: ${name}`,
         `焦点候选: ${focus.candidates?.length ? focus.candidates.join(' / ') : '未检测到'}`,
+        `视觉主体: ${sceneAnchor.subjectTags?.length ? sceneAnchor.subjectTags.join(', ') : '按剧情动作/人物构图'}`,
         `固定外观: ${charMemory.appearance || '未填写'}`,
         `当前服装: ${localScene.outfit || charMemory.currentOutfit || '未填写'}`,
         `地点: ${localScene.location || chatMemory.scene.location || '未填写'}`,
@@ -1849,7 +2063,8 @@ function compilePrompt(inputText, options = {}) {
             ? englishSceneTags(localScene, inputText)
             : translateKnownTags(inputText);
     const promptName = englishOnly ? focus.englishName : name;
-    const coreSceneTags = selectedTextCoreTags(inputText, localScene, focus);
+    const sceneAnchor = buildSceneAnchor(inputText, localScene, focus);
+    const coreSceneTags = selectedTextCoreTags(inputText, localScene, focus, sceneAnchor);
 
     const positive = joinPrompt([
         settings.prompt.positivePrefix,
@@ -1879,12 +2094,13 @@ function compilePrompt(inputText, options = {}) {
 
     const negative = joinPrompt([
         settings.prompt.negative,
+        sceneAnchor.negative,
         settings.memory.world.negativeRules,
         charMemory.negative,
     ]);
 
     const shotCard = buildShotCard(inputText, localScene, focus);
-    return { positive, negative, shotCard, localScene, focus };
+    return { positive, negative, shotCard, localScene, focus, sceneAnchor };
 }
 
 function updateMemoryFromSelectedScene(inputText, localScene) {
@@ -3662,13 +3878,14 @@ function showMessageMenu(eventOrPoint, messageId, selectedText = '', selectionRa
     if (state.activeSelectionText) {
         const hint = document.createElement('div');
         hint.className = 'csid-message-menu-hint';
-        hint.textContent = '已选中 ' + state.activeSelectionText.length + ' 字';
+        hint.textContent = '已选中 ' + state.activeSelectionText.length + ' 字，确认后写到原文下方';
         menu.appendChild(hint);
     }
     const imageButton = document.createElement('button');
     imageButton.type = 'button';
     imageButton.dataset.csidMessageAction = 'image';
-    imageButton.innerHTML = '<span class="fa-solid fa-image"></span><span>预览生图</span>';
+    imageButton.className = 'csid-confirm-image-button';
+    imageButton.innerHTML = '<span class="fa-solid fa-image"></span><span>确认生图</span>';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.dataset.csidMessageAction = 'close';
@@ -3699,7 +3916,12 @@ function bindMessageMenu() {
     state.messageMenuBound = true;
     document.addEventListener('selectionchange', () => {
         clearTimeout(state.selectionCacheTimer);
-        state.selectionCacheTimer = setTimeout(() => getSelectionContext(), 80);
+        state.selectionCacheTimer = setTimeout(() => {
+            if (document.querySelector('.csid-preview-backdrop')) return;
+            const context = getSelectionContext();
+            if (!context) return;
+            showMessageMenu({ clientX: context.x, clientY: context.y }, context.messageId, context.text, context.range, context.sourceRange);
+        }, 160);
     }, true);
     document.addEventListener('mouseup', event => openMenuFromSelection(event, 0), true);
     document.addEventListener('touchend', event => openMenuFromSelection(event, 120), true);
