@@ -906,8 +906,13 @@
     gap: 10px;
 }
 
-.csid-preview-text {
+.csid-preview-text,
+.csid-preview-moment {
     min-height: 92px;
+}
+
+.csid-preview-moment {
+    border-color: rgba(135, 214, 180, 0.42);
 }
 
 .csid-preview-context {

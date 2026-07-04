@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.5.0';
+const EXT_VERSION = '0.5.1';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -158,42 +158,42 @@ const ANIMA_STYLE_PROFILES = [
     {
         id: 'cyberpunk',
         pattern: /赛博朋克|霓虹|义体|黑客|都市夜景|夜晚|雨夜|街道|巷子|灯牌|反光|玻璃幕墙/i,
-        tags: 'anime cyberpunk illustration, neon rim lighting, rainy reflections, detailed urban background, cinematic color grading, crisp lineart',
+        tags: 'anime cyberpunk illustration, neon rim lighting, rainy reflections, cinematic color grading',
     },
     {
         id: 'fantasy',
         pattern: /魔法|魔女|精灵|龙|骑士|王国|城堡|异世界|神殿|森林|冒险|法术|咒文/i,
-        tags: 'fantasy anime illustration, luminous magic, ornate costume details, painterly background, dramatic atmosphere, elegant composition',
+        tags: 'fantasy anime illustration, luminous magic, ornate details, dramatic atmosphere',
     },
     {
         id: 'dark',
         pattern: /恶魔|天使|诅咒|血|阴影|地下|禁忌|恐怖|怪物|深渊|审判|囚禁|锁链|黑暗/i,
-        tags: 'dark fantasy anime illustration, moody lighting, high contrast shadows, gothic atmosphere, sharp highlights, cinematic composition',
+        tags: 'dark fantasy anime illustration, moody lighting, gothic atmosphere, high contrast shadows',
     },
     {
         id: 'action',
         pattern: /战斗|冲刺|追逐|奔跑|挥刀|刀|剑|枪|爆炸|破碎|闪避|攻击|格斗|魔法阵/i,
-        tags: 'dynamic anime action illustration, dramatic perspective, motion blur, impact lighting, energetic composition, sharp lineart',
+        tags: 'dynamic anime action illustration, dramatic perspective, motion blur, impact lighting',
     },
     {
         id: 'romance',
         pattern: /脸红|心跳|告白|靠近|牵手|拥抱|亲吻|暧昧|温柔|约会|恋爱|羞涩/i,
-        tags: 'romantic anime key visual, soft bloom, delicate eyelashes, luminous eyes, warm gentle lighting, subtle color harmony',
+        tags: 'romantic anime key visual, soft bloom, luminous eyes, warm gentle lighting',
     },
     {
         id: 'school',
         pattern: /学校|学院|教室|走廊|校门|制服|校服|书包|社团|学生|风纪委员|图书馆/i,
-        tags: 'polished school anime key visual, clean cel shading, crisp lineart, expressive eyes, soft daylight, tidy background detail',
+        tags: 'polished school anime key visual, clean cel shading, expressive eyes, soft daylight',
     },
     {
         id: 'slice',
         pattern: /日常|房间|客厅|餐桌|甜品|咖啡|清晨|午后|阳光|散步|家里|便利店/i,
-        tags: 'slice of life anime illustration, soft natural lighting, clean lineart, cozy atmosphere, gentle color palette, detailed everyday background',
+        tags: 'slice of life anime illustration, soft natural lighting, cozy atmosphere, gentle color palette',
     },
     {
         id: 'mystery',
         pattern: /秘密|谜|调查|侦探|线索|禁书|档案|监视|阴谋|真相|风纪|检查/i,
-        tags: 'mystery anime illustration, suspenseful lighting, cinematic framing, focused composition, subtle shadows, refined details',
+        tags: 'mystery anime illustration, suspenseful lighting, focused composition, subtle shadows',
     },
 ];
 
@@ -201,17 +201,17 @@ const ANIMA_CHARACTER_STYLE_PROFILES = [
     {
         id: 'cute-girl',
         pattern: /少女|女孩|女学生|公主|女仆|粉色|长发|猫耳|狐耳|可爱|害羞|脸红/i,
-        tags: 'cute anime character design, luminous eyes, delicate facial features, soft hair highlights',
+        tags: 'cute anime character design, luminous eyes, soft hair highlights',
     },
     {
         id: 'elegant',
         pattern: /优雅|大小姐|贵族|女王|礼服|长裙|银发|金发|冷淡|端庄/i,
-        tags: 'elegant anime character art, refined silhouette, graceful pose, ornate details, controlled expression',
+        tags: 'elegant anime character art, refined silhouette, graceful pose, ornate details',
     },
     {
         id: 'cool-boy',
         pattern: /少年|男孩|男人|青年|骑士|执事|冷峻|沉默|黑发|西装/i,
-        tags: 'otome visual novel character art, sharp eyes, elegant lineart, cool lighting, handsome character design',
+        tags: 'otome visual novel character art, sharp eyes, cool lighting, handsome character design',
     },
 ];
 
@@ -243,6 +243,10 @@ const CN_TO_TAG = [
     [/餐桌|饭桌/g, 'dining table'],
     [/甜品店|甜点店|蛋糕店/g, 'dessert shop'],
     [/橱窗/g, 'shop window'],
+    [/草莓蛋糕/g, 'strawberry cake'],
+    [/蛋糕模型|展示模型/g, 'cake display model'],
+    [/蛋糕/g, 'cake'],
+    [/模型/g, 'display model'],
     [/校门口|学校门口|校门/g, 'school gate'],
     [/背着书包/g, 'carrying a school bag on back'],
     [/书包侧袋|侧袋/g, 'school bag side pocket'],
@@ -325,6 +329,8 @@ const CN_TO_TAG = [
     [/掉在地上|落在地上/g, 'falling to the floor'],
     [/回头|回过头|回眸/g, 'looking back'],
     [/头也不回/g, 'not looking back'],
+    [/停下脚步|突然停下|停住|停下/g, 'stopping in place'],
+    [/盯着|凝视|注视|看着|望着/g, 'staring'],
     [/走在前面|走在前方|往前走|向前走/g, 'walking ahead'],
     [/跺脚|跺地板|踩得啪啪响/g, 'stomping footsteps'],
     [/一甩一甩|甩动|甩着/g, 'swaying hair'],
@@ -1079,6 +1085,65 @@ function prepareSceneText(text) {
     const clean = stripPromptScaffoldSections(stripped);
     if (clean) return clean;
     return looksLikePromptScaffold(stripped) ? '' : stripped;
+}
+
+function splitSceneMoments(text) {
+    const clean = normalizeMultiline(text);
+    return clean
+        .split(/(?<=[。！？!?；;])\s*|\n+/)
+        .map(part => normalizeLine(part))
+        .filter(part => part.length >= 3 && !isInstructionScaffoldLine(part));
+}
+
+function scoreVisualMoment(text, index = 0, total = 1) {
+    const clean = normalizeLine(text);
+    if (!clean) return -999;
+    let score = 0;
+    const rules = [
+        [/甜品店|甜点店|蛋糕店|橱窗|草莓蛋糕|蛋糕模型|展示模型|模型/, 22],
+        [/书包|侧袋|书封|封面|漫画|信封|信件|纸条|钥匙|雨伞|自行车|水蜜桃|勺子|草莓牛奶|草莓大福/, 9],
+        [/停下脚步|突然停下|停住|停下|盯着|凝视|注视|看着|望着|回头|头也不回|转身|伸手|拉住|抓住|递给|接过|藏到身后|翻找|检查|露出|奔跑|走在前面|跺脚|踩得啪啪响/, 8],
+        [/站在|坐在|躺在|跪下|抱住|牵手|护在怀里|拿着|握着|捧着|背着/, 5],
+        [/教室|走廊|校门|街道|巷子|房间|餐桌|窗边|月光|阳光|夕阳|霓虹|雨夜|下雨|下雪/, 5],
+        [/樱粉色|粉色头发|粉发|银发|白发|黑发|长发|短发|校服|制服|外套|连衣裙|眼镜|小皮鞋/, 4],
+        [/脸红|咬唇|眼眶发红|含泪|皱眉|惊讶|微笑|冷淡|认真|不安|生气/, 4],
+    ];
+    for (const [pattern, weight] of rules) {
+        if (regexHit(pattern, clean)) score += weight;
+    }
+    if (/(?:橱窗|甜品店|甜点店|蛋糕店)/.test(clean) && /(?:草莓蛋糕|蛋糕|模型|展示模型)/.test(clean)) score += 12;
+    if (/走在前面|往前走|向前走|跺脚|跺地板|踩得啪啪响/.test(clean) && !/(?:橱窗|甜品店|草莓蛋糕|信件|书封|水蜜桃|草莓牛奶|草莓大福)/.test(clean)) score -= 5;
+    if (/[“”"「」]/.test(clean)) score -= 4;
+    if (/^\s*[“”"「」]|说道|说完|低声|回答|问道|喊道/.test(clean) && !/(拿着|递给|接过|盯着|看着|抱住|停下|回头|伸手|藏到身后)/.test(clean)) score -= 7;
+    if (/alens没搭话|依旧保持|保持着|走了大概|大概[一二三四五六七八九十\d]+分钟|Time passed|Dramatic updates|Relationship updates/i.test(clean)) score -= 10;
+    if (/剧情要求|详略安排|文笔要求|补充要求|增项检查|创作预备|生图处理|prompt|negative_prompt/i.test(clean)) score -= 80;
+    if (clean.length < 8) score -= 4;
+    if (clean.length > 190) score -= Math.ceil((clean.length - 190) / 18);
+    score += total > 1 ? (index / Math.max(total - 1, 1)) * 2 : 0;
+    return score;
+}
+
+function selectBestVisualMoment(text) {
+    const clean = normalizeMultiline(text).trim();
+    if (!clean || clean.length <= 150) return clean;
+    const moments = splitSceneMoments(clean);
+    if (!moments.length) return compactPreview(clean, 180);
+    let best = moments[0];
+    let bestScore = -999;
+    const maxWindow = Math.min(3, moments.length);
+    for (let size = 1; size <= maxWindow; size += 1) {
+        for (let i = 0; i <= moments.length - size; i += 1) {
+            const candidate = moments.slice(i, i + size).join('');
+            if (candidate.length > 230) continue;
+            const score = scoreVisualMoment(candidate, i, moments.length) + (size === 2 ? 2 : 0) - (size === 3 ? 2 : 0);
+            if (score > bestScore || (score === bestScore && candidate.length > best.length && candidate.length <= 180)) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+    }
+    if (bestScore < 3) return compactPreview(clean, 180);
+    return best;
 }
 
 function isStoryIndexableText(text) {
@@ -1849,6 +1914,12 @@ function resolveFocusCharacter(text, requestedFocus = '') {
 
 const VISUAL_SUBJECT_RULES = [
     {
+        pattern: /甜品店|甜点店|蛋糕店|橱窗|草莓蛋糕|蛋糕模型|展示模型/,
+        tags: ['(strawberry cake display in shop window:1.4)', '(dessert shop window:1.25)'],
+        support: ['window display focus'],
+        camera: 'medium shot facing the dessert shop window',
+    },
+    {
         pattern: /书包[^。！？\n]{0,32}(?:书封|封面|漫画|书)|(?:书封|封面|漫画|书)[^。！？\n]{0,32}(?:书包|侧袋)/,
         tags: ['(book cover peeking out of school bag side pocket:1.45)', '(school bag side pocket close-up:1.25)'],
         support: ['forbidden item reveal'],
@@ -1910,6 +1981,7 @@ const VISUAL_SUBJECT_RULES = [
 ];
 
 const VISUAL_ACTION_RULES = [
+    { pattern: /停下脚步|突然停下|停住|停下/, tags: ['(stopping in place:1.25)', '(paused footsteps:1.2)'] },
     { pattern: /走在前面|走在前方|往前走|向前走|走在前/, tags: ['(walking ahead:1.35)', '(walking away from viewer:1.25)'] },
     { pattern: /头也不回|没有回头|不回头/, tags: ['(not looking back:1.35)', 'back view', 'face turned away'] },
     { pattern: /跺脚|跺地板|踩得啪啪响|脚步很重|用力踩/, tags: ['(stomping footsteps:1.35)', '(leather shoes stomping on the floor:1.25)'] },
@@ -2105,20 +2177,23 @@ function selectedTextCoreTags(inputText, localScene, focus, sceneAnchor = null) 
 
 function buildAnimaStyleTags(inputText, focus = {}, charMemory = {}) {
     const story = ensureStoryMemory();
-    const hintText = normalizeMultiline([
+    const localHintText = normalizeMultiline([
         inputText,
         focus?.name || '',
         charMemory.appearance || '',
         charMemory.currentOutfit || '',
+    ].join('\n'));
+    const memoryHintText = normalizeMultiline([
         story.summary || '',
         Array.isArray(story.facts) ? story.facts.slice(0, 12).join(' ') : '',
     ].join('\n'));
-    const worldTags = ANIMA_STYLE_PROFILES
-        .filter(profile => regexHit(profile.pattern, hintText))
-        .slice(0, 2)
-        .map(profile => profile.tags);
+    let worldProfiles = ANIMA_STYLE_PROFILES.filter(profile => regexHit(profile.pattern, localHintText)).slice(0, 2);
+    if (!worldProfiles.length) {
+        worldProfiles = ANIMA_STYLE_PROFILES.filter(profile => regexHit(profile.pattern, memoryHintText)).slice(0, 1);
+    }
+    const worldTags = worldProfiles.map(profile => profile.tags);
     const characterTags = ANIMA_CHARACTER_STYLE_PROFILES
-        .filter(profile => regexHit(profile.pattern, hintText))
+        .filter(profile => regexHit(profile.pattern, localHintText))
         .slice(0, 1)
         .map(profile => profile.tags);
     return joinPrompt([
@@ -2155,7 +2230,7 @@ function extractSceneLocal(text) {
         props: '',
     };
 
-    const locationMatch = clean.match(/(?:在|来到|走进|进入|回到|躲进|站在|坐在)([^，。！？\n]{1,24}(?:房间|卧室|客厅|浴室|厨房|街道|巷子|教室|办公室|风纪委员室|委员会办公室|图书馆|阅览室|教学楼|森林|旅馆|酒店|床边|窗边|门口|走廊|屋顶|车里|沙发|浴缸|庭院|阳台))/);
+    const locationMatch = clean.match(/(?:在|来到|走进|进入|回到|躲进|站在|坐在|路边)([^，。！？\n]{1,28}(?:房间|卧室|客厅|浴室|厨房|街道|巷子|教室|办公室|风纪委员室|委员会办公室|图书馆|阅览室|教学楼|森林|旅馆|酒店|床边|窗边|门口|走廊|屋顶|车里|沙发|浴缸|庭院|阳台|甜品店|甜点店|蛋糕店|橱窗|校门))/);
     if (locationMatch) result.location = locationMatch[1];
 
     const outfitMatch = clean.match(/(?:穿着|换上|披着|脱下|套着|裹着|身上是|衣服是)([^，。！？\n]{1,32})/);
@@ -2173,11 +2248,15 @@ function extractSceneLocal(text) {
     const lightingMatch = clean.match(/(阳光|月光|灯光|烛光|霓虹|昏暗|逆光|暖光|冷光|阴影|晨光|夕阳|夕光|夕照|落日)/);
     if (lightingMatch) result.lighting = lightingMatch[1];
 
-    const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|回过头|头也不回|低头|抬头|伸手|握住|抓住|亲吻|凝视|注视|盯着|看着|推开|拉住|转身|蜷缩|倚着|贴近|递给|接过|收下|藏到|藏在|翻找|搜查|检查|露出|甩开|甩动|骑着|奔跑|走在前面|走在前方|往前走|向前走|跺脚|跺地板|踩得啪啪响|停在半空|顿在半空|掉在地上|落在地上)[^，。！？\n]{0,28}/g);
+    const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|回过头|头也不回|低头|抬头|伸手|握住|抓住|亲吻|凝视|注视|盯着|看着|推开|拉住|转身|蜷缩|倚着|贴近|递给|接过|收下|藏到|藏在|翻找|搜查|检查|露出|甩开|甩动|骑着|奔跑|走在前面|走在前方|往前走|向前走|跺脚|跺地板|踩得啪啪响|停下脚步|突然停下|停住|停下|停在半空|顿在半空|掉在地上|落在地上)[^，。！？\n]{0,28}/g);
     if (actionMatches?.length) result.action = actionMatches.slice(-2).join(', ');
 
     const propMatch = clean.match(/(?:拿着|握着|抱着|捧着|戴着|递给|接过|收下|藏着|藏到身后|藏在身后|露出|翻找)([^，。！？\n]{1,24})/);
     if (propMatch) result.props = propMatch[1];
+    if (!result.props) {
+        const staticPropMatch = clean.match(/(草莓蛋糕|蛋糕模型|展示模型|水蜜桃|草莓牛奶|草莓大福|书包|书封|信封|信件|钥匙|雨伞|自行车)/);
+        if (staticPropMatch) result.props = staticPropMatch[1];
+    }
 
     result.camera = inferCamera(clean);
     result.mood = inferMood(clean);
@@ -2185,6 +2264,7 @@ function extractSceneLocal(text) {
 }
 
 function inferCamera(text) {
+    if (/甜品店|甜点店|蛋糕店|橱窗|草莓蛋糕|蛋糕模型|展示模型/.test(text)) return 'medium shot facing the dessert shop window';
     if (/头也不回|走在前面|走在前方|往前走|向前走/.test(text)) return 'full body back view, walking composition';
     if (/全身|站在|走在|奔跑|街道|森林|大厅/.test(text)) return 'full body, environmental shot';
     if (/脸|眼睛|泪|亲吻|靠近|凝视|低声/.test(text)) return 'close-up, intimate framing';
@@ -3783,15 +3863,21 @@ function getSelectionSceneContext(messageId, selectedText, preferredRange = null
 
 function buildScenePreviewPayload(messageId, selectedText, options = {}) {
     const raw = normalizeMultiline(selectedText || '').trim();
-    const sceneText = prepareSceneText(raw);
+    const cleanedScene = prepareSceneText(raw);
+    const sceneText = selectBestVisualMoment(cleanedScene);
     if (!sceneText || sceneText.length < 8) throw new Error('选中的剧情太短或为空，请重新选择一段真正剧情');
     if (looksLikePromptScaffold(sceneText)) throw new Error('这段内容像预设/提示词，不适合直接生图，请只选真正剧情段落');
     const cached = state.lastSelectionContext;
     const cachedMatches = cached?.messageId === Number(messageId) && normalizeMultiline(cached.text || '').trim() === raw;
     const preferredRange = options.sourceRange || (cachedMatches ? cached.sourceRange : null);
     const sceneContext = getSelectionSceneContext(messageId, raw, preferredRange);
-    const focus = resolveFocusCharacter(sceneText, options.focusCharacter || '');
-    const result = compilePrompt(sceneText, { focusCharacter: options.focusCharacter || '' });
+    let focus = resolveFocusCharacter([sceneText, raw].join('\n'), options.focusCharacter || '');
+    if (!options.focusCharacter && focus.name) {
+        const rawCandidates = detectFocusCharacters(raw);
+        const longerName = rawCandidates.find(name => name.length > focus.name.length && name.includes(focus.name));
+        if (longerName) focus = resolveFocusCharacter([sceneText, raw].join('\n'), longerName);
+    }
+    const result = compilePrompt(sceneText, { focusCharacter: options.focusCharacter || focus.name || '' });
     const finalPrompt = normalizePromptText(result.positive);
     const trigger = buildChatu8Trigger(finalPrompt);
     return {
@@ -3808,7 +3894,8 @@ function buildScenePreviewPayload(messageId, selectedText, options = {}) {
         range: sceneContext.range,
         focusCharacter: result.focus?.name || focus.name,
         focusCandidates: focus.candidates,
-        focusRequired: focus.ambiguous && !options.focusCharacter,
+        focusRequired: false,
+        focusAmbiguous: focus.ambiguous && !options.focusCharacter,
         detectedLocation: result.localScene.location || ensureChatMemory().scene.location || '',
         detectedOutfit: result.localScene.outfit || getCharacterMemory(result.focus?.name || focus.name).currentOutfit || '',
         detectedProps: result.localScene.props || '',
@@ -3903,7 +3990,8 @@ function renderScenePreviewModal(payload) {
     const backdrop = document.createElement('div');
     backdrop.className = 'csid-preview-backdrop';
     const focusOptions = uniqueParts([...(payload.focusCandidates || []), payload.focusCharacter].filter(Boolean));
-    const mustChooseFocus = payload.focusRequired && focusOptions.length > 1;
+    const focusAmbiguous = payload.focusAmbiguous && focusOptions.length > 1;
+    const extractedMoment = normalizeLine(payload.selectedTextRaw) !== normalizeLine(payload.selectedText);
     backdrop.innerHTML = `
         <div class="csid-preview-dialog" role="dialog" aria-modal="true">
             <div class="csid-preview-head">
@@ -3914,13 +4002,16 @@ function renderScenePreviewModal(payload) {
                 <button class="menu_button" data-csid-preview-action="cancel"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="csid-preview-body">
-                <label class="csid-label">当前选中的剧情 selectedText</label>
+                <label class="csid-label">你选中的剧情 originalSelection</label>
                 <textarea class="text_pole csid-preview-text" readonly>${escapeHtml(payload.selectedTextRaw)}</textarea>
+                ${extractedMoment ? `
+                    <label class="csid-label">实际取景片段 sceneMoment</label>
+                    <textarea class="text_pole csid-preview-moment" readonly>${escapeHtml(payload.selectedText)}</textarea>
+                ` : ''}
                 <div class="csid-preview-meta">
                     <label>focusCharacter
                         <select class="text_pole" data-csid-preview-focus>
-                            ${mustChooseFocus ? '<option value="">请选择焦点角色</option>' : ''}
-                            ${focusOptions.map(name => `<option value="${escapeHtml(name)}" ${name === payload.focusCharacter && !mustChooseFocus ? 'selected' : ''}>${escapeHtml(name)}${englishCharacterName(name) ? ' / ' + escapeHtml(englishCharacterName(name)) : ''}</option>`).join('')}
+                            ${focusOptions.map(name => `<option value="${escapeHtml(name)}" ${name === payload.focusCharacter ? 'selected' : ''}>${escapeHtml(name)}${englishCharacterName(name) ? ' / ' + escapeHtml(englishCharacterName(name)) : ''}</option>`).join('')}
                         </select>
                     </label>
                     <label>location<input class="text_pole" value="${escapeHtml(payload.detectedLocation || '未检测到')}" readonly></label>
@@ -3941,12 +4032,12 @@ function renderScenePreviewModal(payload) {
                     <span>模式A：插入智绘姬可识别按钮</span>
                     <span>模式B：直接调用智绘姬生成</span>
                 </div>
-                <div class="csid-preview-warning" ${mustChooseFocus ? '' : 'hidden'}>检测到多个角色，请先选择 focusCharacter，避免混脸或混衣服。</div>
+                <div class="csid-preview-warning" ${focusAmbiguous ? '' : 'hidden'}>检测到多个角色，已自动选择 focusCharacter；需要时可在上方切换，按钮不会被锁住。</div>
             </div>
             <div class="csid-preview-actions">
                 <button class="menu_button" data-csid-preview-action="cancel">取消</button>
-                <button class="menu_button" data-csid-preview-action="insert" ${mustChooseFocus ? 'disabled' : ''}>仅插入 prompt 按钮</button>
-                <button class="menu_button result-control" data-csid-preview-action="generate" ${mustChooseFocus ? 'disabled' : ''}>立即调用智绘姬生图</button>
+                <button class="menu_button" data-csid-preview-action="insert">仅插入 prompt 按钮</button>
+                <button class="menu_button result-control" data-csid-preview-action="generate">立即调用智绘姬生图</button>
             </div>
         </div>
     `;
@@ -4635,6 +4726,7 @@ function exposeDebugApi() {
         getStoryDbStats: () => structuredClone(ensureStoryMemory().dbStats || {}),
         cleanStoryText,
         prepareSceneText,
+        selectBestVisualMoment,
         runDiagnostics,
         applyRecommendedSettings,
         refreshStoryMemory: () => updateStoryMemoryInjection(getLatestStoryQuery()),

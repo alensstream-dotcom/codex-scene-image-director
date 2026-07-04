@@ -18,6 +18,7 @@ globalThis.__csidTest = {
   buildChatu8Trigger,
   writePromptToMessage,
   buildCaptureSelectionFromPoints,
+  selectBestVisualMoment,
 };
 `;
 
@@ -181,9 +182,35 @@ function promptOf(api, text, focusCharacter) {
 }
 
 {
+    const { api, context, settings, memory } = createContext();
+    setCharacter(memory, settings, '神原樱', 'pink long hair, green eyes', 'school uniform');
+    memory.story.summary = '旧剧情是赛博朋克雨夜，霓虹街道和玻璃幕墙很多。';
+    const longText = [
+        '神原樱背着书包走在前面，小皮鞋踩得啪啪响，每一步都像在跺地板。',
+        'alens没搭话，依旧保持着那个距离。',
+        '走了大概五分钟，樱突然停下脚步。',
+        '她盯着路边一家还没开门的甜品店橱窗，里面摆着草莓蛋糕的模型。',
+        '“本小姐才不是因为想吃草莓蛋糕才停下来的。”她说完，又迈开步子往前走。',
+        '拐过团子坂的路口，干驮木小学的校门已经能看见了。'
+    ].join('\n');
+    context.chat[0] = { mes: longText };
+    const moment = api.selectBestVisualMoment(api.prepareSceneText(longText));
+    assert.match(moment, /停下脚步|甜品店橱窗|草莓蛋糕/, `test2c3d should extract the drawable moment: ${moment}`);
+    assert.doesNotMatch(moment, /alens没搭话|校门已经能看见/, `test2c3d should not keep non-visual tail/context: ${moment}`);
+    const payload = api.buildScenePreviewPayload(0, longText);
+    assert.equal(payload.selectedText, moment, 'test2c3d preview should use extracted moment for prompt generation');
+    assert.equal(payload.focusCharacter, '神原樱', 'test2c3d should prefer the full character name from the original selection');
+    assert.match(payload.finalPrompt, /Kanbara Sakura|strawberry cake|dessert shop window|shop window/i, `test2c3d prompt should focus the dessert-window shot: ${payload.finalPrompt}`);
+    assert.doesNotMatch(payload.finalPrompt, /school gate|cyberpunk|neon|rainy/i, `test2c3d prompt should not leak old style or later location: ${payload.finalPrompt}`);
+    assert.ok(payload.finalPrompt.length < 760, `test2c3d prompt should stay concise, got ${payload.finalPrompt.length}: ${payload.finalPrompt}`);
+}
+
+{
     assert.doesNotMatch(source, /name="behavior\.promptLanguage"/, 'test2c3b prompt language setting should be removed from UI');
     assert.doesNotMatch(source, /name="world\.visualStyle"/, 'test2c3b world visual style setting should be removed from UI');
     assert.doesNotMatch(source, /name="prompt\.quality"/, 'test2c3b quality prompt setting should be removed from UI');
+    assert.doesNotMatch(source, /mustChooseFocus/, 'test2c3b preview should not lock insert/generate buttons behind focus selection');
+    assert.doesNotMatch(source, /data-csid-preview-action="(?:insert|generate)"[^\\n]*disabled/, 'test2c3b preview action buttons should not render disabled');
 }
 
 {
