@@ -147,6 +147,26 @@ function promptOf(api, text, focusCharacter) {
 
 {
     const { api, settings, memory } = createContext();
+    setCharacter(memory, settings, '樱', 'pink long hair', 'school uniform');
+    memory.scene.location = 'school gate';
+    memory.scene.lighting = 'sunlight';
+    memory.characters['樱'].pose = 'sitting';
+    settings.memory.world.visualStyle = '赛博朋克美学, 暗色调, 霓虹灯光, 玻璃拟态UI';
+    settings.memory.world.genre = '学院, 秘密, 阴谋';
+    const text = '神原樱背着书包走在前面，小皮鞋踩得啪啪响，每一步都像在跺地板。她头也不回，樱粉色的长发随着步伐一甩一甩。';
+    const result = api.compilePrompt(text, { focusCharacter: '樱' });
+    for (const term of ['walking ahead', 'walking away from viewer', 'not looking back', 'stomping footsteps', 'leather shoes', 'school bag', 'swaying hair', 'pink long hair']) {
+        assert.match(result.positive, new RegExp(term, 'i'), `test2c2 missing selected-scene term ${term}: ${result.positive}`);
+    }
+    for (const stale of ['sitting', 'school gate', 'sunlight', 'cyberpunk', 'neon', '赛博朋克', '霓虹']) {
+        assert.doesNotMatch(result.positive, new RegExp(stale, 'i'), `test2c2 should not leak stale memory/style ${stale}: ${result.positive}`);
+    }
+    assert.doesNotMatch(result.positive, /(^|, )book(,|$)/i, `test2c2 should not misread school bag as a book: ${result.positive}`);
+    assert.match(result.negative, /looking back|looking at viewer|sitting/i, `test2c2 should counter wrong pose/view: ${result.negative}`);
+}
+
+{
+    const { api, settings, memory } = createContext();
     setCharacter(memory, settings, '凛', 'silver hair', 'loose white hoodie');
     setCharacter(memory, settings, '蓝', 'blue hair', 'blue cardigan');
     const result = api.compilePrompt('蓝伸手拉住凛的袖口，凛回过头看她。', { focusCharacter: '凛' });

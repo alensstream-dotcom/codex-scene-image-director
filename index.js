@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.4.7';
+const EXT_VERSION = '0.4.8';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -179,11 +179,12 @@ const CN_TO_TAG = [
     [/甜品店|甜点店|蛋糕店/g, 'dessert shop'],
     [/橱窗/g, 'shop window'],
     [/校门口|学校门口|校门/g, 'school gate'],
+    [/背着书包/g, 'carrying a school bag on back'],
     [/书包侧袋|侧袋/g, 'school bag side pocket'],
     [/书包/g, 'school bag'],
     [/书封|封面/g, 'book cover'],
     [/漫画/g, 'manga book'],
-    [/书本|书/g, 'book'],
+    [/书本|书籍|一本书|那本书|这本书/g, 'book'],
     [/信封/g, 'envelope'],
     [/信件|一封信|那封信|这封信|把信|信藏|信递|纸条/g, 'letter'],
     [/雨伞|伞/g, 'umbrella'],
@@ -216,7 +217,7 @@ const CN_TO_TAG = [
     [/金色/g, 'golden'],
     [/银色/g, 'silver'],
     [/银发|银色头发/g, 'silver hair'],
-    [/粉发|粉色头发/g, 'pink hair'],
+    [/樱粉色|浅粉色头发|粉色头发|粉发/g, 'pink hair'],
     [/黑发|黑色头发/g, 'black hair'],
     [/白发|白色头发/g, 'white hair'],
     [/少女|女孩/g, 'young woman'],
@@ -234,7 +235,7 @@ const CN_TO_TAG = [
     [/领带/g, 'tie'],
     [/丝带|缎带/g, 'ribbon'],
     [/眼镜/g, 'glasses'],
-    [/皮鞋/g, 'leather shoes'],
+    [/小皮鞋|皮鞋/g, 'leather shoes'],
     [/长发/g, 'long hair'],
     [/短发/g, 'short hair'],
     [/微笑/g, 'smile'],
@@ -258,6 +259,10 @@ const CN_TO_TAG = [
     [/露出|露出来/g, 'peeking out'],
     [/掉在地上|落在地上/g, 'falling to the floor'],
     [/回头|回过头|回眸/g, 'looking back'],
+    [/头也不回/g, 'not looking back'],
+    [/走在前面|走在前方|往前走|向前走/g, 'walking ahead'],
+    [/跺脚|跺地板|踩得啪啪响/g, 'stomping footsteps'],
+    [/一甩一甩|甩动|甩着/g, 'swaying hair'],
     [/追来|追赶|追逐/g, 'chasing scene'],
     [/跑|奔跑/g, 'running'],
     [/坐/g, 'sitting'],
@@ -1798,9 +1803,23 @@ const VISUAL_SUBJECT_RULES = [
         tags: ['(phone in hand:1.2)'],
         support: ['phone screen prop'],
     },
+    {
+        pattern: /背着书包|书包/,
+        tags: ['(school bag worn on back:1.25)'],
+        support: ['visible school bag straps'],
+    },
+    {
+        pattern: /小皮鞋|皮鞋/,
+        tags: ['(leather shoes visible:1.2)'],
+        support: ['footsteps emphasized'],
+    },
 ];
 
 const VISUAL_ACTION_RULES = [
+    { pattern: /走在前面|走在前方|往前走|向前走|走在前/, tags: ['(walking ahead:1.35)', '(walking away from viewer:1.25)'] },
+    { pattern: /头也不回|没有回头|不回头/, tags: ['(not looking back:1.35)', 'back view', 'face turned away'] },
+    { pattern: /跺脚|跺地板|踩得啪啪响|脚步很重|用力踩/, tags: ['(stomping footsteps:1.35)', '(leather shoes stomping on the floor:1.25)'] },
+    { pattern: /一甩一甩|甩动|甩着|随着步伐/, tags: ['(swaying hair in motion:1.25)'] },
     { pattern: /停在半空|僵在半空|顿在半空/, tags: ['(hand paused in midair:1.3)'] },
     { pattern: /盯着|凝视|注视|看着|望着/, tags: ['(staring at the visual subject:1.25)'] },
     { pattern: /伸手/, tags: ['(reaching hand:1.25)'] },
@@ -1837,6 +1856,7 @@ const VISUAL_EXPRESSION_RULES = [
     { pattern: /冷淡|冷冷|冰冷/, tags: ['cold expression'] },
     { pattern: /认真|专注/, tags: ['serious expression'] },
     { pattern: /微笑|笑了|笑着/, tags: ['smile'] },
+    { pattern: /跺脚|跺地板|头也不回|气冲冲|生气|不满/, tags: ['annoyed expression'] },
 ];
 
 function regexHit(pattern, text) {
@@ -1903,6 +1923,9 @@ function buildSceneAnchor(inputText, localScene, focus) {
         hasStrongAnchor ? 'unrelated portrait' : '',
         hasStrongAnchor ? 'generic standing pose' : '',
         hasStrongAnchor ? 'wrong scene' : '',
+        /头也不回|没有回头|不回头/.test(clean) ? 'looking back' : '',
+        /头也不回|没有回头|不回头/.test(clean) ? 'looking at viewer' : '',
+        /走在前面|走在前方|往前走|向前走|跺脚|跺地板|踩得啪啪响/.test(clean) ? 'sitting' : '',
         peopleCount >= 2 ? 'solo portrait' : '',
         peopleCount >= 2 ? 'merged faces' : '',
         peopleCount >= 2 ? 'mixed outfits' : '',
@@ -1937,6 +1960,7 @@ function selectedTextCoreTags(inputText, localScene, focus, sceneAnchor = null) 
         /接过|接过去|收下/.test(clean) && /草莓牛奶/.test(clean) ? 'accepting strawberry milk' : '',
         /餐桌/.test(clean) && /水蜜桃|蜜桃/.test(clean) ? 'honey peach on dining table' : '',
         /勺子/.test(clean) ? 'spoon in hand' : '',
+        /樱粉色[^，。！？\n]{0,12}长发|粉色[^，。！？\n]{0,12}长发|粉发[^，。！？\n]{0,12}长发/.test(clean) ? '(pink long hair:1.2)' : '',
         /准备给樱|给樱|送给樱/.test(clean) ? 'meant for Sakura, gift for Sakura' : '',
         /草莓大福/.test(clean) ? 'strawberry daifuku' : '',
         /护在怀里|抱在怀里/.test(clean) ? 'holding protectively against chest' : '',
@@ -1990,7 +2014,7 @@ function extractSceneLocal(text) {
     const lightingMatch = clean.match(/(阳光|月光|灯光|烛光|霓虹|昏暗|逆光|暖光|冷光|阴影|晨光|夕阳|夕光|夕照|落日)/);
     if (lightingMatch) result.lighting = lightingMatch[1];
 
-    const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|回过头|低头|抬头|伸手|握住|抓住|亲吻|凝视|注视|盯着|看着|推开|拉住|转身|蜷缩|倚着|贴近|递给|接过|收下|藏到|藏在|翻找|搜查|检查|露出|甩开|骑着|奔跑|停在半空|顿在半空|掉在地上|落在地上)[^，。！？\n]{0,28}/g);
+    const actionMatches = clean.match(/(?:她|他|你|我|少女|男人|女人|女孩|少年|[^，。！？\n]{1,10})(?:轻轻|慢慢|突然|正|正在)?(?:抱住|靠近|坐下|站起|躺下|跪下|回头|回过头|头也不回|低头|抬头|伸手|握住|抓住|亲吻|凝视|注视|盯着|看着|推开|拉住|转身|蜷缩|倚着|贴近|递给|接过|收下|藏到|藏在|翻找|搜查|检查|露出|甩开|甩动|骑着|奔跑|走在前面|走在前方|往前走|向前走|跺脚|跺地板|踩得啪啪响|停在半空|顿在半空|掉在地上|落在地上)[^，。！？\n]{0,28}/g);
     if (actionMatches?.length) result.action = actionMatches.slice(-2).join(', ');
 
     const propMatch = clean.match(/(?:拿着|握着|抱着|捧着|戴着|递给|接过|收下|藏着|藏到身后|藏在身后|露出|翻找)([^，。！？\n]{1,24})/);
@@ -2002,6 +2026,7 @@ function extractSceneLocal(text) {
 }
 
 function inferCamera(text) {
+    if (/头也不回|走在前面|走在前方|往前走|向前走/.test(text)) return 'full body back view, walking composition';
     if (/全身|站在|走在|奔跑|街道|森林|大厅/.test(text)) return 'full body, environmental shot';
     if (/脸|眼睛|泪|亲吻|靠近|凝视|低声/.test(text)) return 'close-up, intimate framing';
     if (/坐|沙发|床边|桌前|拥抱/.test(text)) return 'medium shot';
@@ -2009,6 +2034,7 @@ function inferCamera(text) {
 }
 
 function inferMood(text) {
+    if (/头也不回|跺脚|跺地板|踩得啪啪响|气冲冲|生气|不满/.test(text)) return 'annoyed atmosphere';
     if (/紧张|害怕|颤抖|危险|压抑/.test(text)) return 'tense atmosphere';
     if (/温柔|安心|轻轻|微笑|拥抱/.test(text)) return 'tender atmosphere';
     if (/暧昧|脸红|贴近|亲吻/.test(text)) return 'romantic tension';
@@ -2046,24 +2072,29 @@ function compilePrompt(inputText, options = {}) {
     const charMemory = getCharacterMemory(name);
     const localScene = extractSceneLocal(inputText);
     const style = STYLE_PRESETS[settings.prompt.stylePreset] || '';
-    const sceneLocation = localScene.location || chatMemory.scene.location;
-    const sceneTime = localScene.time || chatMemory.scene.time;
-    const sceneWeather = localScene.weather || chatMemory.scene.weather;
-    const sceneLighting = localScene.lighting || chatMemory.scene.lighting;
-    const sceneMood = localScene.mood || chatMemory.scene.mood;
+    const sceneAnchor = buildSceneAnchor(inputText, localScene, focus);
+    const selectedHasDynamicAnchor = Boolean(sceneAnchor.hasStrongAnchor || localScene.action || localScene.props);
+    const sceneLocation = localScene.location || (selectedHasDynamicAnchor ? '' : chatMemory.scene.location);
+    const sceneTime = localScene.time || (selectedHasDynamicAnchor ? '' : chatMemory.scene.time);
+    const sceneWeather = localScene.weather || (selectedHasDynamicAnchor ? '' : chatMemory.scene.weather);
+    const sceneLighting = localScene.lighting || (selectedHasDynamicAnchor ? '' : chatMemory.scene.lighting);
+    const sceneMood = localScene.mood || (selectedHasDynamicAnchor ? '' : chatMemory.scene.mood);
     const outfit = localScene.outfit || charMemory.currentOutfit;
-    const expression = localScene.expression || charMemory.expression;
-    const pose = localScene.action || charMemory.pose;
+    const expression = localScene.expression || (selectedHasDynamicAnchor ? '' : charMemory.expression);
+    const pose = localScene.action || (selectedHasDynamicAnchor ? '' : charMemory.pose);
     const longTerm = chatMemory.longTerm || {};
     const visualNotes = Array.isArray(longTerm.visualNotes) ? longTerm.visualNotes.slice(0, 6).join(', ') : '';
     const englishOnly = settings.behavior.promptLanguage === 'en';
+    const visualNotesForPrompt = selectedHasDynamicAnchor ? '' : visualNotes;
+    const worldVisualStyle = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.visualStyle, englishOnly);
+    const worldGenre = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.genre, englishOnly);
+    const worldRules = selectedHasDynamicAnchor ? '' : promptPart(settings.memory.world.rules, englishOnly);
     const translatedInput = settings.behavior.promptLanguage === 'zh'
         ? inputText
         : englishOnly
             ? englishSceneTags(localScene, inputText)
             : translateKnownTags(inputText);
     const promptName = englishOnly ? focus.englishName : name;
-    const sceneAnchor = buildSceneAnchor(inputText, localScene, focus);
     const coreSceneTags = selectedTextCoreTags(inputText, localScene, focus, sceneAnchor);
 
     const positive = joinPrompt([
@@ -2072,14 +2103,14 @@ function compilePrompt(inputText, options = {}) {
         style,
         coreSceneTags,
         promptName,
-        settings.memory.world.visualStyle,
-        settings.memory.world.genre,
-        settings.memory.world.rules,
+        worldVisualStyle,
+        worldGenre,
+        worldRules,
         promptPart(charMemory.appearance, englishOnly),
         promptPart(charMemory.accessories, englishOnly),
         promptPart(outfit, englishOnly),
         promptPart(charMemory.state, englishOnly),
-        promptPart(visualNotes, englishOnly),
+        promptPart(visualNotesForPrompt, englishOnly),
         promptPart(sceneLocation, englishOnly),
         promptPart(sceneTime, englishOnly),
         promptPart(sceneWeather, englishOnly),

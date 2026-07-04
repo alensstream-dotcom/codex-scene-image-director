@@ -63,6 +63,10 @@ node tests/prompt-chain.test.mjs
 
 选中文本后的浮窗按钮改为“确认生图”，并会在正文选区稳定后自动弹出。确认后流程不变：插件把英文中括号 prompt 写到所选剧情下方，智绘姬识别按钮，再交给 ComfyUI 出图。
 
+## 0.4.8 动态记忆防污染
+
+0.4.8 修复选段已有明确动作时，旧的地点/光线/姿势/世界风格仍然混入 prompt 的问题。现在像“背着书包走在前面、跺地板、头也不回、粉色长发甩动”这类句子会优先生成 walking away、not looking back、stomping footsteps、leather shoes、swaying pink long hair 等锚点，并禁止旧的 sitting、school gate、sunlight、赛博朋克视觉风格污染该选段。
+
 ## 0.4.2 选段净化
 
 0.4.2 起聊天正文悬浮菜单只保留“图片生成/取消”，主流程不再显示容易误解的复制按钮。选中大段文本时会自动过滤预设结构、思考/要求块、旧世界书 prompt 字段和英文状态摘要，只把真正剧情段落用于生成 prompt 和长期剧情记忆。
