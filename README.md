@@ -79,6 +79,12 @@ node tests/prompt-chain.test.mjs
 
 风格包使用通用美术方向和 Danbooru/Anima 友好的英文标签，不直接套真实在世画师名；这样能保留画面好看和稳定性，也避免画师名带来的版权/风格模仿风险。
 
+## 0.6.0 visualAtoms 主链路
+
+0.6.0 重构“选中剧情 → prompt 确认 → 智绘姬生图”主链路：API 开启时，AI 只负责提取 `visualAtoms` JSON，不再直接书写最终 prompt；插件本地用 `renderPromptFromVisualAtoms()` 渲染英文逗号标签式 prompt，并用 `validateImagePrompt()` 拦截剧情复述、中文、对白、because/while/then 等小说句式。
+
+默认 `sceneMoment` 等于用户完整选段，不再替用户自动挑镜头；只有点击“自动提炼镜头”时才调用本地抽帧。`compilePrompt()` 仅作为 AI visualAtoms 失败或 API 未启用时的 fallback。图片 prompt 请求不传 PRISM 树、长期剧情摘要、recentHistory 或 visualEvents 全量，避免长期记忆污染当前画面。剪贴板优先默认关闭，正文选区/缓存选区优先级最高。
+
 ## 0.5.1 取景片段与手机确认修复
 
 0.5.1 修复长段选中后 prompt 过长的问题：插件会先从你选中的剧情里抽取最适合出图的 1-2 句实际取景片段，再用这段生成英文 prompt，原始选段仍用于定位插回原文下方。确认窗口现在会同时显示 originalSelection 和 sceneMoment，方便检查到底拿哪一幕出图。

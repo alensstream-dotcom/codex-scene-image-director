@@ -19,6 +19,12 @@ globalThis.__csidTest = {
   writePromptToMessage,
   buildCaptureSelectionFromPoints,
   selectBestVisualMoment,
+  renderPromptFromVisualAtoms,
+  validateImagePrompt,
+  extractVisualAtomsByAI,
+  buildPromptByVisualAtoms,
+  buildCharacterCastForPrompt,
+  resolveSourceText,
 };
 `;
 
@@ -26,6 +32,7 @@ function createContext() {
     const context = {
         console,
         structuredClone,
+        AbortController,
         setTimeout,
         clearTimeout,
         setInterval: () => 1,
@@ -60,6 +67,7 @@ function createContext() {
             body: { appendChild() {} },
         },
         navigator: { clipboard: null },
+        fetch: null,
         Blob: class {},
         URL: { createObjectURL: () => '', revokeObjectURL: () => {} },
         FileReader: class {},
@@ -175,7 +183,7 @@ function promptOf(api, text, focusCharacter) {
     settings.memory.world.rules = '学院, secret conspiracy';
     setCharacter(memory, settings, '神原樱', 'pink long hair, green eyes', 'school uniform');
     context.chat[0] = { mes: '神原樱背着书包走在前面，小皮鞋踩得啪啪响。她头也不回，樱粉色的长发随着步伐一甩一甩。' };
-    const payload = api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '神原樱' });
+    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '神原樱' });
     assert.doesNotMatch(payload.finalPrompt, /[\u4e00-\u9fff]/, `test2c3 final prompt must be English only: ${payload.finalPrompt}`);
     assert.doesNotMatch(payload.trigger, /[\u4e00-\u9fff]/, `test2c3 Chatu8 trigger must be English only: ${payload.trigger}`);
     assert.match(payload.finalPrompt, /Kanbara Sakura|walking ahead|school bag/i, `test2c3 should keep English scene anchors: ${payload.finalPrompt}`);
@@ -197,12 +205,15 @@ function promptOf(api, text, focusCharacter) {
     const moment = api.selectBestVisualMoment(api.prepareSceneText(longText));
     assert.match(moment, /停下脚步|甜品店橱窗|草莓蛋糕/, `test2c3d should extract the drawable moment: ${moment}`);
     assert.doesNotMatch(moment, /alens没搭话|校门已经能看见/, `test2c3d should not keep non-visual tail/context: ${moment}`);
-    const payload = api.buildScenePreviewPayload(0, longText);
-    assert.equal(payload.selectedText, moment, 'test2c3d preview should use extracted moment for prompt generation');
+    const payload = await api.buildScenePreviewPayload(0, longText);
+    assert.equal(payload.sceneMoment, longText, 'test2c3d default preview should use the full original selection');
+    assert.equal(payload.sceneMomentSource, 'fullSelection', 'test2c3d default source should be fullSelection');
+    const autoPayload = await api.buildScenePreviewPayload(0, longText, { sceneMoment: moment, sceneMomentSource: 'autoExtract' });
+    assert.equal(autoPayload.sceneMoment, moment, 'test2c3d autoExtract should use extracted moment only when requested');
     assert.equal(payload.focusCharacter, '神原樱', 'test2c3d should prefer the full character name from the original selection');
-    assert.match(payload.finalPrompt, /Kanbara Sakura|strawberry cake|dessert shop window|shop window/i, `test2c3d prompt should focus the dessert-window shot: ${payload.finalPrompt}`);
-    assert.doesNotMatch(payload.finalPrompt, /school gate|cyberpunk|neon|rainy/i, `test2c3d prompt should not leak old style or later location: ${payload.finalPrompt}`);
-    assert.ok(payload.finalPrompt.length < 760, `test2c3d prompt should stay concise, got ${payload.finalPrompt.length}: ${payload.finalPrompt}`);
+    assert.match(autoPayload.finalPrompt, /Kanbara Sakura|strawberry cake|dessert shop window|shop window/i, `test2c3d auto prompt should focus the dessert-window shot: ${autoPayload.finalPrompt}`);
+    assert.doesNotMatch(autoPayload.finalPrompt, /school gate|cyberpunk|neon|rainy/i, `test2c3d prompt should not leak old style or later location: ${autoPayload.finalPrompt}`);
+    assert.ok(autoPayload.finalPrompt.length < 760, `test2c3d prompt should stay concise, got ${autoPayload.finalPrompt.length}: ${autoPayload.finalPrompt}`);
 }
 
 {
@@ -211,6 +222,128 @@ function promptOf(api, text, focusCharacter) {
     assert.doesNotMatch(source, /name="prompt\.quality"/, 'test2c3b quality prompt setting should be removed from UI');
     assert.doesNotMatch(source, /mustChooseFocus/, 'test2c3b preview should not lock insert/generate buttons behind focus selection');
     assert.doesNotMatch(source, /data-csid-preview-action="(?:insert|generate)"[^\\n]*disabled/, 'test2c3b preview action buttons should not render disabled');
+}
+
+{
+    const { api } = createContext();
+    const atoms = {
+        scene_caption: 'Rin watches a peach at the dining table.',
+        main_subject: 'Rin',
+        character_count: '1girl',
+        characters: [{
+            name: 'Rin',
+            role: 'main focus',
+            appearance: 'silver hair',
+            outfit: 'loose white hoodie',
+            pose: 'sitting at dining table',
+            action: 'staring at honey peach',
+            expression: 'sleepy, shy',
+            visible_props: ['spoon paused in midair'],
+        }],
+        location: 'home dining room',
+        time_lighting: 'morning, soft natural lighting',
+        main_props: ['honey peach', 'spoon'],
+        composition: 'medium shot',
+        mood: 'quiet slice of life',
+        must_include_tags: ['Rin', 'silver hair', 'loose white hoodie', 'honey peach'],
+    };
+    const prompt = api.renderPromptFromVisualAtoms(atoms);
+    assert.match(prompt, /^masterpiece, best quality, highres, anime illustration,/i, `test2c3e prompt prefix missing: ${prompt}`);
+    assert.doesNotMatch(prompt, /[\u4e00-\u9fff]| because | while | then /i, `test2c3e prompt should be English comma tags: ${prompt}`);
+    assert.ok(prompt.split(',').length >= 12, `test2c3e prompt should contain comma tags: ${prompt}`);
+    const bad = api.validateImagePrompt('Rin sat at the dining table and stared at the peach for a long time while her spoon stopped in midair because she felt awkward.', { visualAtoms: atoms, sceneMoment: '凛坐在餐桌前，盯着那颗水蜜桃看了很久。' });
+    assert.equal(bad.ok, false, 'test2c3e narrative prompt should be rejected');
+    assert.match(bad.issues.join(','), /story_connector|novel_sentence|too_few_tags/, `test2c3e wrong issues: ${bad.issues}`);
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    setCharacter(memory, settings, '凛', 'silver hair', 'loose white hoodie');
+    settings.api.enabled = true;
+    settings.api.url = 'http://example.test/v1';
+    let requestedBody = null;
+    context.fetch = async (_url, request) => {
+        requestedBody = JSON.parse(request.body);
+        return {
+            ok: true,
+            async json() {
+                return {
+                    choices: [{
+                        message: {
+                            content: JSON.stringify({
+                                positive_prompt: 'BAD DIRECT PROMPT SHOULD BE IGNORED',
+                                scene_caption: 'Rin watches a honey peach at the dining table.',
+                                main_subject: 'Rin',
+                                character_count: '1girl',
+                                characters: [{
+                                    name: 'Rin',
+                                    role: 'main focus',
+                                    appearance: 'silver hair',
+                                    outfit: 'loose white hoodie',
+                                    pose: 'sitting at dining table',
+                                    action: 'staring at honey peach',
+                                    expression: 'sleepy',
+                                    visible_props: ['spoon paused in midair'],
+                                }],
+                                location: 'home dining room',
+                                time_lighting: 'morning, soft natural lighting',
+                                main_props: ['honey peach', 'spoon'],
+                                composition: 'medium shot',
+                                mood: 'quiet slice of life',
+                                must_include_tags: ['Rin', 'silver hair', 'loose white hoodie', 'honey peach'],
+                                must_avoid_tags: ['wrong scene'],
+                            }),
+                        },
+                    }],
+                };
+            },
+        };
+    };
+    context.chat[0] = { mes: '凛坐在餐桌前，盯着那颗水蜜桃看了很久，拿着勺子的手停在半空。' };
+    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '凛' });
+    assert.equal(payload.promptSource, 'api', 'test2c3f API should be main prompt source');
+    assert.match(payload.finalPrompt, /Rin|silver hair|honey peach|spoon paused in midair/i, `test2c3f rendered atoms prompt missing core tags: ${payload.finalPrompt}`);
+    assert.doesNotMatch(payload.finalPrompt, /BAD DIRECT PROMPT/i, 'test2c3f API direct prompt must be ignored');
+    assert.ok(requestedBody.messages[1].content.includes('sceneMoment'), 'test2c3f API request should include sceneMoment');
+    assert.doesNotMatch(requestedBody.messages[1].content, /rootSummary|summaryTree|recentHistory|visualEvents/, 'test2c3f API request should not include long memory trees');
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    setCharacter(memory, settings, '凛', 'silver hair', 'loose white hoodie');
+    settings.api.enabled = true;
+    settings.api.url = 'http://example.test/v1';
+    context.fetch = async () => { throw new Error('network down'); };
+    context.chat[0] = { mes: '凛坐在餐桌前，盯着那颗水蜜桃看了很久，拿着勺子的手停在半空。' };
+    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '凛' });
+    assert.equal(payload.promptSource, 'localFallback', 'test2c3g API failure should use localFallback');
+    assert.match(payload.finalPrompt, /Rin|honey peach/i, `test2c3g fallback prompt should still be usable: ${payload.finalPrompt}`);
+}
+
+{
+    const { api, settings, memory } = createContext();
+    setCharacter(memory, settings, '凛', 'silver hair', 'loose white hoodie');
+    setCharacter(memory, settings, '蓝', 'blue hair', 'blue cardigan');
+    const cast = api.buildCharacterCastForPrompt('蓝伸手拉住凛的袖口，凛回过头看她。', '蓝伸手拉住凛的袖口，凛回过头看她。', '凛');
+    assert.equal(cast.map(item => item.name).slice(0, 2).join('/'), '凛/蓝', 'test2c3h focus character should be first in cast');
+    const prompt = api.renderPromptFromVisualAtoms({
+        character_count: '2girls',
+        characters: [
+            { name: 'Rin', appearance: 'silver hair', outfit: 'loose white hoodie', action: 'looking back' },
+            { name: 'Lan', appearance: 'blue hair', outfit: 'blue cardigan', action: 'grabbing sleeve cuff' },
+        ],
+        composition: 'two character composition',
+        must_include_tags: ['2girls', 'grabbing sleeve cuff', 'looking back'],
+    });
+    assert.match(prompt, /2girls|Rin|Lan|grabbing sleeve cuff|looking back|clear separation between characters|distinct outfits|no merged faces|no mixed clothing/i, `test2c3h multi-character prompt incomplete: ${prompt}`);
+}
+
+{
+    const { api, context } = createContext();
+    context.window.getSelection = () => '正文选区';
+    context.navigator.clipboard = { readText: async () => '剪贴板文本' };
+    const resolved = await api.resolveSourceText('手动输入');
+    assert.equal(resolved, '正文选区', 'test2c3i clipboard must not override current text selection');
 }
 
 {
@@ -229,7 +362,7 @@ function promptOf(api, text, focusCharacter) {
     setCharacter(memory, settings, '神原樱', '', 'school uniform');
     const selected = '神原樱背着书包走在前面，小皮鞋踩得啪啪响。她头也不回，樱粉色的长发随着步伐一甩一甩。';
     context.chat[0] = { mes: selected, swipes: [] };
-    const payload = api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱' });
+    const payload = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱' });
     await api.writePromptToMessage(0, selected, { selectedText: selected, preview: payload });
     const fixed = api.ensureSettings().memory.characters['神原樱'].appearance;
     assert.match(fixed, /pink hair/i, `test2c4 should remember fixed hair color: ${fixed}`);
@@ -280,7 +413,7 @@ function promptOf(api, text, focusCharacter) {
     const { api, context, settings, memory } = createContext();
     setCharacter(memory, settings, '樱', 'soft brown hair', 'school uniform');
     context.chat[0] = { mes: '樱站在校门口，脸红得厉害，把草莓牛奶从 alens 手里接过去。' };
-    const payload = api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '樱' });
+    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '樱' });
     assert.match(payload.trigger, /^\[[\s\S]+\]$/, 'test5 should create Chatu8 bracket trigger');
     assert.equal(payload.insertTargetMessageId, 0);
     assert.match(payload.finalPrompt, /Sakura/i);
@@ -302,7 +435,7 @@ function promptOf(api, text, focusCharacter) {
         ].join('\n'),
     };
     assert.equal(api.prepareSceneText(context.chat[0].mes), '', 'test6 scaffold should not fall back to prompt text');
-    assert.throws(
+    await assert.rejects(
         () => api.buildScenePreviewPayload(0, context.chat[0].mes),
         /太短|预设|提示词/,
         'test6 should reject prompt scaffold instead of generating an image prompt',
