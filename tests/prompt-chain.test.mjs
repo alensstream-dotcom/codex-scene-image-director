@@ -24,6 +24,12 @@ globalThis.__csidTest = {
   extractVisualAtomsByAI,
   buildPromptByVisualAtoms,
   buildCharacterCastForPrompt,
+  buildFastVisualShotSpec,
+  extractVisualShotSpecAccurate,
+  renderPromptFromVisualShotSpec,
+  validatePromptAgainstSpec,
+  buildPromptByVisualShotSpec,
+  visualShotCacheKey,
   resolveSourceText,
 };
 `;
@@ -272,26 +278,24 @@ function promptOf(api, text, focusCharacter) {
                         message: {
                             content: JSON.stringify({
                                 positive_prompt: 'BAD DIRECT PROMPT SHOULD BE IGNORED',
-                                scene_caption: 'Rin watches a honey peach at the dining table.',
-                                main_subject: 'Rin',
-                                character_count: '1girl',
+                                subject_count: '1girl',
                                 characters: [{
                                     name: 'Rin',
-                                    role: 'main focus',
+                                    role: 'main subject',
                                     appearance: 'silver hair',
-                                    outfit: 'loose white hoodie',
+                                    clothing: 'loose white hoodie',
                                     pose: 'sitting at dining table',
                                     action: 'staring at honey peach',
                                     expression: 'sleepy',
                                     visible_props: ['spoon paused in midair'],
                                 }],
                                 location: 'home dining room',
-                                time_lighting: 'morning, soft natural lighting',
-                                main_props: ['honey peach', 'spoon'],
+                                props: ['honey peach', 'spoon'],
+                                camera: 'medium shot',
                                 composition: 'medium shot',
                                 mood: 'quiet slice of life',
-                                must_include_tags: ['Rin', 'silver hair', 'loose white hoodie', 'honey peach'],
-                                must_avoid_tags: ['wrong scene'],
+                                must_include: ['1girl', 'solo', 'Rin', 'silver hair', 'loose white hoodie', 'honey peach', 'full-frame composition', 'subject fills most of the frame'],
+                                must_not_include: ['wrong scene', 'extra people', 'second girl', 'male visible'],
                             }),
                         },
                     }],
@@ -300,11 +304,11 @@ function promptOf(api, text, focusCharacter) {
         };
     };
     context.chat[0] = { mes: '凛坐在餐桌前，盯着那颗水蜜桃看了很久，拿着勺子的手停在半空。' };
-    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '凛' });
-    assert.equal(payload.promptSource, 'api', 'test2c3f API should be main prompt source');
+    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '凛', promptMode: 'accurate' });
+    assert.equal(payload.promptSource, 'accurate', 'test2c3f Accurate Mode should be API source');
     assert.match(payload.finalPrompt, /Rin|silver hair|honey peach|spoon paused in midair/i, `test2c3f rendered atoms prompt missing core tags: ${payload.finalPrompt}`);
     assert.doesNotMatch(payload.finalPrompt, /BAD DIRECT PROMPT/i, 'test2c3f API direct prompt must be ignored');
-    assert.ok(requestedBody.messages[1].content.includes('sceneMoment'), 'test2c3f API request should include sceneMoment');
+    assert.ok(requestedBody.messages[1].content.includes('selectedText'), 'test2c3f API request should include selectedText');
     assert.doesNotMatch(requestedBody.messages[1].content, /rootSummary|summaryTree|recentHistory|visualEvents/, 'test2c3f API request should not include long memory trees');
 }
 
@@ -315,8 +319,8 @@ function promptOf(api, text, focusCharacter) {
     settings.api.url = 'http://example.test/v1';
     context.fetch = async () => { throw new Error('network down'); };
     context.chat[0] = { mes: '凛坐在餐桌前，盯着那颗水蜜桃看了很久，拿着勺子的手停在半空。' };
-    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '凛' });
-    assert.equal(payload.promptSource, 'localFallback', 'test2c3g API failure should use localFallback');
+    const payload = await api.buildScenePreviewPayload(0, context.chat[0].mes, { focusCharacter: '凛', promptMode: 'accurate' });
+    assert.equal(payload.promptSource, 'fallbackFast', 'test2c3g API failure should use fallbackFast');
     assert.match(payload.finalPrompt, /Rin|honey peach/i, `test2c3g fallback prompt should still be usable: ${payload.finalPrompt}`);
 }
 
@@ -344,6 +348,114 @@ function promptOf(api, text, focusCharacter) {
     context.navigator.clipboard = { readText: async () => '剪贴板文本' };
     const resolved = await api.resolveSourceText('手动输入');
     assert.equal(resolved, '正文选区', 'test2c3i clipboard must not override current text selection');
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    let fetchCalled = false;
+    context.fetch = async () => { fetchCalled = true; throw new Error('fast mode should not fetch'); };
+    settings.api.enabled = true;
+    settings.api.url = 'http://example.test/v1';
+    setCharacter(memory, settings, '神原樱', 'pink long hair', 'light pink home dress');
+    const selected = '樱走到书桌另一侧，把笔记本放在桌上，然后拉过那张单人皮质小沙发坐下。沙发对她来说太大了，她的脚够不到地面，白色过膝袜包裹的小腿在空中轻轻晃着。';
+    context.chat[0] = { mes: selected };
+    const payload = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱' });
+    assert.equal(fetchCalled, false, 'test2c3j Fast Mode must not call fetch/LLM');
+    assert.equal(payload.promptSource, 'fast', 'test2c3j default prompt source should be fast');
+    for (const term of ['1girl', 'solo', 'Sakura', 'pink long hair', 'light pink home dress', 'white over-knee socks', 'small single leather sofa', 'feet not touching the floor', 'legs dangling gently', 'desk and notebook nearby', 'full-frame composition', 'subject fills most of the frame', 'no extra people', 'no second girl', 'no male visible', 'no large empty white borders']) {
+        assert.match(payload.finalPrompt, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `test2c3j Case 1 missing ${term}: ${payload.finalPrompt}`);
+    }
+    for (const bad of ['school uniform', '2girls', 'hugging', 'huge blank white border']) {
+        assert.doesNotMatch(payload.finalPrompt, new RegExp(bad, 'i'), `test2c3j Case 1 should not contain ${bad}: ${payload.finalPrompt}`);
+    }
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    setCharacter(memory, settings, '神原樱', 'pink long hair', 'school uniform');
+    const selected = '门被推开一条缝。樱探进半个脑袋，樱粉色的长发从肩头滑落。她已经换下了校服，穿着一件浅粉色的家居连衣裙，裙摆刚好到膝盖上方。';
+    context.chat[0] = { mes: selected };
+    const payload = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱' });
+    for (const term of ['1girl', 'solo', 'Sakura', 'pink long hair', 'light pink home dress', 'peeking through a slightly opened door', 'doorway scene', 'upper body', 'half body', 'no extra people', 'no second girl', 'no male visible', 'no school uniform']) {
+        assert.match(payload.finalPrompt, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `test2c3k Case 2 missing ${term}: ${payload.finalPrompt}`);
+    }
+    for (const bad of ['2girls', 'hugging', 'holding another girl', '(^|, )school uniform(,|$)', ', male visible,']) {
+        assert.doesNotMatch(payload.finalPrompt, new RegExp(bad, 'i'), `test2c3k Case 2 should not contain ${bad}: ${payload.finalPrompt}`);
+    }
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    settings.api.enabled = true;
+    settings.api.url = 'http://example.test/v1';
+    setCharacter(memory, settings, '神原樱', 'pink long hair', 'light pink home dress');
+    let fetchCount = 0;
+    context.fetch = async () => {
+        fetchCount += 1;
+        return {
+            ok: true,
+            async json() {
+                return { choices: [{ message: { content: JSON.stringify({
+                    subject_count: '1girl',
+                    characters: [{ name: 'Sakura', role: 'main subject', appearance: 'pink long hair', clothing: 'light pink home dress', pose: 'sitting on a small single leather sofa', action: 'feet not touching the floor, legs dangling gently', visible_props: ['notebook'] }],
+                    location: 'indoor study room',
+                    props: ['desk', 'notebook', 'small single leather sofa'],
+                    camera: 'medium full shot',
+                    composition: 'tight composition, subject fills most of the frame',
+                    mood: 'soft domestic atmosphere',
+                    must_include: ['1girl', 'solo', 'Sakura', 'pink long hair', 'light pink home dress', 'feet not touching the floor', 'legs dangling gently'],
+                    must_not_include: ['extra people', 'second girl', 'male visible', 'school uniform'],
+                }) } }] };
+            },
+        };
+    };
+    const selected = '樱坐在单人皮质小沙发上，脚够不到地面，小腿轻轻晃着。';
+    context.chat[0] = { mes: selected };
+    const fast = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱', promptMode: 'fast' });
+    assert.equal(fetchCount, 0, 'test2c3l explicit fast should not fetch');
+    const accurate = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱', promptMode: 'accurate' });
+    assert.equal(fetchCount, 1, 'test2c3l accurate should fetch once');
+    assert.equal(accurate.promptSource, 'accurate');
+    const accurateAgain = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱', promptMode: 'accurate' });
+    assert.equal(fetchCount, 1, 'test2c3l same accurate request should hit cache');
+    assert.equal(accurateAgain.promptSource, 'cache');
+    assert.equal(api.visualShotCacheKey(accurate, 'accurate'), accurate.cacheKey, 'test2c3l cache key should match mode/text/focus/cast');
+    assert.match(fast.finalPrompt, /full-frame composition|no extra people/i);
+}
+
+{
+    const { api, context, settings, memory } = createContext();
+    settings.api.enabled = true;
+    settings.api.url = 'http://example.test/v1';
+    context.fetch = async () => { throw new Error('timeout'); };
+    setCharacter(memory, settings, '神原樱', 'pink long hair', 'light pink home dress');
+    const selected = '樱坐在单人皮质小沙发上，脚够不到地面，小腿轻轻晃着。';
+    context.chat[0] = { mes: selected };
+    const payload = await api.buildScenePreviewPayload(0, selected, { focusCharacter: '神原樱', promptMode: 'accurate' });
+    assert.equal(payload.promptSource, 'fallbackFast', 'test2c3m accurate failure should fallback to Fast Mode');
+    assert.match(payload.finalPrompt, /feet not touching the floor|legs dangling gently/i);
+}
+
+{
+    const { api } = createContext();
+    const spec = {
+        subject_count: '1girl',
+        characters: [{ name: 'Sakura', appearance: 'pink long hair', clothing: 'light pink home dress', pose: 'sitting on a small single leather sofa', action: 'feet not touching the floor, legs dangling gently' }],
+        location: 'indoor study room',
+        props: ['desk', 'notebook'],
+        camera: 'medium full shot',
+        composition: 'tight composition',
+        must_include: ['1girl', 'solo', 'Sakura', 'pink long hair', 'feet not touching the floor'],
+        must_not_include: ['second girl', 'male visible'],
+    };
+    const narrative = api.validatePromptAgainstSpec('Sakura walked into the room and sat on the sofa while her legs dangled because the sofa was too large.', spec);
+    assert.equal(narrative.ok, false, 'test2c3n validator should reject narrative prompts');
+    assert.match(narrative.issues.join(','), /story_connector|narrative_prompt|missing/, `test2c3n bad issues: ${narrative.issues}`);
+    const wrongCount = api.validatePromptAgainstSpec('masterpiece, best quality, highres, anime illustration, 2girls, Sakura, pink long hair, sitting, full-frame composition, subject fills most of the frame, tight composition, clear focus on main subject, no large empty white borders, no extra people, no second girl, no male visible', spec);
+    assert.equal(wrongCount.ok, false, 'test2c3n validator should reject 1girl prompt containing 2girls');
+    assert.match(wrongCount.issues.join(','), /wrong_subject_count|forbidden/, `test2c3n wrong count issues: ${wrongCount.issues}`);
+    const fixed = api.renderPromptFromVisualShotSpec(spec);
+    assert.match(fixed, /full-frame composition|subject fills most of the frame|no large empty white borders/i, `test2c3n render should include anti-border tags: ${fixed}`);
 }
 
 {

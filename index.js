@@ -20,7 +20,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '剧情镜头导演';
-const EXT_VERSION = '0.6.0';
+const EXT_VERSION = '0.7.0';
 const SETTINGS_SELECTOR = '#codex_scene_image_director';
 const TH_MEMORY_KEY = 'codexSceneImageDirector';
 const STORY_MEMORY_PROMPT_KEY = EXT_ID + '_story_memory';
@@ -45,6 +45,7 @@ const DEFAULT_SETTINGS = {
         maxRecentMessages: 8,
         promptLanguage: 'en',
         preferClipboard: false,
+        accurateImageMode: false,
     },
     storyMemory: {
         enabled: true,
@@ -366,6 +367,7 @@ let state = {
     saveTimer: null,
     selectionCacheTimer: null,
     lastDiagnostics: [],
+    promptCache: new Map(),
 };
 
 let metadataVariableGuardTimer = null;
@@ -2700,7 +2702,14 @@ function normalizeVisualAtoms(raw = {}) {
 function buildCharacterCastForPrompt(sceneMoment, originalSelection = '', focusCharacter = '') {
     const text = normalizeMultiline([sceneMoment, originalSelection].join('\n'));
     const focus = resolveFocusCharacter(text, focusCharacter || '');
-    const names = uniqueParts([focus.name, ...detectFocusCharacters(text)].filter(Boolean));
+    const settings = ensureSettings();
+    const chatMemory = ensureChatMemory();
+    const knownNames = getKnownCharacterNames();
+    const names = uniqueParts(uniqueParts([focus.name, ...detectFocusCharacters(text)].filter(Boolean))
+        .map(name => {
+            const longer = knownNames.find(known => known.length > name.length && known.includes(name) && (settings.memory.characters?.[known] || chatMemory.characters?.[known]));
+            return longer || name;
+        }));
     return names.map((name, index) => {
         const memory = getCharacterMemory(name);
         return {
@@ -2866,6 +2875,358 @@ function validateImagePrompt(prompt, payload = {}) {
     if (/(她|少女|女孩|女学生|女主|凛|樱|蓝|诗织)/.test(payload.sceneMoment || '') && /solo male portrait|generic standing pose/i.test(clean)) issues.push('wrong_character_or_pose');
     const fixedPrompt = issues.length ? renderPromptFromVisualAtoms(atoms) : clean;
     return { ok: issues.length === 0, issues, fixedPrompt };
+}
+
+function normalizeVisualShotSpec(raw = {}) {
+    const spec = stripForbiddenAtomKeys(raw) || {};
+    const characters = Array.isArray(spec.characters) ? spec.characters : [];
+    return {
+        subject_count: normalizeLine(spec.subject_count || spec.subjectCount || ''),
+        characters: characters.map(character => ({
+            name: normalizeLine(character.name || ''),
+            role: normalizeLine(character.role || character.roleInScene || ''),
+            appearance: normalizeLine(character.appearance || ''),
+            clothing: normalizeLine(character.clothing || character.outfit || character.currentOutfit || ''),
+            pose: normalizeLine(character.pose || ''),
+            action: normalizeLine(character.action || ''),
+            expression: normalizeLine(character.expression || ''),
+            visible_props: textArray(character.visible_props || character.visibleProps || character.props || []),
+        })).filter(character => character.name || character.appearance || character.clothing || character.pose || character.action),
+        location: normalizeLine(spec.location || ''),
+        props: textArray(spec.props || spec.main_props || spec.mainProps || []),
+        camera: normalizeLine(spec.camera || spec.composition_camera || ''),
+        composition: normalizeLine(spec.composition || ''),
+        mood: normalizeLine(spec.mood || ''),
+        must_include: textArray(spec.must_include || spec.mustInclude || spec.must_include_tags || []),
+        must_not_include: textArray(spec.must_not_include || spec.mustNotInclude || spec.must_avoid_tags || []),
+    };
+}
+
+function englishTagFromChinesePhrase(text) {
+    const clean = normalizeLine(text);
+    if (!clean) return '';
+    const table = [
+        [/樱粉色|粉色头发|粉发/, 'pink long hair'],
+        [/浅粉色.*家居.*连衣裙|浅粉色.*连衣裙|家居连衣裙/, 'light pink home dress'],
+        [/白色过膝袜|过膝袜/, 'white over-knee socks'],
+        [/校服|制服/, 'school uniform'],
+        [/单人皮质小沙发|单人皮质沙发|小沙发|单人沙发/, 'small single leather sofa'],
+        [/书桌|桌/, 'desk'],
+        [/笔记本/, 'notebook'],
+        [/门.*一条缝|一条缝/, 'slightly opened door'],
+        [/门口|门边|门/, 'doorway'],
+        [/脚够不到地|脚.*不到地/, 'feet not touching the floor'],
+        [/小腿.*晃|腿.*晃/, 'legs dangling gently'],
+        [/探进半个脑袋|探头|探进/, 'peeking through a slightly opened door'],
+        [/坐下|坐在/, 'sitting'],
+        [/放在桌上|放在书桌/, 'notebook on desk'],
+        [/拉过/, 'pulling a small sofa close'],
+        [/室内|房间|书房/, 'indoor study room'],
+    ];
+    for (const [pattern, tag] of table) {
+        if (pattern.test(clean)) return tag;
+    }
+    return englishTagsFromText(clean);
+}
+
+function explicitClothingTags(text) {
+    const clean = normalizeMultiline(text);
+    const tags = [];
+    if (/浅粉色[^。！？\n]{0,12}(?:家居)?连衣裙|家居连衣裙/.test(clean)) tags.push('light pink home dress');
+    if (/白色过膝袜|过膝袜/.test(clean)) tags.push('white over-knee socks');
+    if (/换下了校服|换下校服|脱下校服/.test(clean)) tags.push('no school uniform');
+    if (/校服|制服/.test(clean) && !/换下了校服|换下校服|脱下校服/.test(clean)) tags.push('school uniform');
+    return uniqueParts(tags);
+}
+
+function explicitActionTags(text) {
+    const clean = normalizeMultiline(text);
+    const tags = [];
+    if (/门被推开一条缝|门.*一条缝|探进半个脑袋|探头/.test(clean)) {
+        tags.push('peeking through a slightly opened door', 'doorway scene', 'upper body', 'half body');
+    }
+    if (/坐下|坐在/.test(clean) && /沙发/.test(clean)) tags.push('sitting on a small single leather sofa');
+    if (/脚够不到地|脚[^。！？\n]{0,10}不到地/.test(clean)) tags.push('feet not touching the floor');
+    if (/小腿[^。！？\n]{0,16}晃|腿[^。！？\n]{0,16}晃/.test(clean)) tags.push('legs dangling gently');
+    if (/放在桌上|放在书桌/.test(clean)) tags.push('placing notebook on the desk');
+    return uniqueParts(tags);
+}
+
+function explicitPropTags(text) {
+    const clean = normalizeMultiline(text);
+    const tags = [];
+    if (/书桌|桌/.test(clean)) tags.push('desk');
+    if (/笔记本/.test(clean)) tags.push('notebook');
+    if (/(书桌|桌)/.test(clean) && /笔记本/.test(clean)) tags.push('desk and notebook nearby');
+    if (/单人皮质小沙发|单人皮质沙发|小沙发|单人沙发|沙发/.test(clean)) tags.push('small single leather sofa');
+    if (/门/.test(clean)) tags.push('doorway');
+    return uniqueParts(tags);
+}
+
+function detectSubjectCountForShot(text, cast = []) {
+    const clean = normalizeMultiline(text);
+    if (/三人|三个人|多人|一群/.test(clean)) return 'group';
+    if (/两人|两个人|二人|双人|对视|拥抱|牵手|拉住/.test(clean) && cast.length >= 2) return /女|凛|樱|蓝|诗织/.test(clean) ? '2girls' : '2 characters';
+    const first = cast[0];
+    if (first?.name && /樱|凛|蓝|诗织|Sakura|Rin|Lan|Shiori/i.test(first.name + first.englishName)) return '1girl';
+    if (/她|少女|女孩|女学生|樱|凛|蓝|诗织/.test(clean)) return '1girl';
+    if (/他|少年|男孩|男人/.test(clean)) return '1boy';
+    return '1girl';
+}
+
+function buildFastVisualShotSpec(payload) {
+    const text = normalizeMultiline(payload.sceneMoment || payload.originalSelection || '');
+    const cast = payload.characterCast?.length ? payload.characterCast : buildCharacterCastForPrompt(text, payload.originalSelection, payload.focusCharacter);
+    const subjectCount = detectSubjectCountForShot(text, cast);
+    const isSingleGirl = subjectCount === '1girl';
+    const clothing = explicitClothingTags(text);
+    const actions = explicitActionTags(text);
+    const props = explicitPropTags(text);
+    const firstCast = cast[0] || {};
+    const memoryAppearance = cleanEnglishPrompt(firstCast.appearance || '');
+    const memoryClothing = cleanEnglishPrompt(firstCast.currentOutfit || '');
+    const characterName = firstCast.englishName || englishCharacterName(firstCast.name) || characterIdentityName({ name: firstCast.name || payload.focusCharacter });
+    const character = {
+        name: characterName || 'Sakura',
+        role: 'main subject',
+        appearance: cleanEnglishPrompt(joinPrompt([
+            /樱粉色|粉色头发|粉发|樱/.test(text) ? 'pink long hair' : '',
+            memoryAppearance,
+        ])),
+        clothing: cleanEnglishPrompt(joinPrompt([
+            clothing.filter(tag => !/^no /.test(tag)).join(', '),
+            clothing.some(tag => /home dress|school uniform/.test(tag)) ? '' : memoryClothing,
+        ])),
+        pose: actions.find(tag => /sitting|peeking|upper body|half body/.test(tag)) || (/坐/.test(text) ? 'sitting' : ''),
+        action: actions.join(', '),
+        expression: '',
+        visible_props: props,
+    };
+    const location = /门/.test(text) ? 'doorway scene' : (/书桌|笔记本|沙发/.test(text) ? 'indoor study room' : (payload.sceneState?.location || ''));
+    const camera = /门.*缝|探进|探头/.test(text) ? 'upper body, half body' : (/坐|沙发/.test(text) ? 'medium full shot' : (payload.sceneState?.camera || 'medium shot'));
+    const mustInclude = uniqueParts([
+        subjectCount,
+        isSingleGirl ? 'solo' : '',
+        character.name,
+        character.appearance,
+        character.clothing,
+        character.pose,
+        character.action,
+        props.includes('desk') && props.includes('notebook') ? 'desk and notebook nearby' : '',
+        ...props,
+        location,
+        ...actions,
+        ...clothing,
+        'full-frame composition',
+        'subject fills most of the frame',
+    ]);
+    const mustNot = uniqueParts([
+        isSingleGirl ? 'extra people' : '',
+        isSingleGirl ? 'second girl' : '',
+        isSingleGirl ? 'male visible' : '',
+        /换下了校服|换下校服|脱下校服/.test(text) ? 'school uniform' : '',
+        'hugging',
+        'large blank white border',
+        '2girls',
+    ]);
+    return normalizeVisualShotSpec({
+        subject_count: subjectCount,
+        characters: [character],
+        location,
+        props,
+        camera,
+        composition: 'full-frame composition, subject fills most of the frame, tight composition, clear focus on main subject, no large empty white borders',
+        mood: /家居|沙发|书桌/.test(text) ? 'soft domestic atmosphere' : '',
+        must_include: mustInclude,
+        must_not_include: mustNot,
+    });
+}
+
+async function extractVisualShotSpecAccurate(payload) {
+    const settings = ensureSettings();
+    if (!settings.api.enabled || !settings.api.url) throw new Error('API not enabled');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(Math.max(3000, Number(settings.api.timeoutMs || 7000)), 8000));
+    const body = {
+        model: settings.api.model || undefined,
+        temperature: Number(settings.api.temperature ?? 0.1),
+        response_format: { type: 'json_object' },
+        messages: [
+            {
+                role: 'system',
+                content: [
+                    'You extract a short visualShotSpec JSON for anime image generation.',
+                    'Do not write final prompt. Do not write prose analysis.',
+                    'Only visible elements: subject_count, characters, clothing, pose, action, props, location, camera, composition, mood, must_include, must_not_include.',
+                    'selectedText has highest priority. Explicit clothing/action/location in selectedText overrides memory.',
+                    'No Chinese. Strict JSON only. Keep values short comma-style English tags.',
+                ].join('\n'),
+            },
+            {
+                role: 'user',
+                content: JSON.stringify({
+                    selectedText: payload.sceneMoment,
+                    focusCharacter: payload.focusCharacter,
+                    characterCast: payload.characterCast,
+                    sceneState: payload.sceneState,
+                }),
+            },
+        ],
+    };
+    try {
+        const response = await fetch(normalizeApiUrl(settings.api.url), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(settings.api.key ? { Authorization: 'Bearer ' + settings.api.key } : {}) },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('API ' + response.status);
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content ?? data?.content ?? data?.text ?? data;
+        const parsed = parsePatchContent(content);
+        if (parsed.finalPrompt || parsed.final_prompt || parsed.positive_prompt || parsed.prompt) {
+            console.warn('[' + EXT_NAME + '] visualShotSpec API returned prompt fields; ignoring them');
+        }
+        return normalizeVisualShotSpec(parsed);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function renderPromptFromVisualShotSpec(spec = {}, options = {}) {
+    const shot = normalizeVisualShotSpec(spec);
+    const characters = shot.characters || [];
+    const tags = ['masterpiece', 'best quality', 'highres', 'anime illustration'];
+    tags.push(shot.subject_count);
+    if (/^1(?:girl|boy|character)/i.test(shot.subject_count)) tags.push('solo');
+    if (/2|two|duo/i.test(shot.subject_count)) tags.push('duo', 'clear separation between characters', 'distinct outfits', 'no merged faces', 'no mixed clothing');
+    for (const character of characters) {
+        tags.push(character.name, character.appearance, character.clothing, character.pose, character.action, character.expression, ...(character.visible_props || []));
+    }
+    tags.push(...(shot.props || []), shot.location, shot.camera, shot.composition, shot.mood, ...(shot.must_include || []));
+    tags.push('full-frame composition', 'subject fills most of the frame', 'tight composition', 'clear focus on main subject', 'no large empty white borders');
+    if (/^1girl/i.test(shot.subject_count)) tags.push('no extra people', 'no second girl', 'no male visible');
+    let prompt = uniqueParts(tags)
+        .filter(tag => tag && !hasCjk(tag))
+        .filter(tag => !/[.!?。！？]/.test(tag))
+        .filter(tag => !/\b(?:because|while|then|after|before|says|thinks|remembers|realizes|decides)\b/i.test(tag))
+        .join(', ');
+    const limit = Math.max(220, Number(options.maxLength || 650));
+    while (prompt.length > limit && prompt.includes(',')) {
+        const parts = prompt.split(/\s*,\s*/);
+        const removableIndex = parts.findLastIndex(part => !/(?:1girl|1boy|solo|Sakura|Rin|Lan|Shiori|no extra people|no second girl|no male visible|no school uniform|full-frame composition|subject fills most|tight composition|clear focus|no large empty white borders|feet not touching|legs dangling|small single leather sofa|desk and notebook|peeking through|doorway scene|upper body|half body|light pink home dress|white over-knee socks|pink long hair)/i.test(part));
+        if (removableIndex < 4) break;
+        parts.splice(removableIndex, 1);
+        prompt = parts.join(', ');
+    }
+    return cleanEnglishPrompt(prompt);
+}
+
+function validatePromptAgainstSpec(prompt, spec = {}) {
+    const shot = normalizeVisualShotSpec(spec);
+    const clean = normalizePromptText(prompt);
+    const lower = clean.toLowerCase();
+    const issues = [];
+    const tags = splitPromptTags(clean);
+    if (hasCjk(clean)) issues.push('contains_chinese');
+    if (/\b(?:because|while|then|after|before|says|thinks|remembers|realizes|decides)\b/i.test(clean)) issues.push('story_connector');
+    if (/[.!?]\s+[A-Z]|\b(?:walked|sat|stood|stared|felt|said)\b[^,]{18,}/i.test(clean)) issues.push('narrative_prompt');
+    if (tags.length < 8) issues.push('too_few_tags');
+    if (clean.length > 650) issues.push('too_long');
+    if (/^1girl/i.test(shot.subject_count) && /\b(?:2girls|multiple girls|duo|group)\b/i.test(clean)) issues.push('wrong_subject_count');
+    for (const include of shot.must_include || []) {
+        const tag = normalizeLine(include).toLowerCase();
+        if (tag && !lower.includes(tag)) issues.push('missing:' + include);
+    }
+    for (const blocked of shot.must_not_include || []) {
+        const tag = normalizeLine(blocked).toLowerCase();
+        if (!tag) continue;
+        if (tag === 'second girl' && /\b(?:second girl|2girls|multiple girls)\b/i.test(clean) && !/\bno second girl\b/i.test(clean)) issues.push('forbidden:' + blocked);
+        else if (tag === 'extra people' && /\b(?:extra people|crowd|group)\b/i.test(clean) && !/\bno extra people\b/i.test(clean)) issues.push('forbidden:' + blocked);
+        else if (tag === 'male visible' && /\bmale visible\b/i.test(clean) && !/\bno male visible\b/i.test(clean)) issues.push('forbidden:' + blocked);
+        else if (tag === 'school uniform' && /\bschool uniform\b/i.test(clean) && !/\bno school uniform\b/i.test(clean)) issues.push('forbidden:' + blocked);
+        else if (!['school uniform', 'extra people', 'second girl', 'male visible'].includes(tag) && lower.includes(tag)) issues.push('forbidden:' + blocked);
+    }
+    for (const needed of ['full-frame composition', 'subject fills most of the frame', 'tight composition', 'clear focus on main subject', 'no large empty white borders']) {
+        if (!lower.includes(needed)) issues.push('missing_composition:' + needed);
+    }
+    if (/^1girl/i.test(shot.subject_count)) {
+        for (const needed of ['no extra people', 'no second girl', 'no male visible']) {
+            if (!lower.includes(needed)) issues.push('missing_negative:' + needed);
+        }
+    }
+    return { ok: issues.length === 0, issues, fixedPrompt: renderPromptFromVisualShotSpec(shot) };
+}
+
+function visualShotCacheKey(payload, mode) {
+    return hashText([
+        mode || 'fast',
+        normalizeMultiline(payload.sceneMoment || payload.originalSelection || ''),
+        normalizeLine(payload.focusCharacter || ''),
+        JSON.stringify((payload.characterCast || []).map(character => [character.name, character.appearance, character.currentOutfit])),
+    ].join('\n'));
+}
+
+async function buildPromptByVisualShotSpec(payload, mode = 'fast') {
+    const requestedMode = mode === 'accurate' ? 'accurate' : 'fast';
+    const cacheKey = visualShotCacheKey(payload, requestedMode);
+    if (state.promptCache.has(cacheKey)) {
+        return { ...deepClone(state.promptCache.get(cacheKey)), promptSource: 'cache', cacheKey };
+    }
+    let promptSource = requestedMode;
+    let spec;
+    if (requestedMode === 'accurate') {
+        try {
+            spec = await extractVisualShotSpecAccurate(payload);
+        } catch (error) {
+            console.warn('[' + EXT_NAME + '] accurate visualShotSpec failed, using fast mode', error);
+            setStatus('精准解析失败，已使用快速模式');
+            spec = buildFastVisualShotSpec(payload);
+            promptSource = 'fallbackFast';
+        }
+    } else {
+        spec = buildFastVisualShotSpec(payload);
+    }
+    let finalPrompt = renderPromptFromVisualShotSpec(spec);
+    let promptValidationResult = validatePromptAgainstSpec(finalPrompt, spec);
+    if (!promptValidationResult.ok) {
+        finalPrompt = promptValidationResult.fixedPrompt;
+        promptValidationResult = { ...validatePromptAgainstSpec(finalPrompt, spec), fixedAutomatically: true, originalIssues: promptValidationResult.issues };
+    }
+    const result = {
+        visualShotSpec: spec,
+        visualAtoms: normalizeVisualAtoms({
+            scene_caption: hasCjk(payload.sceneMoment) ? 'Visual shot spec.' : compactPreview(payload.sceneMoment, 120),
+            main_subject: spec.characters?.[0]?.name || '',
+            character_count: spec.subject_count,
+            characters: spec.characters?.map(character => ({
+                name: character.name,
+                role: character.role,
+                appearance: character.appearance,
+                outfit: character.clothing,
+                pose: character.pose,
+                action: character.action,
+                expression: character.expression,
+                visible_props: character.visible_props,
+            })) || [],
+            location: spec.location,
+            main_props: spec.props,
+            composition: spec.camera || spec.composition,
+            mood: spec.mood,
+            must_include_tags: spec.must_include,
+            must_avoid_tags: spec.must_not_include,
+        }),
+        sceneCaption: spec.characters?.[0]?.action || spec.camera || '',
+        finalPrompt,
+        negativePrompt: cleanEnglishPrompt(['worst quality, low quality, blurry, bad anatomy, bad hands, text, watermark', ...(spec.must_not_include || [])].join(', ')),
+        promptSource,
+        promptValidationResult,
+        cacheKey,
+        result: { positive: finalPrompt, negative: '', localScene: payload.sceneState?.localScene || extractSceneLocal(payload.sceneMoment), source: promptSource },
+    };
+    state.promptCache.set(cacheKey, deepClone(result));
+    if (state.promptCache.size > 40) state.promptCache.delete(state.promptCache.keys().next().value);
+    return result;
 }
 
 async function buildPromptByVisualAtoms(payload) {
@@ -3113,6 +3474,7 @@ function readFormToSettings() {
     settings.behavior.allowPermanentOverwrite = root.querySelector('[name="behavior.allowPermanentOverwrite"]').checked;
     settings.behavior.promptLanguage = 'en';
     settings.behavior.preferClipboard = root.querySelector('[name="behavior.preferClipboard"]')?.checked ?? false;
+    settings.behavior.accurateImageMode = root.querySelector('[name="behavior.accurateImageMode"]')?.checked ?? false;
     settings.chatu8.enabled = root.querySelector('[name="chatu8.enabled"]')?.checked ?? true;
     settings.chatu8.insertToChatInput = root.querySelector('[name="chatu8.insertToChatInput"]')?.checked ?? true;
     settings.chatu8.startTag = root.querySelector('[name="chatu8.startTag"]')?.value || '[';
@@ -3386,6 +3748,7 @@ function applyRecommendedSettings() {
     const settings = ensureSettings();
     settings.behavior.autoMemory = true;
     settings.behavior.preferClipboard = false;
+    settings.behavior.accurateImageMode = false;
     settings.behavior.syncTavernHelper = Boolean(getTavernHelper());
     settings.behavior.allowPermanentOverwrite = false;
     settings.behavior.promptLanguage = 'en';
@@ -3431,6 +3794,8 @@ function fillFormFromSettings() {
     root.querySelector('[name="behavior.allowPermanentOverwrite"]').checked = settings.behavior.allowPermanentOverwrite;
     const preferClipboard = root.querySelector('[name="behavior.preferClipboard"]');
     if (preferClipboard) preferClipboard.checked = settings.behavior.preferClipboard;
+    const accurateImageMode = root.querySelector('[name="behavior.accurateImageMode"]');
+    if (accurateImageMode) accurateImageMode.checked = settings.behavior.accurateImageMode;
     const chatu8Enabled = root.querySelector('[name="chatu8.enabled"]');
     if (chatu8Enabled) chatu8Enabled.checked = settings.chatu8.enabled;
     const chatu8Insert = root.querySelector('[name="chatu8.insertToChatInput"]');
@@ -3715,6 +4080,7 @@ function buildSettingsHtml() {
                                 <label class="csid-switch-card"><input type="checkbox" name="chatu8.enabled"><span><b>输出方括号标签</b><em>供智绘姬识别</em></span></label>
                                 <label class="csid-switch-card"><input type="checkbox" name="chatu8.insertToChatInput"><span><b>填入输入框</b><em>预览后可手动发送</em></span></label>
                                 <label class="csid-switch-card"><input type="checkbox" name="behavior.autoMemory"><span><b>自动视觉记忆</b><em>新回复后台更新</em></span></label>
+                                <label class="csid-switch-card"><input type="checkbox" name="behavior.accurateImageMode"><span><b>默认精准解析</b><em>选段预览时调用 API</em></span></label>
                                 <label class="csid-switch-card"><input type="checkbox" name="behavior.preferClipboard"><span><b>优先剪贴板</b><em>粘贴片段优先</em></span></label>
                                 <label class="csid-switch-card"><input type="checkbox" name="behavior.syncTavernHelper"><span><b>同步酒馆助手</b><em>变量兼容</em></span></label>
                                 <label class="csid-switch-card"><input type="checkbox" name="behavior.allowPermanentOverwrite"><span><b>覆盖永久设定</b><em>谨慎启用</em></span></label>
@@ -4178,15 +4544,19 @@ async function buildScenePreviewPayload(messageId, selectedText, options = {}) {
         detectedProps: sceneState.props || '',
         mode: options.mode || 'insert',
     };
-    const promptPayload = await buildPromptByVisualAtoms(basePayload);
+    const promptMode = options.promptMode || (ensureSettings().behavior.accurateImageMode ? 'accurate' : 'fast');
+    const promptPayload = await buildPromptByVisualShotSpec(basePayload, promptMode);
     const finalPrompt = normalizePromptText(promptPayload.finalPrompt);
     const trigger = buildChatu8Trigger(finalPrompt);
     return {
         ...basePayload,
         visualAtoms: promptPayload.visualAtoms,
+        visualShotSpec: promptPayload.visualShotSpec,
         sceneCaption: promptPayload.sceneCaption,
         promptSource: promptPayload.promptSource,
         promptValidationResult: promptPayload.promptValidationResult,
+        cacheKey: promptPayload.cacheKey,
+        promptMode,
         localScene: promptPayload.result?.localScene || sceneState.localScene,
         result: promptPayload.result,
         finalPrompt,
@@ -4227,6 +4597,8 @@ function buildDebugInfo(patch = {}) {
         sceneMoment: '',
         sceneMomentSource: '',
         promptSource: '',
+        promptMode: '',
+        visualShotSpec: {},
         visualAtoms: {},
         sceneCaption: '',
         negativePrompt: '',
@@ -4287,16 +4659,27 @@ async function rebuildScenePreviewFromModal(payload, action) {
     const originalSelection = normalizeMultiline(payload.originalSelection || payload.selectedTextRaw || '');
     let nextMoment = currentMoment;
     let source = payload.sceneMomentSource || 'fullSelection';
+    let promptMode = payload.promptMode || 'fast';
     if (action === 'full') {
         nextMoment = originalSelection;
         source = 'fullSelection';
     } else if (action === 'auto') {
         nextMoment = selectBestVisualMoment(prepareSceneText(originalSelection));
         source = 'autoExtract';
+    } else if (action === 'fast') {
+        promptMode = 'fast';
+    } else if (action === 'accurate') {
+        promptMode = 'accurate';
+    } else if (action === 'fix') {
+        const fixedPrompt = payload.promptValidationResult?.fixedPrompt || renderPromptFromVisualShotSpec(payload.visualShotSpec || {});
+        payload.finalPrompt = fixedPrompt;
+        payload.promptValidationResult = validatePromptAgainstSpec(fixedPrompt, payload.visualShotSpec || {});
+        renderScenePreviewModal(payload);
+        return;
     } else if (action === 'regen') {
         source = source === 'manualEdit' ? 'manualEdit' : (currentMoment === originalSelection ? 'fullSelection' : source);
     }
-    setStatus('正在重新生成 visualAtoms prompt');
+    setStatus(promptMode === 'accurate' ? '正在精准解析 visualShotSpec' : '正在快速生成 visualShotSpec');
     const next = await buildScenePreviewPayload(payload.messageId, originalSelection, {
         selectionRange: payload.selectionRange,
         sourceRange: payload.sourceRange,
@@ -4304,6 +4687,7 @@ async function rebuildScenePreviewFromModal(payload, action) {
         sceneMoment: nextMoment,
         sceneMomentSource: source,
         mode: payload.mode,
+        promptMode,
     });
     renderScenePreviewModal(next);
 }
@@ -4316,6 +4700,8 @@ function renderScenePreviewModal(payload) {
     backdrop.className = 'csid-preview-backdrop';
     const focusOptions = uniqueParts([...(payload.focusCandidates || []), payload.focusCharacter].filter(Boolean));
     const focusAmbiguous = payload.focusAmbiguous && focusOptions.length > 1;
+    const shotSpec = normalizeVisualShotSpec(payload.visualShotSpec || {});
+    const specText = JSON.stringify(shotSpec, null, 2);
     const atomsText = JSON.stringify(payload.visualAtoms || {}, null, 2);
     const validationText = JSON.stringify(payload.promptValidationResult || {}, null, 2);
     const characterCastText = JSON.stringify(payload.characterCast || [], null, 2);
@@ -4325,6 +4711,8 @@ function renderScenePreviewModal(payload) {
         sceneMoment: payload.sceneMoment,
         sceneMomentSource: payload.sceneMomentSource,
         promptSource: payload.promptSource,
+        promptMode: payload.promptMode,
+        visualShotSpec: payload.visualShotSpec,
         visualAtoms: payload.visualAtoms,
         sceneCaption: payload.sceneCaption,
         finalPrompt: payload.finalPrompt,
@@ -4361,15 +4749,35 @@ function renderScenePreviewModal(payload) {
                     <label>props<input class="text_pole" value="${escapeHtml(payload.detectedProps || '未检测到')}" readonly></label>
                 </div>
                 <div class="csid-preview-mode">
+                    <b>模式</b>
+                    <span>${escapeHtml(payload.promptMode === 'accurate' ? 'Accurate' : 'Fast')}</span>
                     <b>sceneMomentSource</b>
                     <span data-csid-preview-source>${escapeHtml(payload.sceneMomentSource || 'fullSelection')}</span>
                     <b>promptSource</b>
                     <span>${escapeHtml(payload.promptSource || '')}</span>
                 </div>
+                <div class="csid-preview-meta">
+                    <label>人数<input class="text_pole" value="${escapeHtml(shotSpec.subject_count || '')}" readonly></label>
+                    <label>服装<input class="text_pole" value="${escapeHtml(shotSpec.characters?.[0]?.clothing || '')}" readonly></label>
+                    <label>动作<input class="text_pole" value="${escapeHtml(shotSpec.characters?.[0]?.action || '')}" readonly></label>
+                    <label>场景<input class="text_pole" value="${escapeHtml(shotSpec.location || '')}" readonly></label>
+                </div>
                 <label class="csid-label">sceneCaption</label>
                 <input class="text_pole" value="${escapeHtml(payload.sceneCaption || '')}" readonly>
                 <details>
-                    <summary>visualAtoms JSON</summary>
+                    <summary>visualShotSpec JSON</summary>
+                    <textarea class="text_pole csid-preview-json" readonly>${escapeHtml(specText)}</textarea>
+                </details>
+                <details>
+                    <summary>must_include</summary>
+                    <textarea class="text_pole csid-preview-json" readonly>${escapeHtml((shotSpec.must_include || []).join('\n'))}</textarea>
+                </details>
+                <details>
+                    <summary>must_not_include</summary>
+                    <textarea class="text_pole csid-preview-json" readonly>${escapeHtml((shotSpec.must_not_include || []).join('\n'))}</textarea>
+                </details>
+                <details>
+                    <summary>visualAtoms 兼容 JSON</summary>
                     <textarea class="text_pole csid-preview-json" readonly>${escapeHtml(atomsText)}</textarea>
                 </details>
                 <details>
@@ -4409,8 +4817,9 @@ function renderScenePreviewModal(payload) {
                 <div class="csid-preview-warning" ${focusAmbiguous ? '' : 'hidden'}>检测到多个角色，已自动选择 focusCharacter；需要时可在上方切换，按钮不会被锁住。</div>
             </div>
             <div class="csid-preview-actions">
-                <button class="menu_button" data-csid-preview-action="full">使用完整选段</button>
-                <button class="menu_button" data-csid-preview-action="auto">自动提炼镜头</button>
+                <button class="menu_button" data-csid-preview-action="fast">快速生成</button>
+                <button class="menu_button" data-csid-preview-action="accurate">精准解析</button>
+                <button class="menu_button" data-csid-preview-action="fix">自动修正 prompt</button>
                 <button class="menu_button" data-csid-preview-action="regen">重新生成 prompt</button>
                 <button class="menu_button" data-csid-preview-action="copy-prompt">复制 prompt</button>
                 <button class="menu_button" data-csid-preview-action="copy-debug">复制 debug</button>
@@ -4426,7 +4835,7 @@ function renderScenePreviewModal(payload) {
         if (actionButton) {
             const action = actionButton.dataset.csidPreviewAction;
             if (action === 'cancel') closeScenePreview();
-            if (action === 'full' || action === 'auto' || action === 'regen') {
+            if (action === 'full' || action === 'auto' || action === 'fast' || action === 'accurate' || action === 'fix' || action === 'regen') {
                 await rebuildScenePreviewFromModal(payload, action);
             }
             if (action === 'copy-prompt') await copyText(backdrop.querySelector('[data-csid-preview-prompt]')?.value || payload.finalPrompt || '', '已复制 prompt');
@@ -4445,6 +4854,7 @@ function renderScenePreviewModal(payload) {
                 focusCharacter: focusSelect.value,
                 sceneMoment: backdrop.querySelector('[data-csid-preview-moment]')?.value || payload.sceneMoment,
                 sceneMomentSource: 'manualEdit',
+                promptMode: payload.promptMode || 'fast',
             });
             renderScenePreviewModal(next);
         } catch (error) {
@@ -4466,6 +4876,7 @@ function renderScenePreviewModal(payload) {
         sceneMomentSource: payload.sceneMomentSource,
         promptSource: payload.promptSource,
         visualAtoms: payload.visualAtoms,
+        visualShotSpec: payload.visualShotSpec,
         sceneCaption: payload.sceneCaption,
         negativePrompt: payload.negativePrompt,
         promptValidationResult: payload.promptValidationResult,
@@ -4890,6 +5301,8 @@ async function writePromptToMessage(messageId, sourceText, options = {}) {
         sceneMoment: sceneText,
         sceneMomentSource: payload.sceneMomentSource || '',
         promptSource: payload.promptSource || '',
+        promptMode: payload.promptMode || '',
+        visualShotSpec: payload.visualShotSpec || {},
         visualAtoms: payload.visualAtoms || {},
         sceneCaption: payload.sceneCaption || '',
         negativePrompt: state.lastNegative,
@@ -5126,6 +5539,12 @@ function exposeDebugApi() {
         renderPromptFromVisualAtoms,
         validateImagePrompt,
         buildPromptByVisualAtoms,
+        buildFastVisualShotSpec,
+        extractVisualShotSpecAccurate,
+        renderPromptFromVisualShotSpec,
+        validatePromptAgainstSpec,
+        buildPromptByVisualShotSpec,
+        visualShotCacheKey,
         buildCharacterCastForPrompt,
         async composeText(text, { updateMemory = false, smart = false, focusCharacter = '' } = {}) {
             const sceneText = prepareSceneText(String(text || ''));

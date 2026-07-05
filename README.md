@@ -79,6 +79,12 @@ node tests/prompt-chain.test.mjs
 
 风格包使用通用美术方向和 Danbooru/Anima 友好的英文标签，不直接套真实在世画师名；这样能保留画面好看和稳定性，也避免画师名带来的版权/风格模仿风险。
 
+## 0.7.0 Fast / Accurate visualShotSpec
+
+0.7.0 将生图主链路升级为 `visualShotSpec`：默认 Fast Mode 完全本地解析，不调用 LLM；只有点击“精准解析”或开启“默认精准解析”时才调用 API。相同选段 + 焦点角色 + 模式会用 hash 缓存，避免重复请求。
+
+本版新增 `renderPromptFromVisualShotSpec()` 和 `validatePromptAgainstSpec()`，强制英文标签式 prompt、1girl/solo 人数约束、服装/动作/道具优先来自选中文本，并自动加入 full-frame composition、subject fills most of the frame、no large empty white borders 等防白边构图标签。已覆盖“单人皮质小沙发脚够不到地”和“门开一条缝探头换下校服”两类失败案例。
+
 ## 0.6.0 visualAtoms 主链路
 
 0.6.0 重构“选中剧情 → prompt 确认 → 智绘姬生图”主链路：API 开启时，AI 只负责提取 `visualAtoms` JSON，不再直接书写最终 prompt；插件本地用 `renderPromptFromVisualAtoms()` 渲染英文逗号标签式 prompt，并用 `validateImagePrompt()` 拦截剧情复述、中文、对白、because/while/then 等小说句式。
