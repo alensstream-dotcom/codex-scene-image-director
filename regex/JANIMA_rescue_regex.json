@@ -1,0 +1,47 @@
+[
+  {
+    "id": "janima-hide-img-count",
+    "scriptName": "JANIMA 1 - 隐藏 IMG_COUNT 且不回灌",
+    "findRegex": "/<!--\\s*IMG_COUNT\\s*:\\s*[0-3]\\s*-->/gi",
+    "replaceString": "",
+    "trimStrings": [],
+    "placement": [2],
+    "disabled": false,
+    "markdownOnly": true,
+    "promptOnly": true,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  },
+  {
+    "id": "janima-remove-old-image-prompts",
+    "scriptName": "JANIMA 2 - 历史图片 Prompt 不回灌",
+    "findRegex": "/^\\s*\\[(?=[^\\]\\r\\n]{20,650}\\]\\s*$)(?=[^\\]\\r\\n]*(?:1girl|2girls|1boy|2boys|solo|duo|upper body|full body|medium shot|close-up|hair|dress|uniform|lighting|composition))(?=(?:[^\\]\\r\\n]*,){4,})[^\\]\\r\\n]+\\]\\s*$/gim",
+    "replaceString": "",
+    "trimStrings": [],
+    "placement": [2],
+    "disabled": false,
+    "markdownOnly": false,
+    "promptOnly": true,
+    "runOnEdit": false,
+    "substituteRegex": 0,
+    "minDepth": 1,
+    "maxDepth": null
+  },
+  {
+    "id": "janima-hide-update-variable",
+    "scriptName": "JANIMA 3 - 可选隐藏 UpdateVariable（默认关闭）",
+    "findRegex": "/<UpdateVariable>[\\s\\S]*?<\\/UpdateVariable>/gi",
+    "replaceString": "",
+    "trimStrings": [],
+    "placement": [2],
+    "disabled": true,
+    "markdownOnly": true,
+    "promptOnly": true,
+    "runOnEdit": true,
+    "substituteRegex": 0,
+    "minDepth": null,
+    "maxDepth": null
+  }
+]

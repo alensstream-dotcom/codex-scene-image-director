@@ -1,0 +1,6 @@
+{
+  "name": "沙发坐姿",
+  "story": "樱走到书桌另一侧，把笔记本放在桌上，然后拉过那张单人皮质小沙发坐下。沙发对她来说太大了，她的脚够不到地面，白色过膝袜包裹的小腿在空中轻轻晃着。",
+  "prompt": "1girl, solo, Sakura, pink long hair, light pink home dress, white over-knee socks, sitting on a small single leather sofa, feet not touching the floor, legs dangling gently, desk and notebook nearby, medium full shot, subject fills most of the frame, tight composition",
+  "mustInclude": ["1girl", "solo", "Sakura", "pink long hair", "light pink home dress", "white over-knee socks", "small single leather sofa", "feet not touching the floor", "legs dangling gently", "desk", "notebook", "medium full shot"]
+}
