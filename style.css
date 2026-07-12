@@ -19,78 +19,32 @@
     opacity: 0.72;
 }
 
-.janima-rescue-panel {
-    margin: 8px 0 2px;
-    padding: 8px;
-    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
-    font-size: 0.9em;
-}
-
-.janima-rescue-panel.is-ok {
-    padding: 5px 8px;
-    opacity: 0.72;
-}
-
-.janima-rescue-panel.has-issues {
-    border-color: color-mix(in srgb, #e6a23c 60%, var(--SmartThemeBorderColor));
-}
-
-.janima-rescue-status {
-    font-weight: 600;
-}
-
-.janima-rescue-prompt-row {
-    display: grid;
-    gap: 6px;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 55%, transparent);
-}
-
-.janima-rescue-prompt-label {
-    overflow-wrap: anywhere;
-}
-
+/* v1.0 once appended a second column to every message. Never render conversation UI again. */
+.janima-rescue-panel,
+.janima-rescue-prompt-row,
+.janima-rescue-status,
 .janima-rescue-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 6px;
+    display: none !important;
 }
 
-.janima-rescue-button.menu_button {
-    width: auto;
-    min-height: 30px;
-    padding: 4px 9px;
-    font-size: 0.92em;
+/* Keep the actual st-chatu8 control in normal document flow at its native prompt anchor. */
+.mes .mes_text .janima-inline-image-anchor {
+    display: block !important;
+    width: 100% !important;
+    clear: both !important;
 }
 
-.janima-rescue-selection-menu {
-    position: fixed;
-    z-index: 10020;
-    display: flex;
-    gap: 6px;
-    padding: 7px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 9px;
-    background: var(--SmartThemeBlurTintColor);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+.mes .mes_text .janima-inline-image-button {
+    display: block !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    margin: 8px 0 !important;
+    clear: both !important;
 }
 
 @media (max-width: 600px) {
-    .janima-rescue-panel {
-        padding: 7px;
-    }
-
-    .janima-rescue-actions {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .janima-rescue-button.menu_button {
-        width: 100%;
-        min-height: 38px;
+    .mes .mes_text .janima-inline-image-button {
+        min-height: 38px !important;
+        padding: 7px 14px !important;
     }
 }
