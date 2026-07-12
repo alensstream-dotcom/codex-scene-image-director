@@ -24,19 +24,20 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.0.0';
+const EXT_VERSION = '1.1.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
 const DEFAULT_SETTINGS = {
-    version: 3,
+    version: 4,
     enabled: true,
     autoCheck: true,
-    showStatus: true,
-    showToolbar: true,
-    selectionFill: true,
+    silentMode: true,
+    autoLocalRepair: true,
+    selectionFill: false,
     api: {
         enabled: false,
+        autoAudit: true,
         url: '',
         key: '',
         model: '',
@@ -45,6 +46,7 @@ const DEFAULT_SETTINGS = {
     },
     chatu8: {
         enabled: true,
+        inlineButtons: true,
         startTag: '[',
         endTag: ']',
         rescanTimeoutMs: 3500,
@@ -65,6 +67,8 @@ const runtime = {
     writing: new Set(),
     selection: null,
     selectionTimer: null,
+    auditedHashes: new Set(),
+    localRepairHashes: new Set(),
 };
 
 function mergeDefaults(base, incoming) {
@@ -81,12 +85,15 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 3) {
+    if (!existing || Number(existing.version) < 4) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
-            api: { enabled: false, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            chatu8: { enabled: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
+            silentMode: true,
+            autoLocalRepair: true,
+            selectionFill: false,
+            api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
+            chatu8: { enabled: true, inlineButtons: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, existing);
@@ -142,16 +149,6 @@ function baseDebug(messageId, validation, promptIndex = null) {
     };
 }
 
-function statusText(validation) {
-    if (validation.declaredImageCount === null) return '未发现 IMG_COUNT 标记';
-    const mismatch = validation.issues.find(issue => issue.code === 'count_mismatch');
-    if (mismatch) return `应有 ${validation.declaredImageCount} 张，实际 ${validation.detectedPromptCount} 张`;
-    const errors = validation.issues.filter(issue => issue.severity === 'error').length;
-    const warnings = validation.issues.filter(issue => issue.severity === 'warning').length;
-    if (!errors && !warnings) return `生图检查：${validation.detectedPromptCount}/${validation.declaredImageCount}，格式正常`;
-    return `生图检查：${validation.detectedPromptCount}/${validation.declaredImageCount}，${errors} 个错误，${warnings} 个提醒`;
-}
-
 function button(label, action, messageId, promptIndex = '') {
     const node = document.createElement('button');
     node.type = 'button';
@@ -163,11 +160,138 @@ function button(label, action, messageId, promptIndex = '') {
     return node;
 }
 
-function renderMessageCheck(messageId) {
+function removeLegacyConversationUi(host = document) {
+    host.querySelectorAll?.('.janima-rescue-panel, .janima-rescue-prompt-row').forEach(node => node.remove());
+}
+
+function removePromptRange(text, prompt) {
+    let start = prompt.start;
+    let end = prompt.end;
+    while (start > 0 && text[start - 1] === '\n' && start > 1 && text[start - 2] === '\n') start--;
+    while (end < text.length && text[end] === '\n' && end + 1 < text.length && text[end + 1] === '\n') end++;
+    return text.slice(0, start) + text.slice(end);
+}
+
+function updateCountMarker(text, count) {
+    const marker = `<!--IMG_COUNT:${Math.max(0, Math.min(3, Number(count) || 0))}-->`;
+    if (/<!--\s*IMG_COUNT\s*:\s*[0-3]\s*-->/i.test(text)) {
+        return text.replace(/<!--\s*IMG_COUNT\s*:\s*[0-3]\s*-->/gi, marker);
+    }
+    return `${text.trimEnd()}\n\n${marker}`;
+}
+
+function buildSafeLocalRepair(text, validation) {
+    let next = text;
+    let changed = false;
+    for (const prompt of [...validation.prompts].reverse()) {
+        if (prompt.issues?.some(issue => issue.code === 'duplicate_prompt')) {
+            next = removePromptRange(next, prompt);
+            changed = true;
+            continue;
+        }
+        const reinforced = reinforcePromptLocal(prompt.prompt);
+        if (reinforced !== `[${prompt.prompt}]`) {
+            next = replacePromptAt(next, prompt, reinforced);
+            changed = true;
+        }
+    }
+    if (changed && validation.declaredImageCount !== null) next = updateCountMarker(next, extractImagePrompts(next).length);
+    return { changed, text: next };
+}
+
+function markZhihuijiButtonsInline(messageId) {
+    if (!settings().chatu8.inlineButtons) return;
+    const host = messageElement(messageId);
+    const textRoot = host?.querySelector('.mes_text');
+    if (!host || !textRoot) return;
+    const buttons = [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)];
+    buttons.forEach((buttonNode, index) => {
+        buttonNode.dataset.janimaPromptIndex = String(index);
+        buttonNode.classList.add('janima-inline-image-button');
+        buttonNode.style.display = 'block';
+        buttonNode.style.width = 'fit-content';
+        buttonNode.style.margin = '8px 0';
+        const parent = buttonNode.parentElement;
+        parent?.classList.add('janima-inline-image-anchor');
+        if (!buttonNode.closest('.mes_text')) textRoot.append(buttonNode);
+    });
+    setDebug(messageId, {
+        zhihuijiButtonFound: buttons.length > 0,
+        zhihuijiRoute: buttons.length ? `${VERIFIED_ZHIHUIJI_SELECTOR} native-inline-anchor` : 'waiting-for-chatu8',
+        inlineButtonCount: buttons.length,
+    });
+}
+
+function validateSilentAuditResponse(payload) {
+    if (!payload || typeof payload !== 'object') throw new Error('静默审计响应不是对象');
+    const array = name => Array.isArray(payload[name]) ? payload[name] : [];
+    return {
+        remove_prompt_indexes: array('remove_prompt_indexes').map(Number).filter(Number.isInteger),
+        replace_prompts: array('replace_prompts'),
+        missing_prompts: array('missing_prompts'),
+        reasons: array('reasons').filter(item => typeof item === 'string'),
+    };
+}
+
+function applySilentAuditPatch(text, audit) {
+    const prompts = extractImagePrompts(text);
+    const paragraphs = paragraphRanges(text);
+    const operations = [];
+    for (const index of audit.remove_prompt_indexes) {
+        const prompt = prompts[index];
+        if (prompt) operations.push({ start: prompt.start, end: prompt.end, value: '' });
+    }
+    for (const item of audit.replace_prompts) {
+        const prompt = prompts[Number(item.prompt_index)];
+        if (prompt && Array.isArray(item.prompt_tags) && item.prompt_tags.length) {
+            operations.push({ start: prompt.start, end: prompt.end, value: `[${item.prompt_tags.join(', ')}]` });
+        }
+    }
+    for (const item of audit.missing_prompts) {
+        const paragraph = paragraphs[Number(item.after_paragraph_index)];
+        if (paragraph && Array.isArray(item.prompt_tags) && item.prompt_tags.length) {
+            operations.push({ start: paragraph.end, end: paragraph.end, value: `\n\n[${item.prompt_tags.join(', ')}]` });
+        }
+    }
+    let next = text;
+    operations.sort((a, b) => b.start - a.start).forEach(operation => {
+        next = next.slice(0, operation.start) + operation.value + next.slice(operation.end);
+    });
+    return updateCountMarker(next, extractImagePrompts(next).length);
+}
+
+async function runAutomaticAiAudit(messageId, text, validation) {
+    const config = settings().api;
+    if (!config.enabled || !config.autoAudit) return false;
+    const hash = `${messageId}:${stableHash(text)}:silent-ai-audit`;
+    if (runtime.auditedHashes.has(hash)) return false;
+    runtime.auditedHashes.add(hash);
+    try {
+        const audit = validateSilentAuditResponse(await callRepairApi(
+            'Audit one SillyTavern story reply and its existing image prompts. Keep only high-value female-led, relationship, outfit-change, strong-action, strong-expression, key-prop, or major-location shots. Remove redundant, invented, male-only mundane, or unrelated prompts. Repair prompts that contradict the adjacent story. Add only truly missing high-value shots immediately after the matching story paragraph. Normal target 1-2 images, maximum 3. Never rewrite story text. Return strict JSON with remove_prompt_indexes, replace_prompts[{prompt_index,prompt_tags}], missing_prompts[{after_paragraph_index,prompt_tags}], reasons.',
+            {
+                assistant_reply: text,
+                existing_prompts: validation.prompts.map(prompt => ({ prompt_index: prompt.index, paragraph_index: prompt.paragraphIndex, prompt: prompt.prompt })),
+                declared_img_count: validation.declaredImageCount,
+                relevant_character_dna: config.characterDna || '',
+            },
+        ));
+        const next = applySilentAuditPatch(text, audit);
+        if (next !== text) await writeMessage(messageId, next, 'janima-silent-ai-audit');
+        setDebug(messageId, { repairMode: 'silent-ai-audit', reasons: audit.reasons, repairedPrompt: next !== text ? 'message-patched' : '' });
+        return next !== text;
+    } catch (error) {
+        setDebug(messageId, { repairMode: 'silent-ai-audit', error: error.message });
+        console.warn(`[${EXT_NAME}] 静默 AI 审计失败，原文保持不变`, error);
+        return false;
+    }
+}
+
+async function renderMessageCheck(messageId) {
     if (!settings().enabled || !isAssistantMessage(messageId) || runtime.ignored.has(Number(messageId))) return;
     const host = messageElement(messageId);
     if (!host) return;
-    host.querySelectorAll(':scope > .janima-rescue-panel').forEach(node => node.remove());
+    removeLegacyConversationUi(host);
     const text = getMessageText(messageId);
     const validation = validateTurn(text);
     const previousDebug = runtime.debugByMessage.get(Number(messageId));
@@ -179,58 +303,25 @@ function renderMessageCheck(messageId) {
         detectedPromptCount: validation.detectedPromptCount,
         messageContentHash: currentHash,
     });
-
-    const panel = document.createElement('section');
-    panel.className = `janima-rescue-panel${validation.ok ? ' is-ok' : ' has-issues'}`;
-    panel.dataset.messageId = String(messageId);
-
-    if (settings().showStatus) {
-        const status = document.createElement('div');
-        status.className = 'janima-rescue-status';
-        status.textContent = statusText(validation);
-        panel.append(status);
-        if (!validation.ok) {
-            const actions = document.createElement('div');
-            actions.className = 'janima-rescue-actions';
-            if (validation.declaredImageCount !== null && validation.detectedPromptCount < validation.declaredImageCount) {
-                actions.append(button('修复本轮', 'repair-turn', messageId));
-            } else if (validation.declaredImageCount === null) {
-                actions.append(button('检查本轮', 'recheck', messageId));
-            }
-            actions.append(button('忽略', 'ignore', messageId));
-            panel.append(actions);
+    const localRepairKey = `${messageId}:${currentHash}`;
+    if (settings().autoLocalRepair && !runtime.localRepairHashes.has(localRepairKey)) {
+        runtime.localRepairHashes.add(localRepairKey);
+        const local = buildSafeLocalRepair(text, validation);
+        if (local.changed) {
+            await writeMessage(messageId, local.text, 'janima-silent-local-repair');
+            setDebug(messageId, { repairMode: 'silent-local', repairedPrompt: 'safe-normalization' });
+            return;
         }
     }
-
-    if (settings().showToolbar) {
-        validation.prompts.forEach((prompt, index) => {
-            const row = document.createElement('div');
-            row.className = 'janima-rescue-prompt-row';
-            const label = document.createElement('span');
-            label.className = 'janima-rescue-prompt-label';
-            label.textContent = `Prompt ${index + 1}${prompt.issues.length ? ` · ${prompt.issues.map(issue => issue.message).join('、')}` : ''}`;
-            row.append(label);
-            const actions = document.createElement('div');
-            actions.className = 'janima-rescue-actions';
-            actions.append(
-                button('本地补强', 'local', messageId, index),
-                button('修复此 Prompt', 'repair-prompt', messageId, index),
-                button('重新识别按钮', 'rescan', messageId, index),
-                button('立即生图', 'generate', messageId, index),
-                button('复制 Prompt', 'copy-prompt', messageId, index),
-                button('复制 Debug', 'copy-debug', messageId, index),
-            );
-            row.append(actions);
-            panel.append(row);
-        });
-    }
-    host.append(panel);
+    markZhihuijiButtonsInline(messageId);
+    setTimeout(() => markZhihuijiButtonsInline(messageId), 350);
+    await runAutomaticAiAudit(messageId, text, validation);
 }
 
 function scheduleCheck(messageId, delay = 80) {
     const id = Number(messageId);
     if (!Number.isInteger(id) || runtime.writing.has(id)) return;
-    setTimeout(() => renderMessageCheck(id), delay);
+    setTimeout(() => renderMessageCheck(id).catch(error => console.warn(`[${EXT_NAME}] 静默检查失败`, error)), delay);
 }
 
 async function writeMessage(messageId, nextText, source) {
@@ -574,15 +665,15 @@ function settingsHtml() {
                     <b>世界书生图救援器 <small>v${EXT_VERSION}</small></b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">世界书负责正常生图；这里仅做本地检查与用户点击后的救援。默认聊天不会调用额外 LLM。</p>
+                    <p class="notes">默认完全静默：不在正文旁边显示状态条或工具栏。插件只在后台规范 Prompt，并把智绘姬按钮保持在对应剧情段落下。</p>
                     <h4>基础设置</h4>
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
-                    ${checkRow('showStatus', '显示消息状态条')}
-                    ${checkRow('showToolbar', '显示 Prompt 工具栏')}
-                    ${checkRow('selectionFill', '显示选区“补一张图”')}
+                    ${checkRow('silentMode', '静默模式（不向对话插入插件界面）')}
+                    ${checkRow('autoLocalRepair', '自动本地纠错（不调用 AI）')}
                     <h4>API 设置</h4>
-                    ${checkRow('api.enabled', '启用 AI 修复（只在点击修复/补图时调用）')}
+                    ${checkRow('api.enabled', '启用 AI 救援')}
+                    ${checkRow('api.autoAudit', '每轮后台 AI 审计（补漏、删错图、修冲突）')}
                     ${fieldRow('api.url', 'API URL', 'https://example.com/v1')}
                     ${fieldRow('api.key', 'API Key', '', 'password')}
                     ${fieldRow('api.model', '模型', 'model-name')}
@@ -590,11 +681,12 @@ function settingsHtml() {
                     <label>当前相关角色 DNA<textarea class="text_pole" name="api.characterDna" rows="4" placeholder="只填写当前相关角色的固定外貌与当前服装"></textarea></label>
                     <h4>智绘姬设置</h4>
                     ${checkRow('chatu8.enabled', '启用智绘姬适配')}
+                    ${checkRow('chatu8.inlineButtons', '按钮保持在对应剧情段落下')}
                     ${fieldRow('chatu8.startTag', '开始标记', '[')}
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
                     ${fieldRow('chatu8.buttonWaitMs', '生成按钮等待时间 (ms)', '3500', 'number')}
-                    <details><summary>Legacy（只读迁移提示）</summary><p class="notes">旧自主生成器、长期图片记忆、PRISM、Fast/Accurate 模式均已从默认入口移除并保持关闭。完整 0.7.0 代码保留在 tag <code>pre-rescue-rebuild-0.7.0</code> 与 master 分支。</p></details>
+                    <p class="notes">AI 审计只有在“启用 AI 救援”并填写 API 后才会请求；失败时原正文和 Prompt 保持不变。</p>
                 </div>
             </div>
         </div>`;
@@ -638,8 +730,8 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'showStatus', 'showToolbar'].includes(input.name)) {
-            document.querySelectorAll('.janima-rescue-panel').forEach(node => node.remove());
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'chatu8.inlineButtons'].includes(input.name)) {
+            removeLegacyConversationUi();
             if (settings().enabled) scanLatestAssistant();
         }
     });
@@ -659,19 +751,25 @@ function bindEvents() {
         .filter(Boolean)
         .forEach(type => eventSource.on(type, onMessage));
     if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => setTimeout(scanLatestAssistant, 200));
-    document.addEventListener('click', handlePanelAction);
-    document.addEventListener('click', handleSelectionAction);
-    document.addEventListener('mouseup', () => setTimeout(captureSelection, 0));
-    document.addEventListener('touchend', () => setTimeout(captureSelection, 120), { passive: true });
+    const observer = new MutationObserver(mutations => {
+        for (const mutation of mutations) {
+            const host = mutation.target?.closest?.('.mes');
+            const rawId = host?.getAttribute?.('mesid') || host?.dataset?.mesId;
+            const messageId = Number(rawId);
+            if (Number.isInteger(messageId) && messageId >= 0) markZhihuijiButtonsInline(messageId);
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 jQuery(async () => {
     settings();
+    removeLegacyConversationUi();
     const container = document.querySelector('#extensions_settings') || document.querySelector('#extensions_settings2');
     if (container && !document.querySelector(SETTINGS_SELECTOR)) container.insertAdjacentHTML('beforeend', settingsHtml());
     syncSettingsUi();
     bindSettings();
     bindEvents();
     scanLatestAssistant();
-    console.info(`[${EXT_NAME}] v${EXT_VERSION} loaded; default LLM requests: 0; verified Zhihuiji route: ${VERIFIED_ZHIHUIJI_SELECTOR}`);
+    console.info(`[${EXT_NAME}] v${EXT_VERSION} loaded in silent mode; verified Zhihuiji route: ${VERIFIED_ZHIHUIJI_SELECTOR}`);
 });

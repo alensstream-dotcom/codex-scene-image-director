@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 
 const fixture = async name => JSON.parse(await readFile(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 
@@ -26,14 +25,17 @@ test('doorway regression restores current clothing/action and excludes invented 
     for (const tag of scene.mustNotInclude) assert.ok(!scene.prompt.toLowerCase().includes(tag.toLowerCase()), tag);
 });
 
-test('worldbook has exactly the three designed entries and mandatory contract terms', async () => {
-    const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_worldbook_rescue_v1.json', import.meta.url), 'utf8'));
+test('v7.9 worldbook preserves v7.8.2 DNA/variable entries and replaces only the main contract', async () => {
+    const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v7_9_worldbook.json', import.meta.url), 'utf8'));
     const entries = Object.values(worldbook.entries);
-    assert.equal(entries.length, 3);
-    assert.deepEqual(entries.map(entry => entry.comment.split('｜')[0]), ['IMG-CONTRACT', 'IMG-GRAMMAR', 'CHARACTER-DNA']);
-    assert.match(entries[0].content, /<!--IMG_COUNT:n-->/);
-    assert.match(entries[0].content, /紧跟/);
-    assert.match(entries[1].content, /英文标签|English|英文逗号/);
+    assert.equal(entries.length, 4);
+    assert.match(entries[1].comment, /v7\.9/);
+    assert.match(entries[1].content, /<!--IMG_COUNT:n-->/);
+    assert.match(entries[1].content, /紧跟它描绘的剧情段落|紧跟对应剧情/);
+    assert.match(entries[1].content, /每轮硬上限3张/);
+    assert.match(entries[2].content, /FM_DNA_REGISTERED/);
+    assert.match(entries[3].content, /FM_DNA \/ FM_SCENE \/ FM_ANCHOR/);
+    assert.doesNotMatch(entries[1].content, /每 180-320 中文字|10 个自然段以上：至少 4 张|本轮没有最大张数上限/);
 });
 
 test('regex package has three narrow rules and preserves ordinary brackets', async () => {
@@ -50,10 +52,14 @@ test('regex package has three narrow rules and preserves ordinary brackets', asy
     assert.equal('[1girl, solo, Sakura, pink hair, home dress, upper body]'.replace(promptRule, ''), '');
 });
 
-test('runtime source uses only the verified Zhihuiji button route and keeps a mobile selection cache', async () => {
+test('runtime is silent and uses only the verified inline Zhihuiji button route', async () => {
     const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+    const css = await readFile(new URL('../style.css', import.meta.url), 'utf8');
     assert.match(source, /\.st-chatu8-image-button/);
     assert.doesNotMatch(source, /generate-image-request/);
-    assert.match(source, /30000/);
-    assert.match(source, /default LLM requests: 0/);
+    assert.match(source, /silentMode:\s*true/);
+    assert.match(source, /inlineButtons:\s*true/);
+    assert.doesNotMatch(source, /host\.append\(panel\)/);
+    assert.match(css, /\.janima-rescue-panel[\s\S]*display:\s*none\s*!important/);
+    assert.match(css, /\.janima-inline-image-button/);
 });

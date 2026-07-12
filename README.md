@@ -1,38 +1,42 @@
-# 世界书生图救援器
+# 世界书生图静默救援器
 
-SillyTavern 的轻量救援扩展。正常链路固定为：
+正常链路：
 
 ```text
-主聊天模型 → 世界书输出场景 Prompt → 本插件检查/按需修复 → 智绘姬传输 → ComfyUI 渲染
+主模型 + JANIMA v7.9 单世界书 → 原位内联 Prompt → 静默救援插件 → 智绘姬真实按钮 → ComfyUI
 ```
 
-本插件不会在正常聊天时调用额外 LLM，不会自主选镜头，不扫描完整聊天，不读取长期记忆，也不改变绘图风格。0.7.0 的旧自主导演完整保留在 `pre-rescue-rebuild-0.7.0` tag 与 `master` 分支。
+插件默认不在对话中显示状态栏、工具栏或第二列，不占正文宽度。智绘姬按钮保留在 Prompt 的原生位置：Prompt 紧跟哪段剧情，按钮和生成图片就出现在哪段剧情下。
 
 ## 安装
 
-1. 在 SillyTavern 扩展管理器中安装本仓库，或把目录复制到 `public/scripts/extensions/third-party/codex-scene-image-director`。
-2. 导入 `worldbooks/JANIMA_worldbook_rescue_v1.json`，只启用这一本生图世界书。
+在 SillyTavern 扩展管理器填写：
+
+```text
+https://github.com/alensstream-dotcom/codex-scene-image-director.git
+```
+
+然后：
+
+1. 导入 `worldbooks/JANIMA_v7_9_worldbook.json`。它基于用户原版 v7.8.2，保留 FM_DNA、场景变量与 UpdateVariable，只替换冲突的主生图规则。
+2. 关闭旧 v7.8.2 主世界书，避免两套规则同时生效；已有 FM_DNA 变量数据不用删除。
 3. 导入 `regex/JANIMA_rescue_regex.json`。
-4. 在智绘姬中把开始/结束标记设为 `[` 和 `]`，关闭 LLM 扩写、智能分析、二次重写、自动改变角色和自动风格。
-5. 在 ComfyUI/智绘姬正向预设中保留固定质量与风格词；世界书只写当前场景。
+4. 智绘姬标记设置为 `[` 和 `]`，关闭 LLM 扩写、正文二次分析、自动重写和自动风格。
 
-完整步骤见 `docs/installation.md` 与 `docs/migration-from-0.7.md`。
+## 后台行为
 
-## 功能
+- 静默检查最新 assistant 回复，不向 `.mes` 追加任何可见插件节点。
+- 自动规范标点、去重、明确的 `solo` 与缺失构图词；本地处理不调用 AI。
+- 删除完全重复的 Prompt。
+- 给真实 `.st-chatu8-image-button` 添加原位正常文档流布局，不新建替代按钮。
+- 可选后台 AI 审计会补漏、删除低价值/错误图片 Prompt，并修复人数、服装、动作和地点冲突；失败不覆盖原文。
 
-- 只检查最新 assistant 消息的 `IMG_COUNT` 与图片 Prompt。
-- 检查数量、中文、英文小说句、长度、重复、人数冲突和末尾堆叠。
-- “本地补强”只规范标点、去重、补明确的 `solo` 与缺失构图词；绝不调用 API。
-- “修复此 Prompt”“修复本轮”“补一张图”只有用户点击后才调用配置的 OpenAI 兼容 API。
-- AI 失败时保留原文；缓存 key 为 `messageId + message content hash + original prompt hash + repair mode`。
-- 智绘姬 2.7.7 适配使用源码与运行 DOM 核验过的 `.st-chatu8-image-button`；只有真实按钮出现才报告成功和点击。
+## 世界书选图原则
 
-## ComfyUI 原则
-
-- 单人物工作流：`1girl, solo`，适合门口、沙发、坐姿、半身、室内日常。
-- 双人物工作流：`2girls` 或 `1girl and 1boy`，建议使用区域提示或人物分区。
-- 原图有白边时检查 latent 尺寸、padding、canvas、composite、outpaint；只有酒馆显示有白边时再检查智绘姬 CSS。
-- 本插件不会修改 ComfyUI 工作流，也不会猜测智绘姬的工作流切换接口。
+- 不按段落或字数硬凑图片。
+- 普通剧情目标1张；第二个独立高价值镜头才出第2张；特别长且确有三个独立镜头时最多3张。
+- 纯说明、纯心理、无画面过渡、普通男主走路/购物/站着为0张。
+- 每个 Prompt 必须紧跟对应剧情，禁止堆到回复底部。
 
 ## 测试
 
@@ -40,4 +44,4 @@ SillyTavern 的轻量救援扩展。正常链路固定为：
 node --test tests/*.test.mjs
 ```
 
-架构、智绘姬与验收详情位于 `docs/`。可直接导入的交付包为 `JANIMA_worldbook_rescue_v1_package.zip`。
+完整安装包：`JANIMA_worldbook_silent_rescue_v1_1_package.zip`。
