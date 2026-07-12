@@ -1,127 +1,43 @@
-# 剧情镜头导演
+# 世界书生图救援器
 
-一个独立的 SillyTavern 文生图辅助插件。
+SillyTavern 的轻量救援扩展。正常链路固定为：
 
-核心流程：
-
-1. 你手动选择或粘贴真正值得生图的剧情段落。
-2. 插件读取自己的视觉记忆库，包括角色形象、服装、地点、世界观和画风。
-3. 插件快速生成正向提示词、反向提示词和镜头卡。
-4. 后台可选调用额外 OpenAI 兼容 API，异步维护视觉记忆，不阻塞文字生成和生图操作。
-
-## GitHub 安装
-
-在 SillyTavern 中打开：
-
-`扩展 -> 安装扩展 -> 输入 Git URL`
-
-填入：
-
-`https://github.com/alensstream-dotcom/codex-scene-image-director.git`
-
-安装完成后刷新 SillyTavern，在扩展设置里打开“剧情镜头导演”。
-
-手机端同样使用这个链接；实际安装发生在运行 SillyTavern 的电脑或服务器上。
-
-## 手动安装
-
-也可以把整个 `codex-scene-image-director` 文件夹复制到 SillyTavern 的第三方扩展目录后刷新页面。
-
-## 兼容
-
-- 不依赖世界书。
-- 不依赖智绘姬或 st-chatu8。
-- 如果安装了“酒馆助手 / JS-Slash-Runner”，可以在插件中开启变量同步。
-
-## 0.4.6 精确选段与智绘姬按钮识别
-
-0.4.6 修复同一条消息里相同剧情句子出现多次时可能插到第一处的问题：插件会记录选段在正文里的出现序号和 sourceRange，预览、切换焦点、插入 prompt 和直接生图都使用同一个位置。手机端也会在 selectionchange 时缓存最近正文选区，减少点开扩展后选区丢失。
-
-智绘姬按钮识别现在同时匹配 `.st-chatu8-image-button` / `.image-tag-button` 官方 class、按钮文案和 prompt/tag 数据；debug 额外显示 `zhihuijiPipelineRoute`，区分 `official-button-click` 和 `official-event-fallback`。
-
-## 0.4.5 确认生图链路
-
-0.4.5 起选中剧情后先弹出确认框，显示 selectedText、contextBefore/contextAfter、focusCharacter、location、outfit、props 和 finalPrompt。确认后可以选择“仅插入 prompt 按钮”或“立即调用智绘姬生图”。直接生图会优先等待并点击智绘姬生成按钮，复用 `generate-image-request / generate-image-response` 正式链路；找不到按钮时会退回事件提交，并在 debug 面板写明原因和状态。
-
-本版同时强化 selectedText 优先级：主角、动作、情绪、关键道具和构图核心优先来自选中剧情，角色/场景记忆只补固定外观、当前服装、地点时间和持续道具。选段生图链路只走本地规则，不额外调用 LLM/API。
-
-0.4.5 额外修复了两类误触发：像“剧情要求 / 详略安排 / 文笔要求 / prompt / negative_prompt”的预设或世界书输出会被拒绝，不再被当作剧情生图；重复点击同一条消息时会先清理本插件上一次插入的可见 prompt，避免按钮和触发文本越堆越多。
-
-手机选区丢失时可以使用“开始取景 / 结束取景 / 生成这一幕”：先在同一条消息里选起点片段并记录，再选终点片段并记录，最后会截取两点之间的完整剧情进入同一个预览确认框。
-
-Debug 面板在“生图工作台”底部，点击“复制 debug 信息”可复制 selectedText、上下文、finalPrompt、实际发给智绘姬的 prompt、调用入口和生成状态。
-
-测试命令：
-
-```bash
-node tests/prompt-chain.test.mjs
+```text
+主聊天模型 → 世界书输出场景 Prompt → 本插件检查/按需修复 → 智绘姬传输 → ComfyUI 渲染
 ```
 
-## 0.4.7 剧情主体锚定
+本插件不会在正常聊天时调用额外 LLM，不会自主选镜头，不扫描完整聊天，不读取长期记忆，也不改变绘图风格。0.7.0 的旧自主导演完整保留在 `pre-rescue-rebuild-0.7.0` tag 与 `master` 分支。
 
-0.4.7 参考文生图世界书的“文图对应”原则，把选中剧情先拆成视觉主体、动作、道具、表情和人数，再把这些锚点排在角色外观/服装记忆之前。角色记忆继续负责一致性，但不会盖过选段本身；例如“书包侧袋露出书封”“把信藏到身后”“拉住袖口回头”会优先进入 prompt，并在 negative prompt 里压制不相关头像、静态站姿、错误地点、多人混脸和混衣服。
+## 安装
 
-选中文本后的浮窗按钮改为“确认生图”，并会在正文选区稳定后自动弹出。确认后流程不变：插件把英文中括号 prompt 写到所选剧情下方，智绘姬识别按钮，再交给 ComfyUI 出图。
+1. 在 SillyTavern 扩展管理器中安装本仓库，或把目录复制到 `public/scripts/extensions/third-party/codex-scene-image-director`。
+2. 导入 `worldbooks/JANIMA_worldbook_rescue_v1.json`，只启用这一本生图世界书。
+3. 导入 `regex/JANIMA_rescue_regex.json`。
+4. 在智绘姬中把开始/结束标记设为 `[` 和 `]`，关闭 LLM 扩写、智能分析、二次重写、自动改变角色和自动风格。
+5. 在 ComfyUI/智绘姬正向预设中保留固定质量与风格词；世界书只写当前场景。
 
-## 0.4.8 动态记忆防污染
+完整步骤见 `docs/installation.md` 与 `docs/migration-from-0.7.md`。
 
-0.4.8 修复选段已有明确动作时，旧的地点/光线/姿势/世界风格仍然混入 prompt 的问题。现在像“背着书包走在前面、跺地板、头也不回、粉色长发甩动”这类句子会优先生成 walking away、not looking back、stomping footsteps、leather shoes、swaying pink long hair 等锚点，并禁止旧的 sitting、school gate、sunlight、赛博朋克视觉风格污染该选段。
+## 功能
 
-## 0.4.9 Anima 英文与人物固定
+- 只检查最新 assistant 消息的 `IMG_COUNT` 与图片 Prompt。
+- 检查数量、中文、英文小说句、长度、重复、人数冲突和末尾堆叠。
+- “本地补强”只规范标点、去重、补明确的 `solo` 与缺失构图词；绝不调用 API。
+- “修复此 Prompt”“修复本轮”“补一张图”只有用户点击后才调用配置的 OpenAI 兼容 API。
+- AI 失败时保留原文；缓存 key 为 `messageId + message content hash + original prompt hash + repair mode`。
+- 智绘姬 2.7.7 适配使用源码与运行 DOM 核验过的 `.st-chatu8-image-button`；只有真实按钮出现才报告成功和点击。
 
-0.4.9 起最终写给智绘姬/Anima 的方括号 prompt 强制英文：即使界面里旧设置选过中文/混合，或质量词、世界观里有中文，也会在 finalPrompt 和 Chatu8 trigger 前清掉中文片段。
+## ComfyUI 原则
 
-人物一致性改成“固定外观”和“当前服装”分离：插件会用角色英文名/稳定身份标签 + 固定外观锁同一人物的脸、发色、瞳色等；换衣服、当前服装仍按选段和视觉记忆变化，不会写进固定外观。
+- 单人物工作流：`1girl, solo`，适合门口、沙发、坐姿、半身、室内日常。
+- 双人物工作流：`2girls` 或 `1girl and 1boy`，建议使用区域提示或人物分区。
+- 原图有白边时检查 latent 尺寸、padding、canvas、composite、outpaint；只有酒馆显示有白边时再检查智绘姬 CSS。
+- 本插件不会修改 ComfyUI 工作流，也不会猜测智绘姬的工作流切换接口。
 
-## 0.5.0 精简设置与自动画风
+## 测试
 
-0.5.0 删除会污染生图的手填设置项：提示词语言、世界观直入 prompt、视觉风格、质量词、固定前缀、默认镜头和默认反向词不再出现在设置页。Anima 生图链路改为内部固定英文质量/负面词，并按选段和剧情记忆自动选择校园、赛博都市、奇幻、暗黑、动作、恋爱、日常、悬疑等英文风格包。
+```powershell
+node --test tests/*.test.mjs
+```
 
-风格包使用通用美术方向和 Danbooru/Anima 友好的英文标签，不直接套真实在世画师名；这样能保留画面好看和稳定性，也避免画师名带来的版权/风格模仿风险。
-
-## 0.7.0 Fast / Accurate visualShotSpec
-
-0.7.0 将生图主链路升级为 `visualShotSpec`：默认 Fast Mode 完全本地解析，不调用 LLM；只有点击“精准解析”或开启“默认精准解析”时才调用 API。相同选段 + 焦点角色 + 模式会用 hash 缓存，避免重复请求。
-
-本版新增 `renderPromptFromVisualShotSpec()` 和 `validatePromptAgainstSpec()`，强制英文标签式 prompt、1girl/solo 人数约束、服装/动作/道具优先来自选中文本，并自动加入 full-frame composition、subject fills most of the frame、no large empty white borders 等防白边构图标签。已覆盖“单人皮质小沙发脚够不到地”和“门开一条缝探头换下校服”两类失败案例。
-
-## 0.6.0 visualAtoms 主链路
-
-0.6.0 重构“选中剧情 → prompt 确认 → 智绘姬生图”主链路：API 开启时，AI 只负责提取 `visualAtoms` JSON，不再直接书写最终 prompt；插件本地用 `renderPromptFromVisualAtoms()` 渲染英文逗号标签式 prompt，并用 `validateImagePrompt()` 拦截剧情复述、中文、对白、because/while/then 等小说句式。
-
-默认 `sceneMoment` 等于用户完整选段，不再替用户自动挑镜头；只有点击“自动提炼镜头”时才调用本地抽帧。`compilePrompt()` 仅作为 AI visualAtoms 失败或 API 未启用时的 fallback。图片 prompt 请求不传 PRISM 树、长期剧情摘要、recentHistory 或 visualEvents 全量，避免长期记忆污染当前画面。剪贴板优先默认关闭，正文选区/缓存选区优先级最高。
-
-## 0.5.1 取景片段与手机确认修复
-
-0.5.1 修复长段选中后 prompt 过长的问题：插件会先从你选中的剧情里抽取最适合出图的 1-2 句实际取景片段，再用这段生成英文 prompt，原始选段仍用于定位插回原文下方。确认窗口现在会同时显示 originalSelection 和 sceneMoment，方便检查到底拿哪一幕出图。
-
-本版还取消了多角色检测导致“仅插入 prompt 按钮 / 立即调用智绘姬生图”变灰的限制；检测到多个角色时只提示可切换 focusCharacter，不再锁按钮。自动画风改为当前选段优先，长期剧情只做兜底，避免旧的赛博朋克、霓虹、雨夜等风格污染当前校园/日常片段。
-
-## 0.4.2 选段净化
-
-0.4.2 起聊天正文悬浮菜单只保留“图片生成/取消”，主流程不再显示容易误解的复制按钮。选中大段文本时会自动过滤预设结构、思考/要求块、旧世界书 prompt 字段和英文状态摘要，只把真正剧情段落用于生成 prompt 和长期剧情记忆。
-
-## 0.4.1 一键体检
-
-0.4.1 起新增一键体检和推荐配置：自动检查智绘姬识别、方括号标签、剧情长期记忆、本地数据库、额外 API、选段入口和剪贴板取材状态，并用可视化清单提示哪些项目已就绪、哪些需要处理。
-
-## 0.4.0 可视化工作台
-
-0.4.0 起重做设置界面为可视化工作台：顶部状态卡显示角色、地点、服装、剧情记忆、API 和智绘姬连接；生图页聚焦“写入原文下方”和“预览 Prompt”，高级输出折叠；视觉记忆、剧情记忆和设置页改为分组模块，手机端按钮保持横向。
-
-## 剧情长期记忆
-
-0.3.1 起升级并加固为接近 PRISM 的正文长期记忆：插件用浏览器 IndexedDB 保存当前聊天的原文消息，用 chat metadata 保存压缩快照，并构建 root → L3 → L2 → L1 → 原文片段的分层摘要路径，并优先用稳定聊天 ID 绑定数据库，避免角色名变化后拆散记忆。普通文字生成前只注入根摘要、命中摘要路径和少量相关原文片段，避免把全量历史塞进上下文。
-
-可在“剧情记忆”页开启/关闭自动索引、正文注入、本地数据库、PRISM 路径检索、API 后台整理和原文片段预算，也可以回溯索引当前聊天。它不写入聊天正文，也不进入智绘姬方括号；生图仍只使用视觉记忆和你手动选择的剧情段落。
-
-## 第一版范围
-
-- 独立视觉记忆库
-- 手选剧情段落生成提示词
-- 最近消息选择
-- 背景异步记忆更新
-- OpenAI 兼容 API 配置
-- 酒馆助手变量兼容层
-- 手机端紧凑 UI
-
+架构、智绘姬与验收详情位于 `docs/`。可直接导入的交付包为 `JANIMA_worldbook_rescue_v1_package.zip`。
