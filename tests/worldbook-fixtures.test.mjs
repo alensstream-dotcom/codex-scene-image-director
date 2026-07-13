@@ -88,6 +88,8 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /semanticAudit:\s*false/);
     assert.match(source, /female_subject_missing/);
     assert.match(source, /story_segment_since_previous_image/);
+    assert.match(source, /BLOCKING_IMAGE_ISSUE_CODES/);
+    assert.match(source, /promptRecord\?\.issues\?\.some/);
     assert.match(source, /accuracyWorkflow:\s*true/);
     assert.match(source, /janimaSemanticAuditHash/);
     assert.match(source, /Number\(messageId\) === 0/);

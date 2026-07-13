@@ -33,9 +33,18 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.5.0';
+const EXT_VERSION = '1.5.1';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
+const BLOCKING_IMAGE_ISSUE_CODES = new Set([
+    'female_subject_missing',
+    'empty_story_segment',
+    'people_conflict',
+    'solo_relation_conflict',
+    'identity_anchor_missing',
+    'multi_character_separation_missing',
+    'ambiguous_named_prop',
+]);
 
 const DEFAULT_SETTINGS = {
     version: 8,
@@ -295,8 +304,10 @@ function markZhihuijiButtonsInline(messageId) {
     const host = messageElement(messageId);
     const textRoot = host?.querySelector('.mes_text');
     if (!host || !textRoot) return;
+    const validation = validateTurn(getMessageText(messageId));
     const buttons = [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)];
     const validButtons = [];
+    let promptCursor = 0;
     buttons.forEach(buttonNode => {
         const rawPrompt = buttonNode.dataset.imageTag || buttonNode.dataset.link || buttonNode.dataset.change || '';
         if (!isLikelyImagePrompt(rawPrompt)) {
@@ -305,8 +316,18 @@ function markZhihuijiButtonsInline(messageId) {
             buttonNode.setAttribute('aria-hidden', 'true');
             return;
         }
+        const promptRecord = validation.prompts[promptCursor++];
+        const blocked = promptRecord?.issues?.some(issue => BLOCKING_IMAGE_ISSUE_CODES.has(issue.code));
+        if (blocked) {
+            buttonNode.classList.add('janima-invalid-image-button');
+            buttonNode.style.display = 'none';
+            buttonNode.setAttribute('aria-hidden', 'true');
+            return;
+        }
         const index = validButtons.length;
         validButtons.push(buttonNode);
+        buttonNode.classList.remove('janima-invalid-image-button');
+        buttonNode.removeAttribute('aria-hidden');
         buttonNode.dataset.janimaPromptIndex = String(index);
         buttonNode.classList.add('janima-inline-image-button');
         buttonNode.style.display = 'block';
