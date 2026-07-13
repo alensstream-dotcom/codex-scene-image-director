@@ -32,7 +32,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.3.1';
+const EXT_VERSION = '1.3.2';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
@@ -186,6 +186,19 @@ function toast(type, message) {
 function getMessageText(messageId) {
     const message = chat?.[Number(messageId)];
     return String(message?.mes || message?.message || '');
+}
+
+function storedSemanticAuditHash(messageId) {
+    return String(chat?.[Number(messageId)]?.extra?.janimaSemanticAuditHash || '');
+}
+
+async function persistSemanticAuditHash(messageId, hash) {
+    const message = chat?.[Number(messageId)];
+    if (!message) return;
+    message.extra ||= {};
+    if (message.extra.janimaSemanticAuditHash === hash) return;
+    message.extra.janimaSemanticAuditHash = hash;
+    await saveChatConditional?.();
 }
 
 function isAssistantMessage(messageId) {
@@ -473,7 +486,7 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
     if (!config.enabled || !config.repairInvalidPrompts) return false;
     const id = Number(messageId);
     const currentHash = stableHash(text);
-    if (runtime.semanticAuditFinalHashes.get(id) === currentHash) return false;
+    if (runtime.semanticAuditFinalHashes.get(id) === currentHash || storedSemanticAuditHash(id) === currentHash) return false;
     const targets = (config.semanticAudit ? validation.prompts : invalidPromptsForQuietRepair(validation)).slice(0, 6);
     if (!targets.length) return false;
     const hash = `${id}:${stableHash(text)}:${targets.map(item => item.index).join(',')}:quiet-prompt-repair`;
@@ -531,8 +544,15 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
         for (const repair of [...repairs].sort((a, b) => b.prompt_index - a.prompt_index)) {
             next = replacePromptAt(next, validation.prompts[repair.prompt_index], `[${repair.prompt_tags.join(', ')}]`);
         }
-        runtime.semanticAuditFinalHashes.set(id, stableHash(next));
+        const finalHash = stableHash(next);
+        runtime.semanticAuditFinalHashes.set(id, finalHash);
+        const message = chat?.[id];
+        if (message) {
+            message.extra ||= {};
+            message.extra.janimaSemanticAuditHash = finalHash;
+        }
         if (next !== text) await writeMessage(id, next, 'janima-current-model-prompt-repair');
+        else await saveChatConditional?.();
         setDebug(id, {
             repairMode: config.semanticAudit ? 'current-model-semantic-audit' : 'current-model-prompt-repair',
             repairedPromptIndexes: targetIndexes,
@@ -540,6 +560,8 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
         });
         return next !== text;
     } catch (error) {
+        runtime.semanticAuditFinalHashes.set(id, currentHash);
+        await persistSemanticAuditHash(id, currentHash);
         setDebug(id, { repairMode: 'current-model-prompt-repair', error: error.message });
         console.warn(`[${EXT_NAME}] 当前模型 Prompt 纠错失败，原 Prompt 保持不变`, error);
         return false;
