@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { desiredImageCount, extractImagePrompts, isLikelyImagePrompt, parseDeclaredImageCount, storyParagraphCandidates } from '../lib/rescue-core.mjs';
+import { desiredImageCount, extractImagePrompts, isLikelyImagePrompt, parseDeclaredImageCount, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
 
 test('parses the final IMG_COUNT declaration', () => {
     assert.equal(parseDeclaredImageCount('正文\n<!--IMG_COUNT:2-->').count, 2);
@@ -46,4 +46,21 @@ test('does not treat JSON Patch arrays as image prompts', () => {
     const patch = '{ "op": "replace", "path": "/剧情/关键事件", "value": "裂痕被发现,万魔殿外出现异响" },{ "op": "replace", "path": "/剧情/模式", "value": "战斗" }';
     assert.equal(isLikelyImagePrompt(patch), false);
     assert.equal(extractImagePrompts(`[${patch}]`).length, 0);
+});
+
+test('each image owns all story paragraphs since the previous image', () => {
+    const text = [
+        '利维坦推开图书馆的大门。', '',
+        '她抱紧怀里的布偶，警觉地望向破碎的窗户。', '',
+        '[1girl, solo, female focus, adult woman, light-purple twin tails, holding a stuffed demon mascot, looking toward the shattered window, tense expression, medium shot]', '',
+        '路西法从阴影中走出，抬手挡住飞来的玻璃。', '',
+        '利维坦惊讶地转身看她。', '',
+        '[2girls, female focus, two adult women, Lucifer shielding Leviathan, Leviathan turning in surprise, shattered library window, dynamic two-shot]', '',
+        '<!--IMG_COUNT:2-->',
+    ].join('\n');
+    const segments = storySegmentsForPrompts(text);
+    assert.equal(segments.length, 2);
+    assert.match(segments[0].text, /推开图书馆[\s\S]*破碎的窗户/);
+    assert.doesNotMatch(segments[1].text, /推开图书馆/);
+    assert.match(segments[1].text, /路西法[\s\S]*利维坦惊讶/);
 });

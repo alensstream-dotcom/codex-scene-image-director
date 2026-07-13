@@ -9,9 +9,10 @@ test('contains all 20 required worldbook scenarios and valid image counts', asyn
     assert.equal(scenes.length, 20);
     assert.deepEqual(scenes.map(scene => scene.id), Array.from({ length: 20 }, (_, index) => index + 1));
     assert.ok(scenes.every(scene => Number.isInteger(scene.expectedCount) && scene.expectedCount >= 0 && scene.expectedCount <= 6));
-    assert.ok(scenes.filter(scene => scene.name !== '纯解释无图场景').every(scene => scene.expectedCount >= 3));
+    assert.ok(scenes.filter(scene => !['纯解释无图场景', '单男主普通行动'].includes(scene.name)).every(scene => scene.expectedCount >= 3));
     assert.equal(scenes.find(scene => scene.name === '地点切换').expectedCount, 4);
     assert.equal(scenes.find(scene => scene.name === '纯解释无图场景').expectedCount, 0);
+    assert.equal(scenes.find(scene => scene.name === '单男主普通行动').expectedCount, 0);
 });
 
 test('sofa regression contains every fixed assertion', async () => {
@@ -25,20 +26,27 @@ test('doorway regression restores current clothing/action and excludes invented 
     for (const tag of scene.mustNotInclude) assert.ok(!scene.prompt.toLowerCase().includes(tag.toLowerCase()), tag);
 });
 
-test('v8.1 worldbook preserves variables and enforces adaptive inline prompts plus identity locks', async () => {
+test('v8.2 mobile worldbook enforces segment-aware female Galgame shots and identity locks', async () => {
     const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_0_worldbook.json', import.meta.url), 'utf8'));
+    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_2_Galgame_Director.json', import.meta.url), 'utf8'));
     const entries = Object.values(worldbook.entries);
+    assert.deepEqual(mobileWorldbook, worldbook);
     assert.equal(entries.length, 5);
     assert.match(entries[1].comment, /v7\.9/);
     assert.equal(entries[1].disable, true);
     assert.match(entries[2].content, /FM_DNA_REGISTERED/);
     assert.match(entries[3].content, /FM_DNA \/ FM_SCENE \/ FM_ANCHOR/);
-    assert.match(entries[4].comment, /v8\.1/);
+    assert.match(entries[4].comment, /v8\.2/);
     assert.equal(entries[4].disable, false);
     assert.equal(entries[4].order, 999);
-    assert.match(entries[4].content, /至少\s*3\s*个有效 Prompt/);
+    assert.match(entries[4].content, /正常含女性的剧情目标\s*3\s*张/);
     assert.match(entries[4].content, /硬上限\s*6\s*张/);
-    assert.match(entries[4].content, /每个 Prompt 只描绘它正上方紧邻段落/);
+    assert.match(entries[4].content, /上一张 Prompt 之后/);
+    assert.match(entries[4].content, /窗口内全部剧情再选镜/);
+    assert.match(entries[4].content, /女性硬门禁/);
+    assert.match(entries[4].content, /单独男性、纯场景、纯建筑、纯道具/);
+    assert.match(entries[4].content, /整轮完全没有真实可见女性[\s\S]*IMG_COUNT:0/);
+    assert.match(entries[4].content, /最佳镜头赢家规则/);
     assert.match(entries[4].content, /禁止\s*\[Unnamed Persona\]/);
     assert.match(entries[4].content, /<!--IMG_COUNT:n-->/);
     assert.match(entries[2].content, /CANONICAL LOCK: Lucifer/);
@@ -48,6 +56,7 @@ test('v8.1 worldbook preserves variables and enforces adaptive inline prompts pl
     assert.match(entries[4].content, /角色名字不是外貌/);
     assert.match(entries[4].content, /gothic dress with water-pattern trim:1\.25/);
     assert.match(entries[4].content, /bodysuit、leotard、lingerie/);
+    assert.match(entries[2].content, /PREVIOUS SHOT CONTINUITY ANCHOR/);
 });
 
 test('regex package has three narrow rules and preserves ordinary brackets', async () => {
@@ -77,6 +86,8 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /maximumImages:\s*6/);
     assert.match(source, /repairInvalidPrompts:\s*true/);
     assert.match(source, /semanticAudit:\s*false/);
+    assert.match(source, /female_subject_missing/);
+    assert.match(source, /story_segment_since_previous_image/);
     assert.match(source, /accuracyWorkflow:\s*true/);
     assert.match(source, /janimaSemanticAuditHash/);
     assert.match(source, /Number\(messageId\) === 0/);

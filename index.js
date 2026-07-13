@@ -27,17 +27,18 @@ import {
     replacePromptAt,
     stableHash,
     storyParagraphCandidates,
+    storySegmentsForPrompts,
     validateTurn,
 } from './lib/rescue-core.mjs';
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.4.1';
+const EXT_VERSION = '1.5.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
 const DEFAULT_SETTINGS = {
-    version: 7,
+    version: 8,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -109,7 +110,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 7) {
+    if (!existing || Number(existing.version) < 8) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -418,7 +419,8 @@ function validateQuietFallbackResponse(raw, allowedIndexes, missingCount) {
         const promptText = tags.join(', ');
         const key = promptText.toLowerCase();
         if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seen.has(key)) continue;
-        if (!extractImagePrompts(`[${promptText}]`).length) continue;
+        const checked = validateTurn(`An adult woman performs the decisive story action.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
+        if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
         seen.add(key);
         prompts.push({ after_paragraph_index: paragraphIndex, prompt_tags: tags });
     }
@@ -456,6 +458,8 @@ function invalidPromptsForQuietRepair(validation) {
         'identity_anchor_missing',
         'multi_character_separation_missing',
         'ambiguous_named_prop',
+        'female_subject_missing',
+        'empty_story_segment',
     ]);
     return validation.prompts.filter(item => item.issues?.some(issue => repairable.has(issue.code)));
 }
@@ -473,7 +477,7 @@ function validateQuietPromptRepairResponse(raw, targetIndexes) {
             : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
         const promptText = tags.join(', ');
         if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText)) continue;
-        const checked = validateTurn(`Scene.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
+        const checked = validateTurn(`An adult woman performs the decisive story action.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
         if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
         repairs.set(promptIndex, { prompt_index: promptIndex, prompt_tags: tags });
     }
@@ -495,23 +499,31 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
     runtime.quietRepairInFlight.add(id);
 
     try {
-        const targetPayload = targets.map(item => ({
-            prompt_index: item.index,
-            prompt: item.prompt,
-            issues: item.issues.map(issue => issue.code),
-            adjacent_story: promptStoryContext(text, item),
-        }));
+        const targetPayload = targets.map(item => {
+            const context = promptStoryContext(text, item);
+            return {
+                prompt_index: item.index,
+                prompt: item.prompt,
+                previous_image_prompt: validation.prompts[item.index - 1]?.prompt || '',
+                issues: item.issues.map(issue => issue.code),
+                story_segment_since_previous_image: context.segment,
+                insertion_paragraph: context.current,
+            };
+        });
         const targetIndexes = targets.map(item => item.index);
         const dnaHint = collectCharacterDnaHints(`${text}\n${targets.map(item => item.prompt).join('\n')}`);
         const prompt = [
             'You are the silent continuity and scene-accuracy editor for image prompts in a completed SillyTavern story reply.',
             `Return a corrected prompt for every one of the ${targets.length} supplied targets, even when the original looks syntactically valid.`,
-            'The adjacent story is authoritative for the exact visible people, actions, current clothing, props, location, and moment. Never omit a visible participant and never invent one.',
+            'Story truth is the highest priority. For each target, use the complete story_segment_since_previous_image, not only the nearest sentence and never any later text.',
+            'Choose the single most cinematic existing female-led moment inside that segment: plot-changing interaction, decisive action, emotional reversal, reveal, entrance, outfit/prop change, or visually specific daily action. Do not downgrade it to a generic standing portrait.',
+            'Every prompt must show at least one woman who truly appears in that segment. Never output a male-only portrait, scenery-only shot, or prop-only shot. A man may appear only with a present woman, with female focus and the woman as the visual lead.',
+            'The selected moment is authoritative for the exact visible people, actions, current clothing, props, location, and emotion. Never omit a visible participant and never invent one.',
             'The visual DNA registry is authoritative for immutable identity. Repeat 6-10 useful immutable anchors for every named visible character in every prompt; a name alone is never enough.',
             'For two or more people: use the exact count, write a separate character block for each person, assign fixed left/right or front/back positions, require separate bodies and both faces visible when the story allows. Never turn a visible person into a shadow or silhouette.',
             'Describe named props visually instead of relying on their name. Behemoth must be a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
             'Give the current outfit and critical prop placement one explicit weighted phrase, for example (navy and black-purple gothic dress with water-pattern trim:1.25) and (mascot perched on Leviathan shoulder:1.25). Never replace a dress with a bodysuit, leotard, lingerie, or swimsuit.',
-            'Current outfit and state in the adjacent story override older card state. Preserve the original rendering style.',
+            'Current outfit and state in the story segment override older card state. For recurring women, copy the same immutable appearance and unchanged outfit tags from previous_image_prompt; only story-confirmed changes may differ. Preserve the original rendering style.',
             'Every repaired prompt must contain 12-48 concise English comma-separated image tags. Never rewrite story text.',
             'Return only JSON: {"repairs":[{"prompt_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
             `Character DNA registry:\n${dnaHint}`,
@@ -600,12 +612,15 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
         }));
         const dnaHint = collectCharacterDnaHints(text);
         const prompt = [
-            'You are a silent image-prompt rescue pass for a completed SillyTavern story reply.',
+            'You are a silent Galgame storyboard rescue pass for a completed SillyTavern story reply.',
             `Create exactly ${missingCount} missing inline image prompts so the turn reaches ${desired} images.`,
-            'Select the strongest distinct visual beats. Prefer character entrances, interactions, strong expressions, action changes, outfit changes, important props, and location transitions.',
-            'Use the supplied after_paragraph_index values exactly. Use distinct paragraphs whenever possible.',
+            'Story truth is the highest priority. Each image owns the story window after the previous image and through its insertion paragraph. Read the whole window, never only its last sentence, and never use future text.',
+            'Within each window select its strongest existing female-led visual beat: consequential interaction, decisive action, emotional reversal, reveal, entrance, outfit or prop change, then visually specific daily action. Reject generic standing portraits and repetitive reactions.',
+            'Every prompt must show at least one woman who actually appears in its story window. Never create a male-only portrait, scenery-only shot, or prop-only shot. A man may appear only beside a present woman, with female focus and the woman as visual lead.',
+            'Use the supplied after_paragraph_index values exactly and use distinct chronological paragraphs. Never insert two prompts without new story text between them.',
             'Every prompt must be 12-48 concise English comma-separated image tags: quality, exact people count, full visual DNA for every visible named character, current clothing, action, prop, location, expression, spatial relation, shot, composition, lighting.',
             'Repeat immutable face, hair, eye, body-build, and signature clothing anchors in every prompt; a character name alone is never an identity description.',
+            'For a recurring woman, copy the same immutable appearance and unchanged outfit tags from the immediately previous image prompt; change only story-confirmed action, expression, camera, location, or outfit.',
             'For multi-character scenes use exact count, separate character blocks, fixed left/right or front/back positions, separate bodies, and both faces visible when the story permits.',
             'Describe named props visually. Behemoth is a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
             'Give current clothing and critical prop placement one weighted phrase at 1.20-1.30. Do not replace a dress or ceremonial garment with a bodysuit, leotard, lingerie, or swimsuit.',
@@ -614,6 +629,7 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             `Character DNA registry:\n${dnaHint}`,
             `Existing valid prompts: ${JSON.stringify(validation.prompts.map(item => item.prompt))}`,
             `Candidate story paragraphs: ${JSON.stringify(paragraphPayload)}`,
+            `Complete story reply: ${JSON.stringify(text.slice(0, 16000))}`,
         ].join('\n');
         const schema = {
             type: 'object',
@@ -639,6 +655,9 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
         const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(1200, Number(config.responseLength || 2400)));
         const missingPrompts = validateQuietFallbackResponse(raw, allowedIndexes, missingCount);
         const next = updateCountMarker(applyMissingPrompts(text, missingPrompts), validation.prompts.length + missingPrompts.length);
+        const finalValidation = validateTurn(next);
+        const blockingIssues = finalValidation.issues.filter(issue => issue.severity === 'error');
+        if (blockingIssues.length) throw new Error(`补图未通过剧情/女性门禁：${blockingIssues.map(issue => issue.code).join(', ')}`);
         await writeMessage(messageId, next, 'janima-current-model-fallback');
         setDebug(messageId, {
             repairMode: 'current-model-fallback',
@@ -664,7 +683,7 @@ async function runAutomaticAiAudit(messageId, text, validation) {
     runtime.auditedHashes.add(hash);
     try {
         const audit = validateSilentAuditResponse(await callRepairApi(
-            'Audit one SillyTavern story reply and its existing image prompts. Keep at least 3 valid images per normal story turn and allow 4-6 when plot beats or locations change quickly. Remove only duplicates, invented content, or prompts that contradict the adjacent story. Repair wrong people counts, clothing, actions, props, and locations. Add missing high-value shots immediately after their matching story paragraphs. Never rewrite story text. Return strict JSON with remove_prompt_indexes, replace_prompts[{prompt_index,prompt_tags}], missing_prompts[{after_paragraph_index,prompt_tags}], reasons.',
+            'Audit one SillyTavern story reply and its existing image prompts. Story truth is first. Treat the text after the previous image through the current insertion paragraph as one segment and select its most cinematic existing female-led moment. Every image must show a woman actually present in its segment; remove male-only, scenery-only, prop-only, duplicate, invented, or future-spoiling shots. Keep female focus when a man also appears. Preserve recurring female DNA and unchanged clothing from the previous prompt. Keep at least 3 valid images per normal female-present story turn and allow 4-6 for distinct fast beats. Never rewrite story text. Return strict JSON with remove_prompt_indexes, replace_prompts[{prompt_index,prompt_tags}], missing_prompts[{after_paragraph_index,prompt_tags}], reasons.',
             {
                 assistant_reply: text,
                 existing_prompts: validation.prompts.map(prompt => ({ prompt_index: prompt.index, paragraph_index: prompt.paragraphIndex, prompt: prompt.prompt })),
@@ -749,6 +768,7 @@ function currentPrompt(messageId, promptIndex) {
 function promptStoryContext(text, prompt) {
     const paragraphs = paragraphRanges(text);
     const isPromptParagraph = item => extractImagePrompts(item.text).length > 0 || /^<!--\s*IMG_COUNT/.test(item.text.trim());
+    const segment = storySegmentsForPrompts(text).find(item => item.promptIndex === prompt.index);
     let sceneIndex = prompt.paragraphIndex - 1;
     while (sceneIndex >= 0 && isPromptParagraph(paragraphs[sceneIndex])) sceneIndex--;
     return {
@@ -756,6 +776,8 @@ function promptStoryContext(text, prompt) {
         current: paragraphs[sceneIndex]?.text || '',
         after: paragraphs[sceneIndex + 1]?.text && !isPromptParagraph(paragraphs[sceneIndex + 1]) ? paragraphs[sceneIndex + 1].text : '',
         paragraphIndex: sceneIndex,
+        segment: segment?.text || paragraphs[sceneIndex]?.text || '',
+        segmentParagraphIndexes: segment?.paragraphs.map(item => item.index) || [],
     };
 }
 
@@ -810,9 +832,11 @@ async function repairOnePrompt(messageId, promptIndex) {
     const cacheHit = Boolean(repaired);
     if (!repaired) {
         repaired = assertPromptRepairResponse(await callRepairApi(
-            'You repair an existing Stable Diffusion/Anima tag prompt. Preserve its subject, characters, action, and location. Fix only explicit count, current clothing/action, invented people/interactions, and concise tag grammar. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Never return prose or markdown.',
+            'Repair one Stable Diffusion/Anima Galgame prompt. Story truth is first: use the entire story segment since the previous image, choose its strongest existing female-led moment, and never use future text. The prompt must show a woman actually present in the segment; never return a male-only or scenery-only image. Keep female focus, exact people, current action/outfit/props/location, and recurring identity anchors. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Never return prose or markdown.',
             {
                 original_worldbook_prompt: prompt.prompt,
+                story_segment_since_previous_image: context.segment,
+                previous_image_prompt: validation.prompts[prompt.index - 1]?.prompt || '',
                 previous_paragraph: context.before,
                 scene_paragraph: context.current,
                 next_paragraph: context.after,
@@ -846,7 +870,7 @@ async function repairWholeTurn(messageId) {
     const cacheHit = Boolean(repaired);
     if (!repaired) {
         repaired = assertWholeTurnResponse(await callRepairApi(
-            'You fill only missing image prompts in one assistant turn. Never rewrite story text or existing prompts. Return strict JSON {"missing_prompts":[{"after_paragraph_index":0,"anchor_text":"","prompt_tags":[]}]} using short English image tags. The array length must equal missing_count.',
+            'Fill only missing Galgame image prompts in one assistant turn. Each image uses the complete story window since the previous image and selects its strongest existing female-led moment. Every prompt must show a woman actually present in that window, never a male-only or scenery-only shot; keep female focus and recurring identity/outfit tags. Never rewrite story text or existing prompts. Return strict JSON {"missing_prompts":[{"after_paragraph_index":0,"anchor_text":"","prompt_tags":[]}]} using short English image tags. The array length must equal missing_count.',
             {
                 assistant_reply: text,
                 existing_prompts: validation.prompts.map(item => item.prompt),
@@ -1025,7 +1049,7 @@ async function manualFill(capture) {
     const cacheHit = Boolean(result);
     if (!result) {
         result = assertPromptRepairResponse(await callRepairApi(
-            'Create one concise Stable Diffusion/Anima prompt for the selected story paragraph. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Use English comma-separated image tags, no prose, no invented people or actions.',
+            'Create one concise Stable Diffusion/Anima Galgame prompt for the selected story segment. Select the strongest existing female-led visual moment. Show at least one woman actually present, keep female focus and recurring identity/outfit anchors, and never create a male-only or scenery-only shot. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Use English comma-separated image tags, no prose, no invented people or actions.',
             {
                 selected_paragraph: capture.selectedText,
                 previous_paragraph: paragraphs[capture.paragraphIndex - 1]?.text || '',
@@ -1068,7 +1092,7 @@ function settingsHtml() {
                     <b>世界书生图救援器 <small>v${EXT_VERSION}</small></b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">默认完全静默：不在正文旁边显示状态条或工具栏。插件只在后台规范 Prompt，并把智绘姬按钮保持在对应剧情段落下。</p>
+                    <p class="notes">手机 Galgame 模式默认完全静默：后台按“上一张图之后的剧情窗口”检查 Prompt，拦截纯男性/纯场景图，并把智绘姬按钮留在对应剧情段落下。</p>
                     <h4>基础设置</h4>
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
