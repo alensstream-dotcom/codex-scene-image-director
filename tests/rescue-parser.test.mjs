@@ -41,3 +41,9 @@ test('does not treat choices, links, dialogue brackets, or short lists as image 
     assert.equal(extractImagePrompts(text).length, 0);
     assert.equal(isLikelyImagePrompt('A, B, C'), false);
 });
+
+test('does not treat JSON Patch arrays as image prompts', () => {
+    const patch = '{ "op": "replace", "path": "/剧情/关键事件", "value": "裂痕被发现,万魔殿外出现异响" },{ "op": "replace", "path": "/剧情/模式", "value": "战斗" }';
+    assert.equal(isLikelyImagePrompt(patch), false);
+    assert.equal(extractImagePrompts(`[${patch}]`).length, 0);
+});
