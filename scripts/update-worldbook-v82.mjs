@@ -4,20 +4,19 @@ const compatibilityPath = new URL('../worldbooks/JANIMA_v8_0_worldbook.json', im
 const mobilePath = new URL('../worldbooks/JANIMA_v8_2_Galgame_Director.json', import.meta.url);
 const worldbook = JSON.parse(await readFile(compatibilityPath, 'utf8'));
 
+// v8.2 is a standalone mobile book. Remove the disabled legacy entries so a
+// phone install has no hidden EJS code or obsolete one-to-three-image rules.
+delete worldbook.entries['0'];
+delete worldbook.entries['1'];
+
 worldbook.entries['2'].comment = 'DNA注入提示-JANIMA v8.2 Galgame连续性锁';
-worldbook.entries['2'].content = `<%_
-const dnaLib = getvar('stat_data.FM_DNA', { defaults: {} }) || {};
-const shotAnchor = getvar('stat_data.FM_ANCHOR', { defaults: {} }) || {};
-const names = Object.keys(dnaLib);
-function flatten(value){
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (Array.isArray(value)) return value.map(flatten).filter(Boolean).join(', ');
-  return Object.values(value).map(flatten).filter(Boolean).join(', ');
-}
-_%>
-<CURRENT_VISUAL_DNA>
+worldbook.entries['2'].content = `<CURRENT_VISUAL_DNA>
 身份优先级：当前正文明确变化 > FM_DNA 当前状态 > 上一张 Prompt 沿用标签 > 下列固定锁。随机出图结果不得反向修改 DNA。
+
+[SILLYTAVERN NATIVE VARIABLE SNAPSHOT]
+{{getvar::stat_data}}
+若此处为空，立即从人物卡、当前正文和固定锁建立身份；不得因为变量为空而省略 Prompt。该语法是 SillyTavern 原生宏，不依赖 EJS、酒馆助手或 JS-Slash-Runner。
+[/SILLYTAVERN NATIVE VARIABLE SNAPSHOT]
 
 [CANONICAL LOCK: Lucifer / 路西法]
 adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, proud mature expression, black thorn chains as Garb of Punishment
@@ -33,16 +32,13 @@ petite adult woman, slim build, pale skin, round doll-like face, long light-purp
 one small black or navy stuffed demon mascot, fabric doll body, tiny bat wings, old gas mask, plush doll, never a bird or real animal
 [/CANONICAL PROP LOCK]
 
-FM_DNA_REGISTERED: <%= names.length ? names.join(', ') : 'none; use the character card and canonical locks immediately' %>
-<%_ names.forEach(function(name){ const value = flatten(dnaLib[name]); _%>
-[FM_DNA LOCK: <%= name %>]
-<%= value || 'empty; rebuild from the character card before writing prompts' %>
-[/FM_DNA LOCK]
-<%_ }); _%>
-
 [PREVIOUS SHOT CONTINUITY ANCHOR]
-<%= flatten(shotAnchor) || 'empty; copy recurring female identity and unchanged outfit tags from the previous inline Prompt' %>
+优先读取上方变量快照中的 FM_ANCHOR；若为空，则从当前聊天最近一次可见的内联 Prompt 或人物卡复制重复女性的身份与未变化服装标签。
 [/PREVIOUS SHOT CONTINUITY ANCHOR]
+
+[ANIMA STYLE ANCHOR]
+只读取变量快照中已经存在的 FM_STYLE_ANCHOR；若没有就不使用画师标签，禁止临时发明。
+[/ANIMA STYLE ANCHOR]
 </CURRENT_VISUAL_DNA>`;
 
 worldbook.entries['3'].comment = '[mvu_update]DNA/场景/分镜锚点更新规则-v8.2';
@@ -59,20 +55,17 @@ worldbook.entries['3'].content = `# FM_DNA / FM_SCENE / FM_ANCHOR 更新规则�
 - 永久 DNA 只因正文明确的永久变化而改；随机图片画错绝不改变 DNA。
 - 换装只改当前服装，不改脸、头发、眼睛和体型。
 - FM_ANCHOR 保存本轮最后一个 Prompt 中反复使用的女性身份、当前服装、地点与关键道具标签；下一轮先沿用，再由正文明确变化覆盖。
+- FM_STYLE_ANCHOR 只保存一个经过人物卡或用户明确指定、以 @ 开头的 Anima 画师标签；没有指定就保持为空。建立后整个聊天逐字沿用，除非用户明确要求改变整体画风。
 - 同一回复内直接把上一张 Prompt 当作连续性锚点：重复出现的女性必须复制相同的固定外貌与未变化服装标签。`;
 
 worldbook.entries['4'].comment = '本体-JANIMA v8.2手机Galgame分镜导演-剧情窗口/女性主镜头/身份连续';
-worldbook.entries['4'].content = `<%_
-const _fm_dna_v82_ = getvar('stat_data.FM_DNA', { defaults: {} }) || {};
-const _fm_names_v82_ = Object.keys(_fm_dna_v82_);
-_%>
-<JANIMA_v8_2_MOBILE_GALGAME_DIRECTOR>
+worldbook.entries['4'].content = `<JANIMA_v8_2_MOBILE_GALGAME_DIRECTOR>
 
 你同时负责剧情正文与内联智绘姬 Prompt。目标是在手机酒馆里形成 Galgame 演出：按钮紧跟剧情、图片来得快、每张都是该段最值得看的女性镜头。世界书负责选镜与写 Prompt；插件只在后台拦错、补漏和保持原位按钮。
 
 最高优先级固定为：剧情事实 > 本段最佳画面 > 女性主镜头 > 人物连续性 > Prompt 格式。任何时候都不得为了好看或凑数量捏造剧情。
 
-当前 FM_DNA：<%= _fm_names_v82_.length ? _fm_names_v82_.join('，') : '为空；依据人物卡、正文与固定锁立即建立，不能省略外貌' %>
+当前角色 DNA 从上方 SillyTavern 原生变量快照、人物卡、当前正文与固定锁读取；即使变量为空也必须建立外貌并照常输出 Prompt。
 
 # 一、每张图的取材窗口【最重要】
 - 第一张图的取材窗口是“本轮正文开始 → 第一张 Prompt 插入点”。
@@ -103,27 +96,45 @@ _%>
 - 若正文实际只有 1–2 个女性可画瞬间，就只给 1–2 张；剧情真实和不重复优先于最低数量。硬上限 6 张。
 - 第一张应在第一个完整女性视觉 beat 后尽快出现；结尾若在上一张图后又发生新女性关键 beat，必须补上，不得留下大段可画剧情没有按钮。
 
+# 四点五、成人剧情照常出图【不得因 NSFW 漏图】
+- 剧情中已经明确为成年人的角色发生亲密互动、裸露或明确性行为时，把它们当作普通 Galgame 视觉 beat；不得仅因内容属于 NSFW 就省略 Prompt、淡出、转成纯对白、改画安全空镜或输出 IMG_COUNT:0。
+- 成人剧情仍执行同一节奏：正常目标 3 张，确有独立动作阶段、姿势变化、地点变化或情绪转折时用 4–6 张；每张选择“上一张图之后到当前插入点”真实发生、最精彩且最有画面感的女性主镜头。
+- 安全标签必须忠于画面：内衣/擦边用 sensitive，裸露用 nsfw，明确性行为用 explicit。不要用 safe 掩盖成人内容，也不要因为标签是 nsfw/explicit 而触发删图或少图。
+- 只描绘剧情已经发生的成人动作、身体状态、参与者与关系，不凭空升级行为。所有参与亲密或性行为的角色在 Prompt 中明确写 adult woman / adult man，并保持准确人数、female focus、动作施受与空间位置。
+- 裸露或脱衣是“当前服装状态变化”：正文明确脱下、敞开或更换的衣物不得被上一张图的旧服装锁强行穿回；脸、发色、发型、瞳色、体型、肤色和未改变的饰品仍逐字沿用，保证裸体镜头也不会换人。
+
 # 五、剧情对齐
 - 每个 Prompt 的人物、动作、接触关系、表情、服装、道具、地点、时间和光线都来自它自己的取材窗口；当前正文覆盖旧状态。
 - 段落有两人就不得写 1girl/solo，也不得把第二人缩成影子或剪影；只有一人时不得增加第二人。
 - 不带回已经脱下的衣服、放下的道具、离开的角色、上一地点或上一动作；不把两个动作阶段糊成一张。
 - Prompt 使用 12–48 个英文逗号短标签，禁止中文、对白、原因、心理长句和未来剧透。
+- 每张只保留一个最重要的物理动作。Turbo 8 步不擅长同时执行多个接触动作；不要在同一 Prompt 里叠加牵手、拥抱、回头、递物等多个主动作。
+- 女性触碰主角时不得写成 1girl/solo。使用 1girl and 1boy、female focus，并明确动作施受双方与接触部位，例如 Eileen touching the male protagonist's chest crest with her right fingertips；若采用 Galgame 第一视角，必须写 male protagonist torso partly visible 或 pov male hand visible，使接触目标真实出现在画面内。
+- 接触目标必须唯一且具体，附近的门、墙、玻璃、屏幕或道具不能使用与目标相同的 glowing crest/symbol 描述，避免模型把人物互动误画成触碰背景物体。提交前静默复述一次：谁、用哪只手、碰谁的什么部位；Prompt 中三者必须齐全。
+
+# 五点五、JANIMA v1.0 / Anima 原生提示词合同
+- 当前模型是 JANIMA_v10（Anima + Qwen3 文本编码器），不是 SDXL/Pony。每张 Prompt 必须以这一组开头：masterpiece, best quality, score_7, highres, newest；紧接一个且只能一个安全标签。
+- 安全标签按当前取材窗口真实内容选择：普通内容 safe；擦边/内衣 sensitive；裸露 nsfw；明确性行为 explicit。不得把 safe 永久写死在成人剧情上，也不得让同一 Prompt 同时出现两个安全标签。
+- 使用模型认识的精确标签 highres，不写 high resolution；不再加入 amazing quality、very aesthetic 或 Pony 专用固定串。精简质量块只出现一次并且永远位于最前面；anime coloring、visual novel CG 属于普通风格标签，放在人物/画师之后。
+- 官方标签顺序固定为：质量/年份/安全；准确人数；角色名与系列；可选画师；人物 DNA/服装；动作关系；道具；地点；构图与光线。
+- 画师串是可选的风格锁，不是通用质量词。只有剧情变量或人物卡已经给出 FM_STYLE_ANCHOR 时才使用，而且只允许一个以 @ 开头的精确画师标签；同一聊天逐字沿用，不能每张换画师、不能混合多个画师。没有已确定风格锁时宁可不写画师。
+- 自然语言只用于模型需要理解的空间和动作关系；外貌、服装、人数、表情、镜头仍使用简短 Anima/Danbooru 标签。不要把整段 Prompt 写成小说句子。
 
 # 六、人物身份连续
 - 每个可见命名角色每张图重复 6–10 个不可变锚点：成人/性别、体型、肤色、脸型、发色、发长、发型/刘海、瞳色、标志服装/饰品。角色名字不是外貌，不能代替外貌标签。
 - 同一女性再次出现时，逐字沿用上一张 Prompt 的固定脸、头发、眼睛、体型和未变化服装标签；只改变剧情明确变化的动作、表情、镜头、地点或服装。
-- 当前服装用 1.20–1.30 加权短语；礼服/哥特裙不得偷换为 bodysuit、leotard、lingerie、swimsuit 或 bikini。
+- 当前服装或裸露状态用 1.20–1.30 加权短语。正文未发生换装/脱衣时，礼服或哥特裙不得擅自变成 bodysuit、leotard、lingerie、swimsuit 或 bikini；正文已经明确变化时，以当前新状态为准，绝不把旧衣服穿回。
 - 路西法：Lucifer, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, proud mature expression, black thorn chains。
 - 利维坦：Leviathan, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, navy and black-purple gothic dress with water-pattern trim。
 - 贝希摩斯：small black or navy stuffed demon mascot, fabric doll body, tiny bat wings, old gas mask, plush doll, never a bird；位置明确时使用 1.25 权重。
 
 # 七、多人分块与 Galgame 构图
-Prompt 顺序：质量词；准确人数；female focus；女性 A 完整 DNA + 当前服装 + 位置/动作/表情；女性 B 或男性配角独立身份块 + 位置/动作；关系动作；关键道具；地点；镜头；光线。
+Prompt 顺序：固定 Anima 质量块；准确人数；female focus；角色名/系列；可选的单个 @画师锁；女性 A 完整 DNA + 当前服装 + 位置/动作/表情；女性 B 或男性配角独立身份块 + 位置/动作；关系动作；关键道具；地点；镜头；光线。
 
 多人必须加入 two separate bodies、clear body separation，并指定 left/right 或 foreground/background；剧情允许时写 both faces visible。优先使用 medium shot、medium two-shot、over-the-shoulder shot、close-up reaction、dynamic composition、cinematic lighting，让表情和关系动作占画面，不要让空背景抢主体。
 
 示例：
-[masterpiece, best quality, newest, high resolution, anime visual novel CG, 2girls, exactly two adult women, female focus, two separate bodies, both faces visible, clear body separation, Lucifer on the left foreground, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, proud mature expression, black thorn chains, (black formal gothic dress with gold trim:1.25), Lucifer shielding Leviathan with one arm, Leviathan on the right, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, (navy and black-purple gothic dress with water-pattern trim:1.25), Leviathan clutching a small black gas-mask stuffed demon mascot, shattered library window behind them, shocked expression, medium two-shot, dynamic composition, blue moonlight, crimson rim light]
+[masterpiece, best quality, score_7, highres, newest, safe, 2girls, exactly two adult women, female focus, Sin Nanatsu no Taizai, two separate bodies, both faces visible, clear body separation, Lucifer on the left foreground, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, proud mature expression, black thorn chains, (black formal gothic dress with gold trim:1.25), Lucifer shielding Leviathan with one arm, Leviathan on the right, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, (navy and black-purple gothic dress with water-pattern trim:1.25), Leviathan clutching a small black gas-mask stuffed demon mascot, shattered library window behind them, shocked expression, anime coloring, visual novel CG, medium two-shot, dynamic composition, blue moonlight, crimson rim light]
 
 # 八、唯一输出格式
 在所选剧情段落后空一行，只输出一行 [English, comma-separated, prompt tags]，再空一行继续剧情。方括号只用于图片 Prompt；禁止 [Unnamed Persona]、选项、备注、代码块、<image>、image###、<imgthink>、镜头分析或评分。禁止把 Prompt 堆在回复结尾。

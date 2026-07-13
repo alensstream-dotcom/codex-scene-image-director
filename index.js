@@ -33,7 +33,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.5.1';
+const EXT_VERSION = '1.5.2';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -41,17 +41,18 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
     'empty_story_segment',
     'people_conflict',
     'solo_relation_conflict',
-    'identity_anchor_missing',
-    'multi_character_separation_missing',
     'ambiguous_named_prop',
 ]);
 
 const DEFAULT_SETTINGS = {
-    version: 8,
+    version: 9,
     enabled: true,
     autoCheck: true,
     silentMode: true,
-    autoLocalRepair: true,
+    // Prompt content must be correct before Chatu8 creates its button. Chatu8
+    // captures the prompt in a click-listener closure, so post-render content
+    // rewrites can make the visible tag differ from the ComfyUI payload.
+    autoLocalRepair: false,
     selectionFill: false,
     api: {
         enabled: false,
@@ -64,7 +65,7 @@ const DEFAULT_SETTINGS = {
     },
     fallback: {
         enabled: true,
-        repairInvalidPrompts: true,
+        repairInvalidPrompts: false,
         semanticAudit: false,
         minimumImages: 3,
         maximumImages: 6,
@@ -119,15 +120,15 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 8) {
+    if (!existing || Number(existing.version) < 9) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
             silentMode: true,
-            autoLocalRepair: true,
+            autoLocalRepair: false,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, repairInvalidPrompts: true, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
+            fallback: { enabled: true, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -287,12 +288,6 @@ function buildSafeLocalRepair(text, validation) {
         if (prompt.issues?.some(issue => issue.code === 'duplicate_prompt')) {
             next = removePromptRange(next, prompt);
             changed = true;
-            continue;
-        }
-        const reinforced = reinforcePromptLocal(prompt.prompt);
-        if (reinforced !== `[${prompt.prompt}]`) {
-            next = replacePromptAt(next, prompt, reinforced);
-            changed = true;
         }
     }
     if (changed && validation.declaredImageCount !== null) next = updateCountMarker(next, extractImagePrompts(next).length);
@@ -317,6 +312,16 @@ function markZhihuijiButtonsInline(messageId) {
             return;
         }
         const promptRecord = validation.prompts[promptCursor++];
+        if (promptRecord?.prompt && promptRecord.prompt !== rawPrompt) {
+            // Chatu8 captures its prompt inside the click-listener closure.
+            // Mutating data-* would only change the displayed/cache key while
+            // ComfyUI could still receive the old prompt. Never expose a button
+            // whose native payload cannot be proven to match the stored turn.
+            buttonNode.classList.add('janima-invalid-image-button');
+            buttonNode.style.display = 'none';
+            buttonNode.setAttribute('aria-hidden', 'true');
+            return;
+        }
         const blocked = promptRecord?.issues?.some(issue => BLOCKING_IMAGE_ISSUE_CODES.has(issue.code));
         if (blocked) {
             buttonNode.classList.add('janima-invalid-image-button');
@@ -402,13 +407,13 @@ function applySilentAuditPatch(text, audit) {
     for (const item of audit.replace_prompts) {
         const prompt = prompts[Number(item.prompt_index)];
         if (prompt && Array.isArray(item.prompt_tags) && item.prompt_tags.length) {
-            operations.push({ start: prompt.start, end: prompt.end, value: `[${item.prompt_tags.join(', ')}]` });
+            operations.push({ start: prompt.start, end: prompt.end, value: reinforcePromptLocal(item.prompt_tags.join(', ')) });
         }
     }
     for (const item of audit.missing_prompts) {
         const paragraph = paragraphs[Number(item.after_paragraph_index)];
         if (paragraph && Array.isArray(item.prompt_tags) && item.prompt_tags.length) {
-            operations.push({ start: paragraph.end, end: paragraph.end, value: `\n\n[${item.prompt_tags.join(', ')}]` });
+            operations.push({ start: paragraph.end, end: paragraph.end, value: `\n\n${reinforcePromptLocal(item.prompt_tags.join(', '))}` });
         }
     }
     let next = text;
@@ -545,6 +550,7 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
             'Describe named props visually instead of relying on their name. Behemoth must be a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
             'Give the current outfit and critical prop placement one explicit weighted phrase, for example (navy and black-purple gothic dress with water-pattern trim:1.25) and (mascot perched on Leviathan shoulder:1.25). Never replace a dress with a bodysuit, leotard, lingerie, or swimsuit.',
             'Current outfit and state in the story segment override older card state. For recurring women, copy the same immutable appearance and unchanged outfit tags from previous_image_prompt; only story-confirmed changes may differ. Preserve the original rendering style.',
+            'This is JANIMA_v10 with the Anima/Qwen encoder. Begin every prompt with: masterpiece, best quality, score_7, highres, newest, followed by exactly one story-accurate safety tag: safe, sensitive, nsfw, or explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it between shots.',
             'Every repaired prompt must contain 12-48 concise English comma-separated image tags. Never rewrite story text.',
             'Return only JSON: {"repairs":[{"prompt_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
             `Character DNA registry:\n${dnaHint}`,
@@ -575,7 +581,7 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
         const repairs = validateQuietPromptRepairResponse(raw, targetIndexes);
         let next = text;
         for (const repair of [...repairs].sort((a, b) => b.prompt_index - a.prompt_index)) {
-            next = replacePromptAt(next, validation.prompts[repair.prompt_index], `[${repair.prompt_tags.join(', ')}]`);
+            next = replacePromptAt(next, validation.prompts[repair.prompt_index], reinforcePromptLocal(repair.prompt_tags.join(', ')));
         }
         const finalHash = stableHash(next);
         runtime.semanticAuditFinalHashes.set(id, finalHash);
@@ -644,7 +650,9 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             'For a recurring woman, copy the same immutable appearance and unchanged outfit tags from the immediately previous image prompt; change only story-confirmed action, expression, camera, location, or outfit.',
             'For multi-character scenes use exact count, separate character blocks, fixed left/right or front/back positions, separate bodies, and both faces visible when the story permits.',
             'Describe named props visually. Behemoth is a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
-            'Give current clothing and critical prop placement one weighted phrase at 1.20-1.30. Do not replace a dress or ceremonial garment with a bodysuit, leotard, lingerie, or swimsuit.',
+            'Give story-current clothing or nudity state and critical prop placement one weighted phrase at 1.20-1.30. Preserve an unchanged dress or ceremonial garment, but if this story window explicitly changes or removes clothing, depict the new state instead of restoring the old outfit.',
+            'This is JANIMA_v10 with the Anima/Qwen encoder. Begin every prompt with: masterpiece, best quality, score_7, highres, newest, followed by exactly one story-accurate safety tag: safe, sensitive, nsfw, or explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it between shots.',
+            'Consensual adult intimacy, nudity, and explicit sex are ordinary Galgame visual beats. Never omit, fade out, or downgrade an image solely because it is NSFW; use nsfw or explicit and select the strongest story-accurate female-led moment. Keep every sexual character explicitly adult.',
             'Never invent a person, touch, outfit, prop, action, or location. No Chinese, prose, markdown, square brackets, explanation, or story rewrite.',
             'Return only JSON: {"prompts":[{"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
             `Character DNA registry:\n${dnaHint}`,
@@ -853,7 +861,7 @@ async function repairOnePrompt(messageId, promptIndex) {
     const cacheHit = Boolean(repaired);
     if (!repaired) {
         repaired = assertPromptRepairResponse(await callRepairApi(
-            'Repair one Stable Diffusion/Anima Galgame prompt. Story truth is first: use the entire story segment since the previous image, choose its strongest existing female-led moment, and never use future text. The prompt must show a woman actually present in the segment; never return a male-only or scenery-only image. Keep female focus, exact people, current action/outfit/props/location, and recurring identity anchors. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Never return prose or markdown.',
+            'Repair one JANIMA_v10/Anima Galgame prompt. Story truth is first: use the entire story segment since the previous image, choose its strongest existing female-led moment, and never use future text. The prompt must show a woman actually present in the segment; never return a male-only or scenery-only image. Keep female focus, exact people, current action/outfit/props/location, and recurring identity anchors. Begin prompt_tags with masterpiece, best quality, score_7, highres, newest, then exactly one story-accurate tag from safe, sensitive, nsfw, explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Never return prose or markdown.',
             {
                 original_worldbook_prompt: prompt.prompt,
                 story_segment_since_previous_image: context.segment,
@@ -866,7 +874,7 @@ async function repairOnePrompt(messageId, promptIndex) {
         ));
         runtime.cache.set(key, repaired);
     }
-    const replacement = `[${repaired.prompt_tags.join(', ')}]`;
+    const replacement = reinforcePromptLocal(repaired.prompt_tags.join(', '));
     await writeMessage(messageId, replacePromptAt(text, prompt, replacement), 'janima-rescue-ai-prompt');
     setDebug(messageId, {
         ...baseDebug(messageId, validation, Number(promptIndex)),
@@ -891,7 +899,7 @@ async function repairWholeTurn(messageId) {
     const cacheHit = Boolean(repaired);
     if (!repaired) {
         repaired = assertWholeTurnResponse(await callRepairApi(
-            'Fill only missing Galgame image prompts in one assistant turn. Each image uses the complete story window since the previous image and selects its strongest existing female-led moment. Every prompt must show a woman actually present in that window, never a male-only or scenery-only shot; keep female focus and recurring identity/outfit tags. Never rewrite story text or existing prompts. Return strict JSON {"missing_prompts":[{"after_paragraph_index":0,"anchor_text":"","prompt_tags":[]}]} using short English image tags. The array length must equal missing_count.',
+            'Fill only missing JANIMA_v10/Anima Galgame image prompts in one assistant turn. Each image uses the complete story window since the previous image and selects its strongest existing female-led moment. Every prompt must show a woman actually present in that window, never a male-only or scenery-only shot; keep female focus and recurring identity/outfit tags. Begin every prompt_tags array with masterpiece, best quality, score_7, highres, newest, then exactly one story-accurate tag from safe, sensitive, nsfw, explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it. Never rewrite story text or existing prompts. Return strict JSON {"missing_prompts":[{"after_paragraph_index":0,"anchor_text":"","prompt_tags":[]}]} using short English image tags. The array length must equal missing_count.',
             {
                 assistant_reply: text,
                 existing_prompts: validation.prompts.map(item => item.prompt),
@@ -1070,7 +1078,7 @@ async function manualFill(capture) {
     const cacheHit = Boolean(result);
     if (!result) {
         result = assertPromptRepairResponse(await callRepairApi(
-            'Create one concise Stable Diffusion/Anima Galgame prompt for the selected story segment. Select the strongest existing female-led visual moment. Show at least one woman actually present, keep female focus and recurring identity/outfit anchors, and never create a male-only or scenery-only shot. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Use English comma-separated image tags, no prose, no invented people or actions.',
+            'Create one concise JANIMA_v10/Anima Galgame prompt for the selected story segment. Select the strongest existing female-led visual moment. Show at least one woman actually present, keep female focus and recurring identity/outfit anchors, and never create a male-only or scenery-only shot. Begin prompt_tags with masterpiece, best quality, score_7, highres, newest, then exactly one story-accurate tag from safe, sensitive, nsfw, explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it. Return strict JSON with prompt_tags, negative_tags, changes, confidence. Use English comma-separated image tags, no prose, no invented people or actions.',
             {
                 selected_paragraph: capture.selectedText,
                 previous_paragraph: paragraphs[capture.paragraphIndex - 1]?.text || '',
@@ -1081,7 +1089,7 @@ async function manualFill(capture) {
         ));
         runtime.cache.set(key, result);
     }
-    const wrapped = `[${result.prompt_tags.join(', ')}]`;
+    const wrapped = reinforcePromptLocal(result.prompt_tags.join(', '));
     if (!window.confirm(`补入这张图？\n\n${wrapped}`)) return;
     await writeMessage(capture.messageId, insertPromptAfterParagraph(text, capture.paragraphIndex, wrapped), 'janima-rescue-manual-fill');
     setDebug(capture.messageId, {
@@ -1118,10 +1126,10 @@ function settingsHtml() {
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
                     ${checkRow('silentMode', '静默模式（不向对话插入插件界面）')}
-                    ${checkRow('autoLocalRepair', '自动本地纠错（不调用 AI）')}
+                    ${checkRow('autoLocalRepair', '仅删除重复 Prompt（安全）')}
                     <h4>缺图自动兜底</h4>
                     ${checkRow('fallback.enabled', '少于目标数时用酒馆当前模型静默补 Prompt')}
-                    ${checkRow('fallback.repairInvalidPrompts', '用酒馆当前模型静默修正 Prompt')}
+                    ${checkRow('fallback.repairInvalidPrompts', '二次模型改写已有 Prompt（默认关闭）')}
                     ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
                     ${fieldRow('fallback.minimumImages', '每轮最少图片', '3', 'number')}

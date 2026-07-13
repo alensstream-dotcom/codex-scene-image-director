@@ -62,3 +62,16 @@ test('a short female reaction still counts as a new story segment', () => {
     const text = '她笑了。\n\n[1girl, solo, female focus, adult woman, blonde hair, blue eyes, smiling warmly, close-up reaction, soft lighting]\n\n<!--IMG_COUNT:1-->';
     assert.ok(!validateTurn(text).issues.some(issue => issue.code === 'empty_story_segment'));
 });
+
+test('accepts a story-aligned explicit adult female-led prompt', () => {
+    const text = [
+        '两名成年人在卧室里延续彼此自愿的亲密互动，她主动拉近距离。',
+        '',
+        '[masterpiece, best quality, score_7, highres, newest, explicit, 1girl and 1boy, female focus, adult woman, tall curvy build, pale skin, oval face, very long blonde hair, blue eyes, adult man behind her, intimate embrace, bedroom, flushed expression, medium two-shot, warm lighting]',
+        '',
+        '<!--IMG_COUNT:1-->',
+    ].join('\n');
+    const result = validateTurn(text);
+    assert.ok(!result.issues.some(issue => ['female_subject_missing', 'people_conflict', 'solo_relation_conflict'].includes(issue.code)));
+    assert.equal(result.ok, true);
+});

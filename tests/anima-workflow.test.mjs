@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     ANIMA_ACCURACY_WORKFLOW_ID,
+    ANIMA_NATIVE_NEGATIVE_TAGS,
+    ANIMA_PROMPT_PRESET_ID,
     buildAnimaAccuracyWorkflow,
     installAnimaAccuracyWorkflow,
 } from '../lib/anima-workflow.mjs';
@@ -22,15 +24,18 @@ test('Galgame workflow restores the user Turbo LoRA and eight-step sampling', ()
     assert.equal(Object.values(graph).some(node => node.class_type === 'LoraLoader'), true);
 });
 
-test('installer selects the accuracy workflow and adds identity negatives once', () => {
+test('installer selects the native Anima workflow and isolated prompt preset once', () => {
     const settings = { workers: {}, yushe: { 默认: { negativePrompt: 'low quality, wrong face' } } };
     assert.equal(installAnimaAccuracyWorkflow(settings), true);
     assert.equal(settings.workerid, ANIMA_ACCURACY_WORKFLOW_ID);
     assert.equal(settings.comfyui_steps, 8);
-    assert.match(settings.yushe.默认.negativePrompt, /missing character/);
-    assert.match(settings.yushe.默认.negativePrompt, /skintight bodysuit/);
-    assert.match(settings.yushe.默认.negativePrompt, /floating mascot/);
-    const first = settings.yushe.默认.negativePrompt;
+    assert.equal(settings.AQT_comfyui, '');
+    assert.equal(settings.UCP_comfyui, ANIMA_NATIVE_NEGATIVE_TAGS.join(', '));
+    assert.equal(settings.yusheid_comfyui, ANIMA_PROMPT_PRESET_ID);
+    assert.equal(settings.yushe.默认.negativePrompt, 'low quality, wrong face');
+    assert.equal(settings.yushe[ANIMA_PROMPT_PRESET_ID].negativePrompt, '');
+    assert.match(settings.UCP_comfyui, /chromatic aberration/);
+    const first = JSON.stringify(settings);
     assert.equal(installAnimaAccuracyWorkflow(settings), false);
-    assert.equal(settings.yushe.默认.negativePrompt, first);
+    assert.equal(JSON.stringify(settings), first);
 });

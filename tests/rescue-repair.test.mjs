@@ -15,7 +15,7 @@ test('local reinforcement is deterministic and never calls fetch', () => {
     globalThis.fetch = () => { called = true; throw new Error('must not call'); };
     try {
         const result = reinforcePromptLocal('[1girl， pink hair, pink hair, sitting]');
-        assert.match(result, /^\[1girl, solo,/);
+        assert.match(result, /^\[masterpiece, best quality, score_7, highres, newest, safe, 1girl, solo,/);
         assert.equal((result.match(/pink hair/g) || []).length, 1);
         assert.match(result, /tight composition/);
         assert.equal(called, false);
@@ -27,6 +27,26 @@ test('local reinforcement is deterministic and never calls fetch', () => {
 test('local reinforcement never adds solo to an explicit two-girl prompt', () => {
     const result = reinforcePromptLocal('[2girls, Sakura, Lan, distinct outfits, standing together, upper body]');
     assert.ok(!result.split(',').map(tag => tag.trim().toLowerCase()).includes('solo'));
+});
+
+test('local reinforcement makes a Galgame protagonist physically visible for contact', () => {
+    const result = reinforcePromptLocal('[Eileen, adult woman, silver-white long hair, violet eyes, touching the protagonist chest crest with her right fingertips, emotional close-up]');
+    assert.match(result, /1girl and 1boy/);
+    assert.match(result, /male protagonist torso partly visible/);
+    assert.doesNotMatch(result, /, solo,/);
+    assert.equal(reinforcePromptLocal(result), result);
+});
+
+test('local reinforcement selects one Anima safety tag from the actual content', () => {
+    const normal = reinforcePromptLocal('[1girl, silver hair, school uniform, smile, upper body]');
+    const clothedCurvy = reinforcePromptLocal('[1girl, adult woman, large breasts, formal gothic dress, upper body]');
+    const nude = reinforcePromptLocal('[1girl, solo, nude, nipples, lying on bed, upper body]');
+    const adult = reinforcePromptLocal('[1girl, 1boy, vaginal sex, explicit, on bed, medium shot]');
+    assert.match(normal, /newest, safe, 1girl/);
+    assert.match(clothedCurvy, /newest, safe, 1girl/);
+    assert.match(nude, /newest, nsfw, 1girl/);
+    assert.match(adult, /newest, explicit, 1girl/);
+    assert.doesNotMatch(adult, /, safe,/);
 });
 
 test('repair replaces only one prompt and preserves story', () => {
@@ -41,7 +61,7 @@ test('repair replaces only one prompt and preserves story', () => {
 test('whole-turn fill inserts only at requested paragraph', () => {
     const source = '第一段。\n\n第二段。\n\n<!--IMG_COUNT:1-->';
     const next = applyMissingPrompts(source, [{ after_paragraph_index: 0, prompt_tags: ['1girl', 'solo', 'Sakura', 'pink hair', 'home dress', 'upper body'] }]);
-    assert.match(next, /^第一段。\n\n\[1girl/m);
+    assert.match(next, /^第一段。\n\n\[masterpiece, best quality, score_7, highres, newest, safe, 1girl/m);
     assert.match(next, /第二段。/);
 });
 
