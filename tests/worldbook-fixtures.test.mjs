@@ -25,7 +25,7 @@ test('doorway regression restores current clothing/action and excludes invented 
     for (const tag of scene.mustNotInclude) assert.ok(!scene.prompt.toLowerCase().includes(tag.toLowerCase()), tag);
 });
 
-test('v8.0 worldbook preserves v7.8.2 DNA/variable entries and enforces adaptive 3-6 inline prompts', async () => {
+test('v8.1 worldbook preserves variables and enforces adaptive inline prompts plus identity locks', async () => {
     const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_0_worldbook.json', import.meta.url), 'utf8'));
     const entries = Object.values(worldbook.entries);
     assert.equal(entries.length, 5);
@@ -33,14 +33,19 @@ test('v8.0 worldbook preserves v7.8.2 DNA/variable entries and enforces adaptive
     assert.equal(entries[1].disable, true);
     assert.match(entries[2].content, /FM_DNA_REGISTERED/);
     assert.match(entries[3].content, /FM_DNA \/ FM_SCENE \/ FM_ANCHOR/);
-    assert.match(entries[4].comment, /v8\.0/);
+    assert.match(entries[4].comment, /v8\.1/);
     assert.equal(entries[4].disable, false);
     assert.equal(entries[4].order, 999);
-    assert.match(entries[4].content, /必须至少3个有效 Prompt/);
-    assert.match(entries[4].content, /硬上限6张/);
-    assert.match(entries[4].content, /每完成一个被选中的 beat，立即在该段正文下输出/);
-    assert.match(entries[4].content, /禁止输出\[Unnamed Persona\]/);
+    assert.match(entries[4].content, /至少\s*3\s*个有效 Prompt/);
+    assert.match(entries[4].content, /硬上限\s*6\s*张/);
+    assert.match(entries[4].content, /每个 Prompt 只描绘它正上方紧邻段落/);
+    assert.match(entries[4].content, /禁止\s*\[Unnamed Persona\]/);
     assert.match(entries[4].content, /<!--IMG_COUNT:n-->/);
+    assert.match(entries[2].content, /CANONICAL LOCK: Lucifer/);
+    assert.match(entries[2].content, /CANONICAL LOCK: Leviathan/);
+    assert.match(entries[2].content, /CANONICAL PROP LOCK: Behemoth/);
+    assert.match(entries[4].content, /two separate bodies/);
+    assert.match(entries[4].content, /角色名字不是外貌/);
 });
 
 test('regex package has three narrow rules and preserves ordinary brackets', async () => {
@@ -59,6 +64,7 @@ test('regex package has three narrow rules and preserves ordinary brackets', asy
 
 test('runtime is silent and uses only the verified inline Zhihuiji button route', async () => {
     const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+    const workflowSource = await readFile(new URL('../lib/anima-workflow.mjs', import.meta.url), 'utf8');
     const css = await readFile(new URL('../style.css', import.meta.url), 'utf8');
     assert.match(source, /\.st-chatu8-image-button/);
     assert.doesNotMatch(source, /generate-image-request/);
@@ -68,6 +74,9 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /minimumImages:\s*3/);
     assert.match(source, /maximumImages:\s*6/);
     assert.match(source, /repairInvalidPrompts:\s*true/);
+    assert.match(source, /semanticAudit:\s*true/);
+    assert.match(source, /accuracyWorkflow:\s*true/);
+    assert.match(workflowSource, /JANIMA_剧情准确_30步_角色锁_v1/);
     assert.match(source, /janima-current-model-prompt-repair/);
     assert.match(source, /janima-invalid-image-button/);
     assert.doesNotMatch(source, /host\.append\(panel\)/);
