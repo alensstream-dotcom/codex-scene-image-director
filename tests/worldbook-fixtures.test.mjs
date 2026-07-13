@@ -79,6 +79,7 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /semanticAudit:\s*true/);
     assert.match(source, /accuracyWorkflow:\s*true/);
     assert.match(source, /janimaSemanticAuditHash/);
+    assert.match(source, /Number\(messageId\) === 0/);
     assert.match(workflowSource, /JANIMA_剧情准确_30步_角色锁_v1/);
     assert.match(source, /janima-current-model-prompt-repair/);
     assert.match(source, /janima-invalid-image-button/);

@@ -32,7 +32,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.3.2';
+const EXT_VERSION = '1.3.3';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
@@ -573,6 +573,9 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
 async function runAutomaticQuietFallback(messageId, text, validation) {
     const config = settings().fallback;
     if (!config.enabled) return false;
+    // The greeting (message 0) is character-card boilerplate, not a normal
+    // generated story turn. Never launch a slow fallback request on each reload.
+    if (Number(messageId) === 0) return false;
     const candidates = storyParagraphCandidates(text);
     if (!candidates.length) return false;
     const minimum = Math.max(3, Math.min(6, Number(config.minimumImages || 3)));
