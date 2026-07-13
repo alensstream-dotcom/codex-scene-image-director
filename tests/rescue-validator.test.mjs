@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateTurn } from '../lib/rescue-core.mjs';
 
-const good = '剧情。\n\n[1girl, solo, Sakura, pink long hair, home dress, upper body]\n\n<!--IMG_COUNT:1-->';
+const good = '樱推开窗户，回头坚定地看向来人。\n\n[1girl, solo, female focus, Sakura, pink long hair, home dress, turning toward the viewer, determined expression, upper body]\n\n<!--IMG_COUNT:1-->';
 
 test('accepts matching count and prompt', () => {
     const result = validateTurn(good);
@@ -36,4 +36,29 @@ test('flags prompts longer than the configured limit', () => {
 test('flags solo prompts that explicitly place a second person beside the subject', () => {
     const text = '剧情。\n\n[1girl, solo, Lucifer, blonde hair, blue eyes, Leviathan kneeling beside her, dark hall, medium shot]\n\n<!--IMG_COUNT:1-->';
     assert.ok(validateTurn(text).issues.some(issue => issue.code === 'solo_relation_conflict'));
+});
+
+test('rejects male-only and scenery-only Galgame prompts but accepts a female-led mixed shot', () => {
+    const story = '门外传来脚步声，众人同时回头。';
+    const maleOnly = `${story}\n\n[1boy, solo, black hair, dark coat, running through the corridor, dynamic shot]\n\n<!--IMG_COUNT:1-->`;
+    const sceneryOnly = `${story}\n\n[masterpiece, empty gothic corridor, moonlight, detailed background, cinematic lighting]\n\n<!--IMG_COUNT:1-->`;
+    const mixed = `${story}\n\n[1girl and 1boy, female focus, adult woman in the foreground, blonde hair, blue eyes, raising her sword, male companion behind her, shocked expression, gothic corridor, dynamic composition]\n\n<!--IMG_COUNT:1-->`;
+    assert.ok(validateTurn(maleOnly).issues.some(issue => issue.code === 'female_subject_missing'));
+    assert.ok(validateTurn(sceneryOnly).issues.some(issue => issue.code === 'female_subject_missing'));
+    assert.ok(!validateTurn(mixed).issues.some(issue => issue.code === 'female_subject_missing'));
+});
+
+test('rejects two image prompts with no new story between them', () => {
+    const text = [
+        '少女拔出长剑，挡在同伴身前。', '',
+        '[1girl, solo, female focus, adult woman, silver hair, blue eyes, drawing a sword, determined expression, medium shot]', '',
+        '[1girl, solo, female focus, adult woman, silver hair, blue eyes, holding a sword, determined expression, close-up]', '',
+        '<!--IMG_COUNT:2-->',
+    ].join('\n');
+    assert.ok(validateTurn(text).issues.some(issue => issue.code === 'empty_story_segment'));
+});
+
+test('a short female reaction still counts as a new story segment', () => {
+    const text = '她笑了。\n\n[1girl, solo, female focus, adult woman, blonde hair, blue eyes, smiling warmly, close-up reaction, soft lighting]\n\n<!--IMG_COUNT:1-->';
+    assert.ok(!validateTurn(text).issues.some(issue => issue.code === 'empty_story_segment'));
 });

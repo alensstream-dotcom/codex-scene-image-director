@@ -5,7 +5,7 @@
   {"id":4,"name":"沙发坐姿","expectedCount":3,"fixture":"sofa-scene.json"},
   {"id":5,"name":"女角色递东西","expectedCount":3,"rule":"minimum three around the clear hand and object action"},
   {"id":6,"name":"女角色接东西","expectedCount":3,"rule":"minimum three around the receiver and object"},
-  {"id":7,"name":"单男主普通行动","expectedCount":3,"rule":"normal story still satisfies the minimum"},
+  {"id":7,"name":"单男主普通行动","expectedCount":0,"rule":"male-only travel and scenery never consume a Galgame image slot"},
   {"id":8,"name":"纯心理活动","expectedCount":3,"rule":"use visible framing, environment, and expression beats"},
   {"id":9,"name":"两女角色抓袖口","expectedCount":3,"fixture":"multi-character-scene.json"},
   {"id":10,"name":"一男一女递物","expectedCount":3,"rule":"explicit positions and action"},

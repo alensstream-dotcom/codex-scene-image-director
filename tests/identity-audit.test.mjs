@@ -19,7 +19,7 @@ test('accepts complete independent DNA blocks in a two-character scene', () => {
     const text = [
         '两人同时出现在王座前。',
         '',
-        '[masterpiece, best quality, newest, high resolution, anime illustration, 2girls, exactly two adult women, two separate bodies, both faces visible, clear body separation, Lucifer on the left, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, black thorn chains, Leviathan on the right, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, navy gothic dress, dark throne room, medium two-shot]',
+        '[masterpiece, best quality, newest, high resolution, anime illustration, 2girls, exactly two adult women, female focus, two separate bodies, both faces visible, clear body separation, Lucifer on the left, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, black thorn chains, Lucifer shielding Leviathan, determined expression, Leviathan on the right, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, navy gothic dress, Leviathan looking up in surprise, dark throne room, medium two-shot]',
         '',
         '<!--IMG_COUNT:1-->',
     ].join('\n');

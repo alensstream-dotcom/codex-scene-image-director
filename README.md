@@ -3,7 +3,7 @@
 正常链路：
 
 ```text
-主模型 + JANIMA v8.1 身份锁世界书 → 每轮3–6个原位 Prompt → 本地异常检查 → 智绘姬真实按钮 → JANIMA Galgame Turbo 8步工作流
+主模型 + JANIMA v8.2 手机 Galgame 分镜世界书 → 逐段最佳女性 Prompt → 本地剧情窗口/女性门禁 → 智绘姬真实按钮 → JANIMA Galgame Turbo 8步工作流
 ```
 
 插件默认不在对话中显示状态栏、工具栏或第二列，不占正文宽度。智绘姬按钮保留在 Prompt 的原生位置：Prompt 紧跟哪段剧情，按钮和生成图片就出现在哪段剧情下。
@@ -18,7 +18,7 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 
 然后：
 
-1. 导入 `worldbooks/JANIMA_v8_0_worldbook.json`（文件名保持兼容，内容已升级为 v8.1）。它保留 FM_DNA、场景变量与 UpdateVariable，同时增加逐图角色身份锁。
+1. 手机下载并导入 `worldbooks/JANIMA_v8_2_Galgame_Director.json`。兼容文件 `JANIMA_v8_0_worldbook.json` 内容相同；它保留 FM_DNA、场景变量与 UpdateVariable。
 2. 关闭旧 v7.8.2 主世界书，避免两套规则同时生效；已有 FM_DNA 变量数据不用删除。
 3. 导入 `regex/JANIMA_rescue_regex.json`。
 4. 智绘姬标记设置为 `[` 和 `]`，关闭 LLM 扩写、正文二次分析、自动重写和自动风格。
@@ -28,8 +28,8 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 - 静默检查最新 assistant 回复，不向 `.mes` 追加任何可见插件节点。
 - 自动规范标点、去重、明确的 `solo` 与缺失构图词；本地处理不调用 AI。
 - 删除完全重复的 Prompt。
-- 如世界书本轮漏写 Prompt，静默调用酒馆当前模型补到至少3张；快节奏回复自动增加到4–6张。
-- 默认只对真正存在人数冲突、身份锚点缺失或道具错误的 Prompt 调用静默修复；不再让每张正常 Prompt 额外等待一次 AI 深度重审。
+- 如世界书漏写 Prompt，静默调用酒馆当前模型按“上一张图之后的完整剧情窗口”补图；快节奏回复自动增加到4–6张。
+- 自动拦截纯男性、纯场景、纯建筑和纯道具 Prompt；男女同框时强制女性为视觉中心。默认只对真正异常的 Prompt 调用静默修复，不让正常 Prompt 额外等待 AI 深度重审。
 - 每个可见命名角色在每张图中重复脸、发色/发型、瞳色、体型和标志服装锚点；双人图强制分角色块、左右/前后位置和独立身体。
 - 自动安装并选中 `JANIMA_Galgame_Turbo_8步_角色锁_v1`：使用官方 Turbo 建议的 `anima-turbo-lora-v0.2`、8 步、CFG 1、`euler` + `normal`，优先保证聊天中的即时出图体验。
 - 给真实 `.st-chatu8-image-button` 添加原位正常文档流布局，不新建替代按钮。
@@ -37,12 +37,14 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 - 自动隐藏智绘姬对 `[Unnamed Persona]` 等非图像方括号的误识别按钮。
 - 可选外部 API 审计可进一步删除低价值/错误图片 Prompt；不开也不影响上述当前模型兜底，任何失败都不覆盖原文。
 
-## 世界书选图原则
+## v8.2 世界书选图原则
 
-- 每轮正常剧情至少3张：开场状态、核心动作/互动、结尾变化。
+- 每张图读取“上一张 Prompt 之后到当前插入点”的完整剧情，不只看最后一句，不使用未来剧情。
+- 从该窗口选择剧情后果、女性情绪、动作关系、视觉反差和镜头新鲜度最强的一帧。
+- 每张必须有剧情中真实出现的女性；禁止单男、空镜、风景和纯道具。整轮没有女性时宁可0张，也不捏造女性。
+- 正常含女性剧情目标3张：开场女性状态、核心互动高点、结尾变化；实际只有1–2个有效女性 beat 时不重复凑图。
 - 地点切换、新角色登场、换装、强表情、道具或动作阶段变化时增加到4张。
 - 追逐、战斗、多地点高速转场可以5–6张，硬上限6张。
-- 纯技术说明或用户明确要求不写剧情时才可以0张。
 - 每个 Prompt 必须紧跟对应剧情，禁止堆到回复底部。
 
 ## 测试
@@ -51,4 +53,4 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 node --test tests/*.test.mjs
 ```
 
-完整安装包：`JANIMA_worldbook_auto_image_v1_3_package.zip`。
+手机安装说明见 `docs/mobile-install.md`。

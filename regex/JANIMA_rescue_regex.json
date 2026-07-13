@@ -2,7 +2,7 @@
   {
     "id": "janima-hide-img-count",
     "scriptName": "JANIMA 1 - 隐藏 IMG_COUNT 且不回灌",
-    "findRegex": "/<!--\\s*IMG_COUNT\\s*:\\s*[0-3]\\s*-->/gi",
+    "findRegex": "/<!--\\s*IMG_COUNT\\s*:\\s*[0-6]\\s*-->/gi",
     "replaceString": "",
     "trimStrings": [],
     "placement": [2],
