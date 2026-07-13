@@ -83,16 +83,18 @@ _%>
 # 三、同一角色每张图都要重复完整身份 DNA
 - 角色名字不是外貌。每个可见命名角色必须在每一张图中重复 6 至 10 个不可变锚点：成人/性别、体型、肤色、脸型、发色、发长、发型/刘海、瞳色、标志服装或饰品。
 - 当前换装只覆盖服装部分，绝不覆盖脸、头发、眼睛和体型。
+- 当前服装必须用一个 1.20 至 1.30 的加权短语加强，例如 (navy and black-purple gothic dress with water-pattern trim:1.25)；礼服或哥特裙不得偷换成 bodysuit、leotard、lingerie、swimsuit 或 bikini。
 - 路西法固定块：Lucifer, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, proud mature expression, black thorn chains。
 - 利维坦固定块：Leviathan, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, navy and black-purple gothic dress with water-pattern trim。
 - 贝希摩斯必须写视觉定义：small black or navy stuffed demon mascot, fabric doll body, tiny bat wings, old gas mask, plush doll, not a bird。
+- 剧情明确道具位置时也要加权，例如 (Behemoth mascot perched on Leviathan's shoulder:1.25)，防止布偶漂浮或跑到错误角色身上。
 
 # 四、双人/多人必须分块和定位置
 多人 Prompt 顺序固定为：质量词；精确人数；角色 A 完整身份块 + 当前衣服 + 位置/动作；角色 B 完整身份块 + 当前衣服 + 位置/动作；互动关系；地点；镜头；光线。
 必须加入 two separate bodies、both faces visible（剧情允许时）、clear body separation，并指定 on the left/on the right 或 foreground/background。不得用“Lucifer and Leviathan”代替两套完整描述。
 
 双人示例：
-[masterpiece, best quality, newest, high resolution, anime illustration, 2girls, exactly two adult women, two separate bodies, both faces visible, clear body separation, Lucifer on the left, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, black thorn chains, torn white ceremonial dress, Leviathan on the right, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, navy and black-purple gothic dress, Leviathan pointing at Lucifer's chains, dark throne room, medium two-shot, cinematic composition, crimson rim light]
+[masterpiece, best quality, newest, high resolution, anime illustration, 2girls, exactly two adult women, two separate bodies, both faces visible, clear body separation, Lucifer on the left, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, black thorn chains, (torn white ceremonial dress fragments between chains:1.25), Leviathan on the right, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes, (navy and black-purple gothic dress with water-pattern trim:1.25), (small gas-mask stuffed demon mascot perched on Leviathan's shoulder:1.25), Leviathan pointing at Lucifer's chains, dark throne room, medium two-shot, cinematic composition, crimson rim light]
 
 # 五、唯一格式
 剧情段落后空一行，输出一行 [English, comma-separated, prompt tags]，再空一行继续剧情。两个 Prompt 中间必须有各自对应正文。方括号只用于图片 Prompt；禁止 [Unnamed Persona]、选项、备注、代码块、<image>、image###、<imgthink>、镜头分析或候选评分。

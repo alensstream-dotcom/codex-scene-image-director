@@ -24,6 +24,8 @@ test('installer selects the accuracy workflow and adds identity negatives once',
     assert.equal(settings.workerid, ANIMA_ACCURACY_WORKFLOW_ID);
     assert.equal(settings.comfyui_steps, 30);
     assert.match(settings.yushe.默认.negativePrompt, /missing character/);
+    assert.match(settings.yushe.默认.negativePrompt, /skintight bodysuit/);
+    assert.match(settings.yushe.默认.negativePrompt, /floating mascot/);
     const first = settings.yushe.默认.negativePrompt;
     assert.equal(installAnimaAccuracyWorkflow(settings), false);
     assert.equal(settings.yushe.默认.negativePrompt, first);
