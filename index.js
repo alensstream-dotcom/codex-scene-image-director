@@ -28,7 +28,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.2.1';
+const EXT_VERSION = '1.2.2';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
@@ -82,6 +82,7 @@ const runtime = {
     localRepairHashes: new Set(),
     fallbackHashes: new Set(),
     fallbackInFlight: new Set(),
+    zhihuijiRescanHashes: new Set(),
 };
 
 function mergeDefaults(base, incoming) {
@@ -245,6 +246,41 @@ function markZhihuijiButtonsInline(messageId) {
         inlineButtonCount: validButtons.length,
         ignoredFalseButtonCount: buttons.length - validButtons.length,
     });
+}
+
+function nudgeZhihuijiObserver(messageId, validation = validateTurn(getMessageText(messageId))) {
+    if (!settings().chatu8.enabled || !validation.prompts.length) return false;
+    const id = Number(messageId);
+    const key = `${id}:${stableHash(getMessageText(id))}:chatu8-observer`;
+    if (runtime.zhihuijiRescanHashes.has(key)) return false;
+    runtime.zhihuijiRescanHashes.add(key);
+
+    const wake = delay => setTimeout(() => {
+        const host = messageElement(id);
+        const textRoot = host?.querySelector('.mes_text');
+        if (!textRoot || verifiedZhihuijiButtons(id).length >= validation.prompts.length) return;
+
+        // st-chatu8 2.7.x performs its native recognition from a DOM observer.
+        // A transient, empty node wakes that observer without changing chat text,
+        // adding visible UI, or clicking any generation button.
+        const marker = document.createElement('span');
+        marker.hidden = true;
+        marker.setAttribute('aria-hidden', 'true');
+        marker.dataset.janimaChatu8Rescan = key;
+        textRoot.append(marker);
+        requestAnimationFrame(() => marker.remove());
+        setTimeout(() => markZhihuijiButtonsInline(id), 450);
+    }, delay);
+
+    wake(80);
+    wake(700);
+    wake(Math.min(2400, Math.max(1200, Number(settings().chatu8.rescanTimeoutMs || 3500) - 700)));
+    setDebug(id, {
+        zhihuijiButtonFound: false,
+        zhihuijiRoute: 'native DOM observer rescan scheduled',
+        generationStatus: 'waiting-for-button',
+    });
+    return true;
 }
 
 function validateSilentAuditResponse(payload) {
@@ -470,6 +506,7 @@ async function renderMessageCheck(messageId) {
     }
     if (await runAutomaticQuietFallback(messageId, text, validation)) return;
     markZhihuijiButtonsInline(messageId);
+    nudgeZhihuijiObserver(messageId, validation);
     setTimeout(() => markZhihuijiButtonsInline(messageId), 350);
     await runAutomaticAiAudit(messageId, text, validation);
 }
@@ -648,6 +685,7 @@ async function waitForZhihuijiButton(messageId, promptIndex) {
 }
 
 async function rescanZhihuiji(messageId, promptIndex) {
+    nudgeZhihuijiObserver(Number(messageId));
     await eventSource.emit(event_types.MESSAGE_UPDATED, Number(messageId), 'janima-rescue-rescan');
     const buttonNode = await waitForZhihuijiButton(messageId, promptIndex);
     setDebug(messageId, {
