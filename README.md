@@ -31,7 +31,7 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 - 如世界书本轮漏写 Prompt，静默调用酒馆当前模型补到至少3张；快节奏回复自动增加到4–6张。
 - 默认只对真正存在人数冲突、身份锚点缺失或道具错误的 Prompt 调用静默修复；不再让每张正常 Prompt 额外等待一次 AI 深度重审。
 - 每个可见命名角色在每张图中重复脸、发色/发型、瞳色、体型和标志服装锚点；双人图强制分角色块、左右/前后位置和独立身体。
-- 自动安装并选中 `JANIMA_Galgame_Turbo_8步_角色锁_v1`：恢复用户原有 `anima-turbo-lora-v0.2`、8 步、CFG 4.5、`er_sde` + `normal`，优先保证聊天中的即时出图体验。
+- 自动安装并选中 `JANIMA_Galgame_Turbo_8步_角色锁_v1`：使用官方 Turbo 建议的 `anima-turbo-lora-v0.2`、8 步、CFG 1、`euler` + `normal`，优先保证聊天中的即时出图体验。
 - 给真实 `.st-chatu8-image-button` 添加原位正常文档流布局，不新建替代按钮。
 - 自动唤醒智绘姬原生重扫，避免生成结束时误判“消息数量未增加”而漏掉按钮。
 - 自动隐藏智绘姬对 `[Unnamed Persona]` 等非图像方括号的误识别按钮。
