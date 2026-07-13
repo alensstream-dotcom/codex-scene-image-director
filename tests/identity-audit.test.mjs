@@ -34,3 +34,9 @@ test('DNA hint provides canonical locks even when FM_DNA is empty', () => {
     assert.match(hint, /long light-purple twin tails/);
     assert.match(hint, /old gas mask/);
 });
+
+test('incomplete character DNA remains diagnostic without suppressing an otherwise usable image', () => {
+    const issues = identityAnchorIssues('1girl, solo, female focus, Lucifer, blonde hair, blue eyes, nude, bedroom, close-up');
+    const identity = issues.find(issue => issue.code === 'identity_anchor_missing');
+    assert.equal(identity?.severity, 'warning');
+});

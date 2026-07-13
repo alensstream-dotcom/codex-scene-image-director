@@ -3,17 +3,19 @@
 ## 需要的两个核心文件
 
 - 插件安装地址：`https://github.com/alensstream-dotcom/codex-scene-image-director.git`
-- 世界书直链：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.1/JANIMA_v8_2_Galgame_Director.json`
+- 世界书直链：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.2/JANIMA_v8_2_Galgame_Director.json`
 
-推荐同时导入正则：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.1/JANIMA_rescue_regex.json`，避免历史 Prompt 和 IMG_COUNT 回灌给模型。
+必须另外安装智绘姬 `st-chatu8`，因为真正的生成图片按钮由智绘姬创建；本插件负责后台纠错、过滤和原位布局，不能代替智绘姬连接 ComfyUI。推荐同时导入正则：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.2/JANIMA_rescue_regex.json`，避免历史 Prompt 和 IMG_COUNT 回灌给模型。
+
+v8.2 世界书已使用 SillyTavern 原生变量宏，不需要额外安装 EJS、酒馆助手或 JS-Slash-Runner。
 
 ## 手机操作
 
-1. 在手机 SillyTavern 的扩展管理器选择“安装扩展”，粘贴插件安装地址并刷新页面。
+1. 先确认智绘姬 `st-chatu8` 已安装并启用；再在手机 SillyTavern 的扩展管理器选择“安装扩展”，粘贴本插件安装地址并刷新页面。
 2. 用手机浏览器下载世界书 JSON，在“世界信息/世界书”中导入并绑定到当前角色或聊天。
 3. 关闭旧 JANIMA v7.8.2、v7.9、v8.1 主生图世界书，只保留 v8.2；已有 FM_DNA 不用删除。
 4. 导入正则 JSON；智绘姬的识别标记设为 `[` 和 `]`，关闭它的 LLM 扩写、二次分析与自动改写。
-5. 智绘姬选择 ComfyUI。插件会自动选中 `JANIMA_Galgame_Turbo_8步_角色锁_v1`。
+5. 智绘姬选择 ComfyUI。插件会自动选中 `JANIMA_Galgame_Turbo_8步_Anima原生提示词_v2`。
 
 插件和世界书运行在手机浏览器里的 SillyTavern 前端；真正的 JANIMA 模型仍运行在 ComfyUI 所在电脑/服务器。手机必须能够通过当前酒馆配置访问该 ComfyUI 服务。
 
