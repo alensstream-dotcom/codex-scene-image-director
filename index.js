@@ -28,7 +28,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.2.2';
+const EXT_VERSION = '1.2.3';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS = {
     },
     fallback: {
         enabled: true,
+        repairInvalidPrompts: true,
         minimumImages: 3,
         maximumImages: 6,
         adaptive: true,
@@ -82,6 +83,8 @@ const runtime = {
     localRepairHashes: new Set(),
     fallbackHashes: new Set(),
     fallbackInFlight: new Set(),
+    quietRepairHashes: new Set(),
+    quietRepairInFlight: new Set(),
     zhihuijiRescanHashes: new Set(),
 };
 
@@ -107,7 +110,7 @@ function settings() {
             autoLocalRepair: true,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
+            fallback: { enabled: true, repairInvalidPrompts: true, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -373,6 +376,103 @@ async function generateQuietFallbackPayload(prompt, schema, responseLength) {
     }
 }
 
+function invalidPromptsForQuietRepair(validation) {
+    const repairable = new Set(['contains_chinese', 'people_conflict', 'solo_relation_conflict']);
+    return validation.prompts.filter(item => item.issues?.some(issue => repairable.has(issue.code)));
+}
+
+function validateQuietPromptRepairResponse(raw, targetIndexes) {
+    const payload = typeof raw === 'string' ? parseStrictJson(raw) : raw;
+    if (!payload || !Array.isArray(payload.repairs)) throw new Error('当前模型未返回 repairs 数组');
+    const targets = new Set(targetIndexes.map(Number));
+    const repairs = new Map();
+    for (const item of payload.repairs) {
+        const promptIndex = Number(item?.prompt_index);
+        if (!Number.isInteger(promptIndex) || !targets.has(promptIndex) || repairs.has(promptIndex)) continue;
+        const tags = Array.isArray(item?.prompt_tags)
+            ? item.prompt_tags.map(tag => String(tag).trim()).filter(Boolean)
+            : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
+        const promptText = tags.join(', ');
+        if (tags.length < 8 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText)) continue;
+        const checked = validateTurn(`Scene.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
+        if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
+        repairs.set(promptIndex, { prompt_index: promptIndex, prompt_tags: tags });
+    }
+    if (repairs.size !== targets.size) throw new Error(`当前模型只修复 ${repairs.size}/${targets.size} 个冲突 Prompt`);
+    return [...repairs.values()];
+}
+
+async function runAutomaticQuietPromptRepair(messageId, text, validation) {
+    const config = settings().fallback;
+    if (!config.enabled || !config.repairInvalidPrompts) return false;
+    const targets = invalidPromptsForQuietRepair(validation).slice(0, 3);
+    if (!targets.length) return false;
+    const id = Number(messageId);
+    const hash = `${id}:${stableHash(text)}:${targets.map(item => item.index).join(',')}:quiet-prompt-repair`;
+    if (runtime.quietRepairHashes.has(hash) || runtime.quietRepairInFlight.has(id)) return false;
+    runtime.quietRepairHashes.add(hash);
+    runtime.quietRepairInFlight.add(id);
+
+    try {
+        const targetPayload = targets.map(item => ({
+            prompt_index: item.index,
+            prompt: item.prompt,
+            issues: item.issues.map(issue => issue.code),
+            adjacent_story: promptStoryContext(text, item),
+        }));
+        const targetIndexes = targets.map(item => item.index);
+        const prompt = [
+            'You are a silent image-prompt correction pass for a completed SillyTavern story reply.',
+            `Repair exactly ${targets.length} supplied prompts. Preserve their scene and visual style.`,
+            'Correct explicit people counts, solo/duo tags, character presence, current clothing, actions, props, and locations using only the adjacent story.',
+            'Every repaired prompt must contain 10-30 concise English comma-separated image tags. Never rewrite story text.',
+            'Return only JSON: {"repairs":[{"prompt_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
+            `Character DNA hint: ${settings().api.characterDna || 'Use only identities and appearance stated in the prompt and adjacent story.'}`,
+            `Targets: ${JSON.stringify(targetPayload)}`,
+        ].join('\n');
+        const schema = {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                repairs: {
+                    type: 'array',
+                    minItems: targets.length,
+                    maxItems: targets.length,
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            prompt_index: { type: 'integer', enum: targetIndexes },
+                            prompt_tags: { type: 'array', minItems: 10, maxItems: 30, items: { type: 'string' } },
+                        },
+                        required: ['prompt_index', 'prompt_tags'],
+                    },
+                },
+            },
+            required: ['repairs'],
+        };
+        const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(600, Number(config.responseLength || 1200)));
+        const repairs = validateQuietPromptRepairResponse(raw, targetIndexes);
+        let next = text;
+        for (const repair of [...repairs].sort((a, b) => b.prompt_index - a.prompt_index)) {
+            next = replacePromptAt(next, validation.prompts[repair.prompt_index], `[${repair.prompt_tags.join(', ')}]`);
+        }
+        await writeMessage(id, next, 'janima-current-model-prompt-repair');
+        setDebug(id, {
+            repairMode: 'current-model-prompt-repair',
+            repairedPromptIndexes: targetIndexes,
+            repairedPrompt: 'conflicting-prompts-replaced',
+        });
+        return true;
+    } catch (error) {
+        setDebug(id, { repairMode: 'current-model-prompt-repair', error: error.message });
+        console.warn(`[${EXT_NAME}] 当前模型 Prompt 纠错失败，原 Prompt 保持不变`, error);
+        return false;
+    } finally {
+        runtime.quietRepairInFlight.delete(id);
+    }
+}
+
 async function runAutomaticQuietFallback(messageId, text, validation) {
     const config = settings().fallback;
     if (!config.enabled) return false;
@@ -504,6 +604,7 @@ async function renderMessageCheck(messageId) {
             return;
         }
     }
+    if (await runAutomaticQuietPromptRepair(messageId, text, validation)) return;
     if (await runAutomaticQuietFallback(messageId, text, validation)) return;
     markZhihuijiButtonsInline(messageId);
     nudgeZhihuijiObserver(messageId, validation);
@@ -870,6 +971,7 @@ function settingsHtml() {
                     ${checkRow('autoLocalRepair', '自动本地纠错（不调用 AI）')}
                     <h4>缺图自动兜底</h4>
                     ${checkRow('fallback.enabled', '少于目标数时用酒馆当前模型静默补 Prompt')}
+                    ${checkRow('fallback.repairInvalidPrompts', '人数/人物互动冲突时用当前模型静默修 Prompt')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
                     ${fieldRow('fallback.minimumImages', '每轮最少图片', '3', 'number')}
                     ${fieldRow('fallback.maximumImages', '每轮最多图片', '6', 'number')}
@@ -933,7 +1035,7 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons'].includes(input.name)) {
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.repairInvalidPrompts', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons'].includes(input.name)) {
             removeLegacyConversationUi();
             if (settings().enabled) scanLatestAssistant();
         }
