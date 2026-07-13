@@ -3,9 +3,9 @@
 ## 需要的两个核心文件
 
 - 插件安装地址：`https://github.com/alensstream-dotcom/codex-scene-image-director.git`
-- 世界书直链：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.0/JANIMA_v8_2_Galgame_Director.json`
+- 世界书直链：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.1/JANIMA_v8_2_Galgame_Director.json`
 
-推荐同时导入正则：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.0/JANIMA_rescue_regex.json`，避免历史 Prompt 和 IMG_COUNT 回灌给模型。
+推荐同时导入正则：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.5.1/JANIMA_rescue_regex.json`，避免历史 Prompt 和 IMG_COUNT 回灌给模型。
 
 ## 手机操作
 
