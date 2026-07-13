@@ -17,11 +17,11 @@ v8.0 采用强制动态合同：每轮正常剧情至少3张，地点/人物/服
 
 插件只读取最新 assistant 消息，解析 Prompt、段落位置与 `IMG_COUNT`。它会删除旧版残留的 `.janima-rescue-panel`，从不向消息容器追加状态栏、工具栏或第二列。
 
-本地纠错处理标点、空白、标签去重、明确的 `1girl → solo`、缺失构图词和完全重复 Prompt。若有效 Prompt 少于动态目标，插件通过 `generateQuietPrompt` 调用酒馆当前模型，只返回段落索引和英文标签 JSON，再按字符位置插入，不重写剧情。
+本地纠错处理标点、空白、标签去重、明确的 `1girl → solo`、缺失构图词和完全重复 Prompt。若发现 `solo/1girl` 与第二人物互动等明确冲突，插件通过 `generateQuietPrompt` 只重写有问题的 Prompt；若有效 Prompt 少于动态目标，则只返回段落索引和英文标签 JSON，再按字符位置插入。两条路径都不重写剧情，也不需要单独填写 API。
 
 ## 按钮原位
 
-st-chatu8 2.7.7 会按 Prompt 在原始回复中的字符位置创建 `.st-chatu8-image-button`。v8.0 强制 Prompt 紧跟剧情；插件只给真实图像 Prompt 按钮和其原生父节点添加正常文档流样式。对 `[Unnamed Persona]` 等短元数据方括号误生成的按钮会静默隐藏。
+st-chatu8 2.7.7 会按 Prompt 在原始回复中的字符位置创建 `.st-chatu8-image-button`。v8.0 强制 Prompt 紧跟剧情；插件只给真实图像 Prompt 按钮和其原生父节点添加正常文档流样式，并在智绘姬误判生成结束时唤醒其原生 DOM 重扫。对 `[Unnamed Persona]` 与 JSON Patch 数组等误生成按钮会静默隐藏。
 
 ## 可选后台 AI 审计
 

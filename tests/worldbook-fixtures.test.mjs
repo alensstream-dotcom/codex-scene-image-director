@@ -67,6 +67,8 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /generateQuietPrompt/);
     assert.match(source, /minimumImages:\s*3/);
     assert.match(source, /maximumImages:\s*6/);
+    assert.match(source, /repairInvalidPrompts:\s*true/);
+    assert.match(source, /janima-current-model-prompt-repair/);
     assert.match(source, /janima-invalid-image-button/);
     assert.doesNotMatch(source, /host\.append\(panel\)/);
     assert.match(css, /\.janima-rescue-panel[\s\S]*display:\s*none\s*!important/);

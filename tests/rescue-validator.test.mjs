@@ -32,3 +32,8 @@ test('flags prompts longer than the configured limit', () => {
     const long = `[1girl, solo, Sakura, pink hair, home dress, upper body, ${'detailed background, '.repeat(50)}soft lighting]`;
     assert.ok(validateTurn(`${long}\n\n<!--IMG_COUNT:1-->`, { maxPromptChars: 100 }).issues.some(issue => issue.code === 'too_long'));
 });
+
+test('flags solo prompts that explicitly place a second person beside the subject', () => {
+    const text = '剧情。\n\n[1girl, solo, Lucifer, blonde hair, blue eyes, Leviathan kneeling beside her, dark hall, medium shot]\n\n<!--IMG_COUNT:1-->';
+    assert.ok(validateTurn(text).issues.some(issue => issue.code === 'solo_relation_conflict'));
+});
