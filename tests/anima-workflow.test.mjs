@@ -6,23 +6,27 @@ import {
     installAnimaAccuracyWorkflow,
 } from '../lib/anima-workflow.mjs';
 
-test('accuracy workflow uses Anima base guidance without the weak Turbo LoRA', () => {
+test('Galgame workflow restores the user Turbo LoRA and eight-step sampling', () => {
     const graph = JSON.parse(buildAnimaAccuracyWorkflow());
-    assert.equal(graph['11'].inputs.steps, 30);
-    assert.equal(graph['11'].inputs.cfg, 4);
+    assert.equal(graph['11'].inputs.steps, 8);
+    assert.equal(graph['11'].inputs.cfg, 4.5);
     assert.equal(graph['11'].inputs.sampler_name, 'er_sde');
-    assert.equal(graph['11'].inputs.scheduler, 'simple');
-    assert.equal(graph['11'].inputs.model[0], '2');
+    assert.equal(graph['11'].inputs.scheduler, 'normal');
+    assert.equal(graph['11'].inputs.model[0], '7');
+    assert.equal(graph['7'].class_type, 'LoraLoader');
+    assert.equal(graph['7'].inputs.lora_name, 'anima-turbo-lora-v0.2.safetensors');
+    assert.equal(graph['7'].inputs.strength_model, 0.35);
+    assert.equal(graph['7'].inputs.strength_clip, 0.25);
     assert.equal(graph['8'].inputs.text, '%prompt%');
     assert.equal(graph['9'].inputs.text, '%negative_prompt%');
-    assert.equal(Object.values(graph).some(node => node.class_type === 'LoraLoader'), false);
+    assert.equal(Object.values(graph).some(node => node.class_type === 'LoraLoader'), true);
 });
 
 test('installer selects the accuracy workflow and adds identity negatives once', () => {
     const settings = { workers: {}, yushe: { 默认: { negativePrompt: 'low quality, wrong face' } } };
     assert.equal(installAnimaAccuracyWorkflow(settings), true);
     assert.equal(settings.workerid, ANIMA_ACCURACY_WORKFLOW_ID);
-    assert.equal(settings.comfyui_steps, 30);
+    assert.equal(settings.comfyui_steps, 8);
     assert.match(settings.yushe.默认.negativePrompt, /missing character/);
     assert.match(settings.yushe.默认.negativePrompt, /skintight bodysuit/);
     assert.match(settings.yushe.默认.negativePrompt, /floating mascot/);

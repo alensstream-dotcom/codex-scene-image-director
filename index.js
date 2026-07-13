@@ -32,12 +32,12 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.3.3';
+const EXT_VERSION = '1.4.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
 const DEFAULT_SETTINGS = {
-    version: 6,
+    version: 7,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -55,11 +55,11 @@ const DEFAULT_SETTINGS = {
     fallback: {
         enabled: true,
         repairInvalidPrompts: true,
-        semanticAudit: true,
+        semanticAudit: false,
         minimumImages: 3,
         maximumImages: 6,
         adaptive: true,
-        responseLength: 2400,
+        responseLength: 1200,
     },
     chatu8: {
         enabled: true,
@@ -109,7 +109,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 6) {
+    if (!existing || Number(existing.version) < 7) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -117,7 +117,7 @@ function settings() {
             autoLocalRepair: true,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, repairInvalidPrompts: true, semanticAudit: true, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 2400 },
+            fallback: { enabled: true, repairInvalidPrompts: true, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -1077,7 +1077,7 @@ function settingsHtml() {
                     <h4>缺图自动兜底</h4>
                     ${checkRow('fallback.enabled', '少于目标数时用酒馆当前模型静默补 Prompt')}
                     ${checkRow('fallback.repairInvalidPrompts', '用酒馆当前模型静默修正 Prompt')}
-                    ${checkRow('fallback.semanticAudit', '每张图按邻近剧情和角色 DNA 静默校正')}
+                    ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
                     ${fieldRow('fallback.minimumImages', '每轮最少图片', '3', 'number')}
                     ${fieldRow('fallback.maximumImages', '每轮最多图片', '6', 'number')}
@@ -1093,7 +1093,7 @@ function settingsHtml() {
                     <h4>智绘姬设置</h4>
                     ${checkRow('chatu8.enabled', '启用智绘姬适配')}
                     ${checkRow('chatu8.inlineButtons', '按钮保持在对应剧情段落下')}
-                    ${checkRow('chatu8.accuracyWorkflow', '启用 JANIMA 30 步剧情准确/角色锁工作流')}
+                    ${checkRow('chatu8.accuracyWorkflow', '启用 JANIMA Galgame Turbo 8 步实时工作流')}
                     ${fieldRow('chatu8.startTag', '开始标记', '[')}
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
