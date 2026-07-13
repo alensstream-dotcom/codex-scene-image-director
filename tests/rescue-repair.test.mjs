@@ -54,10 +54,17 @@ test('cache key changes by message, content, prompt, and mode', () => {
 
 test('invalid AI response cannot overwrite the original', () => {
     const original = '[1girl, solo, Sakura, pink hair, home dress, upper body]';
-    assert.throws(() => parseStrictJson('```json\n{}\n```'));
+    assert.throws(() => parseStrictJson('I could not create the requested prompts.'));
     assert.equal(original, '[1girl, solo, Sakura, pink hair, home dress, upper body]');
 });
 
 test('strict JSON accepts a plain object response', () => {
     assert.deepEqual(parseStrictJson('{"prompt_tags":["1girl"]}'), { prompt_tags: ['1girl'] });
+});
+
+test('JSON parser tolerates Markdown fences and short reasoning wrappers', () => {
+    assert.deepEqual(parseStrictJson('```json\n{"prompts":[]}\n```'), { prompts: [] });
+    assert.deepEqual(parseStrictJson('Done.\n{"prompts":[{"prompt_tags":["brace } inside string"]}]}\nUse it.'), {
+        prompts: [{ prompt_tags: ['brace } inside string'] }],
+    });
 });
