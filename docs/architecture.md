@@ -4,9 +4,9 @@
 主聊天模型
   → JANIMA v8.1 身份锁世界书（保留 v7.8.2 的 FM_DNA/变量体系）
   → 剧情段落 + 紧随其后的 [English prompt] + IMG_COUNT
-  → 静默救援器（逐图剧情语义审计 + 身份 DNA，不渲染对话 UI）
+  → 静默救援器（本地异常检查 + 身份 DNA，不渲染对话 UI）
   → 智绘姬原生按钮
-  → JANIMA 30 步剧情准确工作流
+  → JANIMA Galgame Turbo 8 步实时工作流
 ```
 
 ## 世界书
@@ -17,9 +17,9 @@ v8.1 采用强制动态合同：每轮正常剧情至少3张，地点/人物/服
 
 插件只读取最新 assistant 消息，解析 Prompt、段落位置与 `IMG_COUNT`。它会删除旧版残留的 `.janima-rescue-panel`，从不向消息容器追加状态栏、工具栏或第二列。
 
-本地纠错处理标点、空白、标签去重、明确的 `1girl → solo`、缺失构图词和完全重复 Prompt。随后插件通过 `generateQuietPrompt` 对每张图执行一次剧情/DNA语义校正；若有效 Prompt 少于动态目标，则只返回段落索引和英文标签 JSON，再按字符位置插入。两条路径都不重写剧情，也不需要单独填写 API。
+本地纠错处理标点、空白、标签去重、明确的 `1girl → solo`、缺失构图词和完全重复 Prompt。只有 Prompt 真正存在人数冲突、身份锚点缺失或关键道具错误时，插件才通过 `generateQuietPrompt` 修复该条；若有效 Prompt 少于动态目标，则只返回段落索引和英文标签 JSON，再按字符位置插入。默认关闭逐图 AI 深度重审，正常 Prompt 不增加等待时间。
 
-JANIMA 是 Anima 架构而不是 SD1.5/SDXL UNet，不能直接套用经典 IP-Adapter 工作流。插件因此选用完整逐图 DNA + Anima Base 高遵循度采样：30 步、CFG 4、`er_sde`、`simple`，并移除弱强度 Turbo LoRA。
+JANIMA 是 Anima 架构而不是 SD1.5/SDXL UNet，不能直接套用经典 IP-Adapter 工作流。角色连续性由完整逐图 DNA 保持；生成端恢复用户原有 Turbo LoRA，以 8 步实时出图，符合 Galgame 连续游玩的优先级。
 
 ## 按钮原位
 
