@@ -46,6 +46,8 @@ test('v8.1 worldbook preserves variables and enforces adaptive inline prompts pl
     assert.match(entries[2].content, /CANONICAL PROP LOCK: Behemoth/);
     assert.match(entries[4].content, /two separate bodies/);
     assert.match(entries[4].content, /角色名字不是外貌/);
+    assert.match(entries[4].content, /gothic dress with water-pattern trim:1\.25/);
+    assert.match(entries[4].content, /bodysuit、leotard、lingerie/);
 });
 
 test('regex package has three narrow rules and preserves ordinary brackets', async () => {

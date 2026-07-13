@@ -32,7 +32,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.3.0';
+const EXT_VERSION = '1.3.1';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
@@ -497,6 +497,7 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
             'The visual DNA registry is authoritative for immutable identity. Repeat 6-10 useful immutable anchors for every named visible character in every prompt; a name alone is never enough.',
             'For two or more people: use the exact count, write a separate character block for each person, assign fixed left/right or front/back positions, require separate bodies and both faces visible when the story allows. Never turn a visible person into a shadow or silhouette.',
             'Describe named props visually instead of relying on their name. Behemoth must be a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
+            'Give the current outfit and critical prop placement one explicit weighted phrase, for example (navy and black-purple gothic dress with water-pattern trim:1.25) and (mascot perched on Leviathan shoulder:1.25). Never replace a dress with a bodysuit, leotard, lingerie, or swimsuit.',
             'Current outfit and state in the adjacent story override older card state. Preserve the original rendering style.',
             'Every repaired prompt must contain 12-48 concise English comma-separated image tags. Never rewrite story text.',
             'Return only JSON: {"repairs":[{"prompt_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
@@ -582,6 +583,7 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             'Repeat immutable face, hair, eye, body-build, and signature clothing anchors in every prompt; a character name alone is never an identity description.',
             'For multi-character scenes use exact count, separate character blocks, fixed left/right or front/back positions, separate bodies, and both faces visible when the story permits.',
             'Describe named props visually. Behemoth is a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
+            'Give current clothing and critical prop placement one weighted phrase at 1.20-1.30. Do not replace a dress or ceremonial garment with a bodysuit, leotard, lingerie, or swimsuit.',
             'Never invent a person, touch, outfit, prop, action, or location. No Chinese, prose, markdown, square brackets, explanation, or story rewrite.',
             'Return only JSON: {"prompts":[{"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
             `Character DNA registry:\n${dnaHint}`,
