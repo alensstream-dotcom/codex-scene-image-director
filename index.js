@@ -1,12 +1,16 @@
 import {
     chat,
+    characters,
     eventSource,
     event_types,
     generateQuietPrompt,
     saveChatConditional,
     saveSettingsDebounced,
+    this_chid,
 } from '../../../../script.js';
 import { extension_settings } from '../../../extensions.js';
+import { buildVisualDnaHint, visualLocksForText } from './lib/identity-locks.mjs';
+import { installAnimaAccuracyWorkflow } from './lib/anima-workflow.mjs';
 import {
     applyMissingPrompts,
     assertPromptRepairResponse,
@@ -28,12 +32,12 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.2.3';
+const EXT_VERSION = '1.3.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
 const DEFAULT_SETTINGS = {
-    version: 5,
+    version: 6,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -51,14 +55,16 @@ const DEFAULT_SETTINGS = {
     fallback: {
         enabled: true,
         repairInvalidPrompts: true,
+        semanticAudit: true,
         minimumImages: 3,
         maximumImages: 6,
         adaptive: true,
-        responseLength: 1200,
+        responseLength: 2400,
     },
     chatu8: {
         enabled: true,
         inlineButtons: true,
+        accuracyWorkflow: true,
         startTag: '[',
         endTag: ']',
         rescanTimeoutMs: 3500,
@@ -85,6 +91,7 @@ const runtime = {
     fallbackInFlight: new Set(),
     quietRepairHashes: new Set(),
     quietRepairInFlight: new Set(),
+    semanticAuditFinalHashes: new Map(),
     zhihuijiRescanHashes: new Set(),
 };
 
@@ -102,7 +109,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 5) {
+    if (!existing || Number(existing.version) < 6) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -110,13 +117,65 @@ function settings() {
             autoLocalRepair: true,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, repairInvalidPrompts: true, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
-            chatu8: { enabled: true, inlineButtons: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
+            fallback: { enabled: true, repairInvalidPrompts: true, semanticAudit: true, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 2400 },
+            chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, existing);
     }
     return extension_settings[EXT_ID];
+}
+
+function findNestedValue(root, wantedKey, depth = 0, seen = new Set()) {
+    if (!root || typeof root !== 'object' || depth > 5 || seen.has(root)) return null;
+    seen.add(root);
+    if (Object.prototype.hasOwnProperty.call(root, wantedKey) && root[wantedKey] && typeof root[wantedKey] === 'object') {
+        return root[wantedKey];
+    }
+    for (const value of Object.values(root)) {
+        const found = findNestedValue(value, wantedKey, depth + 1, seen);
+        if (found) return found;
+    }
+    return null;
+}
+
+function currentVariableDna() {
+    for (let index = (chat?.length || 0) - 1; index >= Math.max(0, (chat?.length || 0) - 12); index--) {
+        const dna = findNestedValue(chat[index], 'FM_DNA');
+        if (dna && Object.keys(dna).length) return dna;
+    }
+    return null;
+}
+
+function collectCharacterCardEvidence(source = '') {
+    const character = characters?.[Number(this_chid)];
+    const book = character?.data?.character_book || character?.character_book;
+    const entries = Array.isArray(book?.entries) ? book.entries : Object.values(book?.entries || {});
+    const wantedNames = visualLocksForText(source).flatMap(lock => lock.names.map(name => name.toLowerCase()));
+    if (!wantedNames.length || !entries.length) return [];
+    return entries.flatMap(entry => {
+        const content = String(entry?.content || entry?.text || '').trim();
+        const label = [entry?.comment, entry?.name, ...(Array.isArray(entry?.keys) ? entry.keys : [])].filter(Boolean).join(' ');
+        const haystack = `${label}\n${content}`.toLowerCase();
+        if (!content || !wantedNames.some(name => haystack.includes(name))) return [];
+        return [content.slice(0, 2200)];
+    }).slice(0, 5);
+}
+
+function collectCharacterDnaHints(source = '') {
+    const parts = [buildVisualDnaHint(source, settings().api.characterDna, collectCharacterCardEvidence(source))];
+    const variableDna = currentVariableDna();
+    if (variableDna) parts.push(`CURRENT FM_DNA VARIABLE:\n${JSON.stringify(variableDna).slice(0, 3500)}`);
+    return parts.join('\n\n');
+}
+
+function configureChatu8AccuracyWorkflow() {
+    if (!settings().chatu8.enabled || !settings().chatu8.accuracyWorkflow) return false;
+    const chatu8Settings = extension_settings['st-chatu8'];
+    if (!chatu8Settings) return false;
+    const changed = installAnimaAccuracyWorkflow(chatu8Settings);
+    if (changed) saveSettingsDebounced();
+    return changed;
 }
 
 function toast(type, message) {
@@ -345,7 +404,7 @@ function validateQuietFallbackResponse(raw, allowedIndexes, missingCount) {
             : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
         const promptText = tags.join(', ');
         const key = promptText.toLowerCase();
-        if (tags.length < 6 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seen.has(key)) continue;
+        if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seen.has(key)) continue;
         if (!extractImagePrompts(`[${promptText}]`).length) continue;
         seen.add(key);
         prompts.push({ after_paragraph_index: paragraphIndex, prompt_tags: tags });
@@ -377,7 +436,14 @@ async function generateQuietFallbackPayload(prompt, schema, responseLength) {
 }
 
 function invalidPromptsForQuietRepair(validation) {
-    const repairable = new Set(['contains_chinese', 'people_conflict', 'solo_relation_conflict']);
+    const repairable = new Set([
+        'contains_chinese',
+        'people_conflict',
+        'solo_relation_conflict',
+        'identity_anchor_missing',
+        'multi_character_separation_missing',
+        'ambiguous_named_prop',
+    ]);
     return validation.prompts.filter(item => item.issues?.some(issue => repairable.has(issue.code)));
 }
 
@@ -393,7 +459,7 @@ function validateQuietPromptRepairResponse(raw, targetIndexes) {
             ? item.prompt_tags.map(tag => String(tag).trim()).filter(Boolean)
             : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
         const promptText = tags.join(', ');
-        if (tags.length < 8 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText)) continue;
+        if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText)) continue;
         const checked = validateTurn(`Scene.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
         if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
         repairs.set(promptIndex, { prompt_index: promptIndex, prompt_tags: tags });
@@ -405,9 +471,11 @@ function validateQuietPromptRepairResponse(raw, targetIndexes) {
 async function runAutomaticQuietPromptRepair(messageId, text, validation) {
     const config = settings().fallback;
     if (!config.enabled || !config.repairInvalidPrompts) return false;
-    const targets = invalidPromptsForQuietRepair(validation).slice(0, 3);
-    if (!targets.length) return false;
     const id = Number(messageId);
+    const currentHash = stableHash(text);
+    if (runtime.semanticAuditFinalHashes.get(id) === currentHash) return false;
+    const targets = (config.semanticAudit ? validation.prompts : invalidPromptsForQuietRepair(validation)).slice(0, 6);
+    if (!targets.length) return false;
     const hash = `${id}:${stableHash(text)}:${targets.map(item => item.index).join(',')}:quiet-prompt-repair`;
     if (runtime.quietRepairHashes.has(hash) || runtime.quietRepairInFlight.has(id)) return false;
     runtime.quietRepairHashes.add(hash);
@@ -421,13 +489,18 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
             adjacent_story: promptStoryContext(text, item),
         }));
         const targetIndexes = targets.map(item => item.index);
+        const dnaHint = collectCharacterDnaHints(`${text}\n${targets.map(item => item.prompt).join('\n')}`);
         const prompt = [
-            'You are a silent image-prompt correction pass for a completed SillyTavern story reply.',
-            `Repair exactly ${targets.length} supplied prompts. Preserve their scene and visual style.`,
-            'Correct explicit people counts, solo/duo tags, character presence, current clothing, actions, props, and locations using only the adjacent story.',
-            'Every repaired prompt must contain 10-30 concise English comma-separated image tags. Never rewrite story text.',
+            'You are the silent continuity and scene-accuracy editor for image prompts in a completed SillyTavern story reply.',
+            `Return a corrected prompt for every one of the ${targets.length} supplied targets, even when the original looks syntactically valid.`,
+            'The adjacent story is authoritative for the exact visible people, actions, current clothing, props, location, and moment. Never omit a visible participant and never invent one.',
+            'The visual DNA registry is authoritative for immutable identity. Repeat 6-10 useful immutable anchors for every named visible character in every prompt; a name alone is never enough.',
+            'For two or more people: use the exact count, write a separate character block for each person, assign fixed left/right or front/back positions, require separate bodies and both faces visible when the story allows. Never turn a visible person into a shadow or silhouette.',
+            'Describe named props visually instead of relying on their name. Behemoth must be a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
+            'Current outfit and state in the adjacent story override older card state. Preserve the original rendering style.',
+            'Every repaired prompt must contain 12-48 concise English comma-separated image tags. Never rewrite story text.',
             'Return only JSON: {"repairs":[{"prompt_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
-            `Character DNA hint: ${settings().api.characterDna || 'Use only identities and appearance stated in the prompt and adjacent story.'}`,
+            `Character DNA registry:\n${dnaHint}`,
             `Targets: ${JSON.stringify(targetPayload)}`,
         ].join('\n');
         const schema = {
@@ -443,7 +516,7 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
                         additionalProperties: false,
                         properties: {
                             prompt_index: { type: 'integer', enum: targetIndexes },
-                            prompt_tags: { type: 'array', minItems: 10, maxItems: 30, items: { type: 'string' } },
+                            prompt_tags: { type: 'array', minItems: 12, maxItems: 48, items: { type: 'string' } },
                         },
                         required: ['prompt_index', 'prompt_tags'],
                     },
@@ -451,19 +524,20 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
             },
             required: ['repairs'],
         };
-        const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(600, Number(config.responseLength || 1200)));
+        const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(1200, Number(config.responseLength || 2400)));
         const repairs = validateQuietPromptRepairResponse(raw, targetIndexes);
         let next = text;
         for (const repair of [...repairs].sort((a, b) => b.prompt_index - a.prompt_index)) {
             next = replacePromptAt(next, validation.prompts[repair.prompt_index], `[${repair.prompt_tags.join(', ')}]`);
         }
-        await writeMessage(id, next, 'janima-current-model-prompt-repair');
+        runtime.semanticAuditFinalHashes.set(id, stableHash(next));
+        if (next !== text) await writeMessage(id, next, 'janima-current-model-prompt-repair');
         setDebug(id, {
-            repairMode: 'current-model-prompt-repair',
+            repairMode: config.semanticAudit ? 'current-model-semantic-audit' : 'current-model-prompt-repair',
             repairedPromptIndexes: targetIndexes,
-            repairedPrompt: 'conflicting-prompts-replaced',
+            repairedPrompt: next !== text ? 'scene-and-identity-prompts-replaced' : 'already-correct',
         });
-        return true;
+        return next !== text;
     } catch (error) {
         setDebug(id, { repairMode: 'current-model-prompt-repair', error: error.message });
         console.warn(`[${EXT_NAME}] 当前模型 Prompt 纠错失败，原 Prompt 保持不变`, error);
@@ -498,15 +572,19 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             after_paragraph_index: item.index,
             text: item.text.slice(0, 700),
         }));
+        const dnaHint = collectCharacterDnaHints(text);
         const prompt = [
             'You are a silent image-prompt rescue pass for a completed SillyTavern story reply.',
             `Create exactly ${missingCount} missing inline image prompts so the turn reaches ${desired} images.`,
             'Select the strongest distinct visual beats. Prefer character entrances, interactions, strong expressions, action changes, outfit changes, important props, and location transitions.',
             'Use the supplied after_paragraph_index values exactly. Use distinct paragraphs whenever possible.',
-            'Every prompt must be 10-30 concise English comma-separated image tags: quality, exact people count, character identity and appearance visible in the paragraph, current clothing, action, prop, location, expression, spatial relation, shot, composition, lighting.',
+            'Every prompt must be 12-48 concise English comma-separated image tags: quality, exact people count, full visual DNA for every visible named character, current clothing, action, prop, location, expression, spatial relation, shot, composition, lighting.',
+            'Repeat immutable face, hair, eye, body-build, and signature clothing anchors in every prompt; a character name alone is never an identity description.',
+            'For multi-character scenes use exact count, separate character blocks, fixed left/right or front/back positions, separate bodies, and both faces visible when the story permits.',
+            'Describe named props visually. Behemoth is a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
             'Never invent a person, touch, outfit, prop, action, or location. No Chinese, prose, markdown, square brackets, explanation, or story rewrite.',
             'Return only JSON: {"prompts":[{"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
-            `Character DNA hint: ${settings().api.characterDna || 'Use only appearance stated in the supplied story paragraphs.'}`,
+            `Character DNA registry:\n${dnaHint}`,
             `Existing valid prompts: ${JSON.stringify(validation.prompts.map(item => item.prompt))}`,
             `Candidate story paragraphs: ${JSON.stringify(paragraphPayload)}`,
         ].join('\n');
@@ -523,7 +601,7 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
                         additionalProperties: false,
                         properties: {
                             after_paragraph_index: { type: 'integer', enum: allowedIndexes },
-                            prompt_tags: { type: 'array', minItems: 10, maxItems: 30, items: { type: 'string' } },
+                            prompt_tags: { type: 'array', minItems: 12, maxItems: 48, items: { type: 'string' } },
                         },
                         required: ['after_paragraph_index', 'prompt_tags'],
                     },
@@ -531,7 +609,7 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             },
             required: ['prompts'],
         };
-        const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(600, Number(config.responseLength || 1200)));
+        const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(1200, Number(config.responseLength || 2400)));
         const missingPrompts = validateQuietFallbackResponse(raw, allowedIndexes, missingCount);
         const next = updateCountMarker(applyMissingPrompts(text, missingPrompts), validation.prompts.length + missingPrompts.length);
         await writeMessage(messageId, next, 'janima-current-model-fallback');
@@ -971,7 +1049,8 @@ function settingsHtml() {
                     ${checkRow('autoLocalRepair', '自动本地纠错（不调用 AI）')}
                     <h4>缺图自动兜底</h4>
                     ${checkRow('fallback.enabled', '少于目标数时用酒馆当前模型静默补 Prompt')}
-                    ${checkRow('fallback.repairInvalidPrompts', '人数/人物互动冲突时用当前模型静默修 Prompt')}
+                    ${checkRow('fallback.repairInvalidPrompts', '用酒馆当前模型静默修正 Prompt')}
+                    ${checkRow('fallback.semanticAudit', '每张图按邻近剧情和角色 DNA 静默校正')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
                     ${fieldRow('fallback.minimumImages', '每轮最少图片', '3', 'number')}
                     ${fieldRow('fallback.maximumImages', '每轮最多图片', '6', 'number')}
@@ -987,6 +1066,7 @@ function settingsHtml() {
                     <h4>智绘姬设置</h4>
                     ${checkRow('chatu8.enabled', '启用智绘姬适配')}
                     ${checkRow('chatu8.inlineButtons', '按钮保持在对应剧情段落下')}
+                    ${checkRow('chatu8.accuracyWorkflow', '启用 JANIMA 30 步剧情准确/角色锁工作流')}
                     ${fieldRow('chatu8.startTag', '开始标记', '[')}
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
@@ -1035,8 +1115,9 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.repairInvalidPrompts', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons'].includes(input.name)) {
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
             removeLegacyConversationUi();
+            if (input.name === 'chatu8.accuracyWorkflow') configureChatu8AccuracyWorkflow();
             if (settings().enabled) scanLatestAssistant();
         }
     });
@@ -1069,6 +1150,7 @@ function bindEvents() {
 
 jQuery(async () => {
     settings();
+    configureChatu8AccuracyWorkflow();
     removeLegacyConversationUi();
     const container = document.querySelector('#extensions_settings') || document.querySelector('#extensions_settings2');
     if (container && !document.querySelector(SETTINGS_SELECTOR)) container.insertAdjacentHTML('beforeend', settingsHtml());

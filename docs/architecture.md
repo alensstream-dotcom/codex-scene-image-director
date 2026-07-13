@@ -2,26 +2,28 @@
 
 ```text
 主聊天模型
-  → JANIMA v8.0 单世界书（保留 v7.8.2 的 FM_DNA/变量体系）
+  → JANIMA v8.1 身份锁世界书（保留 v7.8.2 的 FM_DNA/变量体系）
   → 剧情段落 + 紧随其后的 [English prompt] + IMG_COUNT
-  → 静默救援器（不渲染对话 UI）
+  → 静默救援器（逐图剧情语义审计 + 身份 DNA，不渲染对话 UI）
   → 智绘姬原生按钮
-  → ComfyUI
+  → JANIMA 30 步剧情准确工作流
 ```
 
 ## 世界书
 
-v8.0 采用强制动态合同：每轮正常剧情至少3张，地点/人物/服装/道具/动作阶段变化时4张，追逐、战斗或多地点高速转场时5–6张，硬上限6张。它保留原文件中的 DNA 初始化、DNA 注入和变量更新条目。
+v8.1 采用强制动态合同：每轮正常剧情至少3张，地点/人物/服装/道具/动作阶段变化时4张，追逐、战斗或多地点高速转场时5–6张，硬上限6张。每张 Prompt 必须重复可见角色的固定脸、头发、眼睛、体型与标志服装；多人场景必须分别描述并定位每个人。
 
 ## 静默插件
 
 插件只读取最新 assistant 消息，解析 Prompt、段落位置与 `IMG_COUNT`。它会删除旧版残留的 `.janima-rescue-panel`，从不向消息容器追加状态栏、工具栏或第二列。
 
-本地纠错处理标点、空白、标签去重、明确的 `1girl → solo`、缺失构图词和完全重复 Prompt。若发现 `solo/1girl` 与第二人物互动等明确冲突，插件通过 `generateQuietPrompt` 只重写有问题的 Prompt；若有效 Prompt 少于动态目标，则只返回段落索引和英文标签 JSON，再按字符位置插入。两条路径都不重写剧情，也不需要单独填写 API。
+本地纠错处理标点、空白、标签去重、明确的 `1girl → solo`、缺失构图词和完全重复 Prompt。随后插件通过 `generateQuietPrompt` 对每张图执行一次剧情/DNA语义校正；若有效 Prompt 少于动态目标，则只返回段落索引和英文标签 JSON，再按字符位置插入。两条路径都不重写剧情，也不需要单独填写 API。
+
+JANIMA 是 Anima 架构而不是 SD1.5/SDXL UNet，不能直接套用经典 IP-Adapter 工作流。插件因此选用完整逐图 DNA + Anima Base 高遵循度采样：30 步、CFG 4、`er_sde`、`simple`，并移除弱强度 Turbo LoRA。
 
 ## 按钮原位
 
-st-chatu8 2.7.7 会按 Prompt 在原始回复中的字符位置创建 `.st-chatu8-image-button`。v8.0 强制 Prompt 紧跟剧情；插件只给真实图像 Prompt 按钮和其原生父节点添加正常文档流样式，并在智绘姬误判生成结束时唤醒其原生 DOM 重扫。对 `[Unnamed Persona]` 与 JSON Patch 数组等误生成按钮会静默隐藏。
+st-chatu8 2.7.7 会按 Prompt 在原始回复中的字符位置创建 `.st-chatu8-image-button`。v8.1 强制 Prompt 紧跟剧情；插件只给真实图像 Prompt 按钮和其原生父节点添加正常文档流样式，并在智绘姬误判生成结束时唤醒其原生 DOM 重扫。对 `[Unnamed Persona]` 与 JSON Patch 数组等误生成按钮会静默隐藏。
 
 ## 可选后台 AI 审计
 
