@@ -2,6 +2,7 @@ import {
     chat,
     eventSource,
     event_types,
+    generateQuietPrompt,
     saveChatConditional,
     saveSettingsDebounced,
 } from '../../../../script.js';
@@ -10,26 +11,29 @@ import {
     applyMissingPrompts,
     assertPromptRepairResponse,
     assertWholeTurnResponse,
+    desiredImageCount,
     extractImagePrompts,
     findSelectedParagraph,
     insertPromptAfterParagraph,
+    isLikelyImagePrompt,
     makeCacheKey,
     paragraphRanges,
     parseStrictJson,
     reinforcePromptLocal,
     replacePromptAt,
     stableHash,
+    storyParagraphCandidates,
     validateTurn,
 } from './lib/rescue-core.mjs';
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.1.0';
+const EXT_VERSION = '1.2.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 
 const DEFAULT_SETTINGS = {
-    version: 4,
+    version: 5,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -43,6 +47,13 @@ const DEFAULT_SETTINGS = {
         model: '',
         timeoutMs: 10000,
         characterDna: '',
+    },
+    fallback: {
+        enabled: true,
+        minimumImages: 3,
+        maximumImages: 6,
+        adaptive: true,
+        responseLength: 1200,
     },
     chatu8: {
         enabled: true,
@@ -69,6 +80,8 @@ const runtime = {
     selectionTimer: null,
     auditedHashes: new Set(),
     localRepairHashes: new Set(),
+    fallbackHashes: new Set(),
+    fallbackInFlight: new Set(),
 };
 
 function mergeDefaults(base, incoming) {
@@ -85,7 +98,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 4) {
+    if (!existing || Number(existing.version) < 5) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -93,6 +106,7 @@ function settings() {
             autoLocalRepair: true,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
+            fallback: { enabled: true, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -173,9 +187,9 @@ function removePromptRange(text, prompt) {
 }
 
 function updateCountMarker(text, count) {
-    const marker = `<!--IMG_COUNT:${Math.max(0, Math.min(3, Number(count) || 0))}-->`;
-    if (/<!--\s*IMG_COUNT\s*:\s*[0-3]\s*-->/i.test(text)) {
-        return text.replace(/<!--\s*IMG_COUNT\s*:\s*[0-3]\s*-->/gi, marker);
+    const marker = `<!--IMG_COUNT:${Math.max(0, Math.min(6, Number(count) || 0))}-->`;
+    if (/<!--\s*IMG_COUNT\s*:\s*[0-6]\s*-->/i.test(text)) {
+        return text.replace(/<!--\s*IMG_COUNT\s*:\s*[0-6]\s*-->/gi, marker);
     }
     return `${text.trimEnd()}\n\n${marker}`;
 }
@@ -205,7 +219,17 @@ function markZhihuijiButtonsInline(messageId) {
     const textRoot = host?.querySelector('.mes_text');
     if (!host || !textRoot) return;
     const buttons = [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)];
-    buttons.forEach((buttonNode, index) => {
+    const validButtons = [];
+    buttons.forEach(buttonNode => {
+        const rawPrompt = buttonNode.dataset.imageTag || buttonNode.dataset.link || buttonNode.dataset.change || '';
+        if (!isLikelyImagePrompt(rawPrompt)) {
+            buttonNode.classList.add('janima-invalid-image-button');
+            buttonNode.style.display = 'none';
+            buttonNode.setAttribute('aria-hidden', 'true');
+            return;
+        }
+        const index = validButtons.length;
+        validButtons.push(buttonNode);
         buttonNode.dataset.janimaPromptIndex = String(index);
         buttonNode.classList.add('janima-inline-image-button');
         buttonNode.style.display = 'block';
@@ -216,9 +240,10 @@ function markZhihuijiButtonsInline(messageId) {
         if (!buttonNode.closest('.mes_text')) textRoot.append(buttonNode);
     });
     setDebug(messageId, {
-        zhihuijiButtonFound: buttons.length > 0,
-        zhihuijiRoute: buttons.length ? `${VERIFIED_ZHIHUIJI_SELECTOR} native-inline-anchor` : 'waiting-for-chatu8',
-        inlineButtonCount: buttons.length,
+        zhihuijiButtonFound: validButtons.length > 0,
+        zhihuijiRoute: validButtons.length ? `${VERIFIED_ZHIHUIJI_SELECTOR} native-inline-anchor` : 'waiting-for-chatu8',
+        inlineButtonCount: validButtons.length,
+        ignoredFalseButtonCount: buttons.length - validButtons.length,
     });
 }
 
@@ -260,6 +285,136 @@ function applySilentAuditPatch(text, audit) {
     return updateCountMarker(next, extractImagePrompts(next).length);
 }
 
+function anchoredStoryIndexes(text, prompts, candidates) {
+    return prompts.map(prompt => {
+        const preceding = candidates.filter(item => item.end <= prompt.start);
+        return preceding.length ? preceding[preceding.length - 1].index : null;
+    }).filter(Number.isInteger);
+}
+
+function validateQuietFallbackResponse(raw, allowedIndexes, missingCount) {
+    const payload = typeof raw === 'string' ? parseStrictJson(raw) : raw;
+    if (!payload || !Array.isArray(payload.prompts)) throw new Error('当前模型未返回 prompts 数组');
+    const allowed = new Set(allowedIndexes.map(Number));
+    const seen = new Set();
+    const prompts = [];
+    for (const item of payload.prompts) {
+        const paragraphIndex = Number(item?.after_paragraph_index);
+        if (!Number.isInteger(paragraphIndex) || !allowed.has(paragraphIndex)) continue;
+        const tags = Array.isArray(item?.prompt_tags)
+            ? item.prompt_tags.map(tag => String(tag).trim()).filter(Boolean)
+            : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
+        const promptText = tags.join(', ');
+        const key = promptText.toLowerCase();
+        if (tags.length < 6 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seen.has(key)) continue;
+        if (!extractImagePrompts(`[${promptText}]`).length) continue;
+        seen.add(key);
+        prompts.push({ after_paragraph_index: paragraphIndex, prompt_tags: tags });
+    }
+    if (prompts.length < missingCount) throw new Error(`当前模型只返回 ${prompts.length}/${missingCount} 个有效 Prompt`);
+    return prompts.slice(0, missingCount);
+}
+
+async function generateQuietFallbackPayload(prompt, schema, responseLength) {
+    try {
+        return await generateQuietPrompt({
+            quietPrompt: prompt,
+            quietName: 'JANIMA Prompt Rescue',
+            skipWIAN: true,
+            responseLength,
+            jsonSchema: schema,
+            trimToSentence: false,
+        });
+    } catch (structuredError) {
+        console.debug(`[${EXT_NAME}] 结构化输出不可用，改用严格 JSON 文本`, structuredError);
+        return generateQuietPrompt({
+            quietPrompt: prompt,
+            quietName: 'JANIMA Prompt Rescue',
+            skipWIAN: true,
+            responseLength,
+            trimToSentence: false,
+        });
+    }
+}
+
+async function runAutomaticQuietFallback(messageId, text, validation) {
+    const config = settings().fallback;
+    if (!config.enabled) return false;
+    const candidates = storyParagraphCandidates(text);
+    if (!candidates.length) return false;
+    const minimum = Math.max(3, Math.min(6, Number(config.minimumImages || 3)));
+    const maximum = Math.max(minimum, Math.min(6, Number(config.maximumImages || 6)));
+    const desired = config.adaptive ? desiredImageCount(text, { minimum, maximum }) : minimum;
+    const missingCount = Math.max(0, desired - validation.prompts.length);
+    if (!missingCount) return false;
+
+    const hash = `${messageId}:${stableHash(text)}:${desired}:quiet-fallback`;
+    if (runtime.fallbackHashes.has(hash) || runtime.fallbackInFlight.has(Number(messageId))) return false;
+    runtime.fallbackHashes.add(hash);
+    runtime.fallbackInFlight.add(Number(messageId));
+
+    try {
+        const occupied = new Set(anchoredStoryIndexes(text, validation.prompts, candidates));
+        const unused = candidates.filter(item => !occupied.has(item.index));
+        const allowedCandidates = unused.length >= missingCount ? unused : candidates;
+        const allowedIndexes = allowedCandidates.map(item => item.index);
+        const paragraphPayload = allowedCandidates.slice(0, 30).map(item => ({
+            after_paragraph_index: item.index,
+            text: item.text.slice(0, 700),
+        }));
+        const prompt = [
+            'You are a silent image-prompt rescue pass for a completed SillyTavern story reply.',
+            `Create exactly ${missingCount} missing inline image prompts so the turn reaches ${desired} images.`,
+            'Select the strongest distinct visual beats. Prefer character entrances, interactions, strong expressions, action changes, outfit changes, important props, and location transitions.',
+            'Use the supplied after_paragraph_index values exactly. Use distinct paragraphs whenever possible.',
+            'Every prompt must be 10-30 concise English comma-separated image tags: quality, exact people count, character identity and appearance visible in the paragraph, current clothing, action, prop, location, expression, spatial relation, shot, composition, lighting.',
+            'Never invent a person, touch, outfit, prop, action, or location. No Chinese, prose, markdown, square brackets, explanation, or story rewrite.',
+            'Return only JSON: {"prompts":[{"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
+            `Character DNA hint: ${settings().api.characterDna || 'Use only appearance stated in the supplied story paragraphs.'}`,
+            `Existing valid prompts: ${JSON.stringify(validation.prompts.map(item => item.prompt))}`,
+            `Candidate story paragraphs: ${JSON.stringify(paragraphPayload)}`,
+        ].join('\n');
+        const schema = {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                prompts: {
+                    type: 'array',
+                    minItems: missingCount,
+                    maxItems: missingCount,
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            after_paragraph_index: { type: 'integer', enum: allowedIndexes },
+                            prompt_tags: { type: 'array', minItems: 10, maxItems: 30, items: { type: 'string' } },
+                        },
+                        required: ['after_paragraph_index', 'prompt_tags'],
+                    },
+                },
+            },
+            required: ['prompts'],
+        };
+        const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(600, Number(config.responseLength || 1200)));
+        const missingPrompts = validateQuietFallbackResponse(raw, allowedIndexes, missingCount);
+        const next = updateCountMarker(applyMissingPrompts(text, missingPrompts), validation.prompts.length + missingPrompts.length);
+        await writeMessage(messageId, next, 'janima-current-model-fallback');
+        setDebug(messageId, {
+            repairMode: 'current-model-fallback',
+            desiredImageCount: desired,
+            insertedImageCount: missingPrompts.length,
+            insertParagraphIndex: missingPrompts.map(item => item.after_paragraph_index),
+        });
+        return true;
+    } catch (error) {
+        setDebug(messageId, { repairMode: 'current-model-fallback', error: error.message, desiredImageCount: desired });
+        console.warn(`[${EXT_NAME}] 当前模型自动补图失败，原文保持不变`, error);
+        return false;
+    } finally {
+        runtime.fallbackInFlight.delete(Number(messageId));
+    }
+}
+
 async function runAutomaticAiAudit(messageId, text, validation) {
     const config = settings().api;
     if (!config.enabled || !config.autoAudit) return false;
@@ -268,7 +423,7 @@ async function runAutomaticAiAudit(messageId, text, validation) {
     runtime.auditedHashes.add(hash);
     try {
         const audit = validateSilentAuditResponse(await callRepairApi(
-            'Audit one SillyTavern story reply and its existing image prompts. Keep only high-value female-led, relationship, outfit-change, strong-action, strong-expression, key-prop, or major-location shots. Remove redundant, invented, male-only mundane, or unrelated prompts. Repair prompts that contradict the adjacent story. Add only truly missing high-value shots immediately after the matching story paragraph. Normal target 1-2 images, maximum 3. Never rewrite story text. Return strict JSON with remove_prompt_indexes, replace_prompts[{prompt_index,prompt_tags}], missing_prompts[{after_paragraph_index,prompt_tags}], reasons.',
+            'Audit one SillyTavern story reply and its existing image prompts. Keep at least 3 valid images per normal story turn and allow 4-6 when plot beats or locations change quickly. Remove only duplicates, invented content, or prompts that contradict the adjacent story. Repair wrong people counts, clothing, actions, props, and locations. Add missing high-value shots immediately after their matching story paragraphs. Never rewrite story text. Return strict JSON with remove_prompt_indexes, replace_prompts[{prompt_index,prompt_tags}], missing_prompts[{after_paragraph_index,prompt_tags}], reasons.',
             {
                 assistant_reply: text,
                 existing_prompts: validation.prompts.map(prompt => ({ prompt_index: prompt.index, paragraph_index: prompt.paragraphIndex, prompt: prompt.prompt })),
@@ -313,6 +468,7 @@ async function renderMessageCheck(messageId) {
             return;
         }
     }
+    if (await runAutomaticQuietFallback(messageId, text, validation)) return;
     markZhihuijiButtonsInline(messageId);
     setTimeout(() => markZhihuijiButtonsInline(messageId), 350);
     await runAutomaticAiAudit(messageId, text, validation);
@@ -474,7 +630,10 @@ async function repairWholeTurn(messageId) {
 function verifiedZhihuijiButtons(messageId) {
     const host = messageElement(messageId);
     if (!host || !settings().chatu8.enabled) return [];
-    return [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)].filter(node => node instanceof HTMLElement);
+    return [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)].filter(node => {
+        const rawPrompt = node.dataset.imageTag || node.dataset.link || node.dataset.change || '';
+        return node instanceof HTMLElement && isLikelyImagePrompt(rawPrompt);
+    });
 }
 
 async function waitForZhihuijiButton(messageId, promptIndex) {
@@ -671,6 +830,12 @@ function settingsHtml() {
                     ${checkRow('autoCheck', '自动检查最新回复')}
                     ${checkRow('silentMode', '静默模式（不向对话插入插件界面）')}
                     ${checkRow('autoLocalRepair', '自动本地纠错（不调用 AI）')}
+                    <h4>缺图自动兜底</h4>
+                    ${checkRow('fallback.enabled', '少于目标数时用酒馆当前模型静默补 Prompt')}
+                    ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
+                    ${fieldRow('fallback.minimumImages', '每轮最少图片', '3', 'number')}
+                    ${fieldRow('fallback.maximumImages', '每轮最多图片', '6', 'number')}
+                    ${fieldRow('fallback.responseLength', '兜底模型回复上限', '1200', 'number')}
                     <h4>API 设置</h4>
                     ${checkRow('api.enabled', '启用 AI 救援')}
                     ${checkRow('api.autoAudit', '每轮后台 AI 审计（补漏、删错图、修冲突）')}
@@ -730,7 +895,7 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'silentMode', 'autoLocalRepair', 'chatu8.inlineButtons'].includes(input.name)) {
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons'].includes(input.name)) {
             removeLegacyConversationUi();
             if (settings().enabled) scanLatestAssistant();
         }
