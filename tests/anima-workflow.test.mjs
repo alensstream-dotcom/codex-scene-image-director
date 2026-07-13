@@ -9,14 +9,14 @@ import {
 test('Galgame workflow restores the user Turbo LoRA and eight-step sampling', () => {
     const graph = JSON.parse(buildAnimaAccuracyWorkflow());
     assert.equal(graph['11'].inputs.steps, 8);
-    assert.equal(graph['11'].inputs.cfg, 4.5);
-    assert.equal(graph['11'].inputs.sampler_name, 'er_sde');
+    assert.equal(graph['11'].inputs.cfg, 1);
+    assert.equal(graph['11'].inputs.sampler_name, 'euler');
     assert.equal(graph['11'].inputs.scheduler, 'normal');
     assert.equal(graph['11'].inputs.model[0], '7');
     assert.equal(graph['7'].class_type, 'LoraLoader');
     assert.equal(graph['7'].inputs.lora_name, 'anima-turbo-lora-v0.2.safetensors');
-    assert.equal(graph['7'].inputs.strength_model, 0.35);
-    assert.equal(graph['7'].inputs.strength_clip, 0.25);
+    assert.equal(graph['7'].inputs.strength_model, 1);
+    assert.equal(graph['7'].inputs.strength_clip, 1);
     assert.equal(graph['8'].inputs.text, '%prompt%');
     assert.equal(graph['9'].inputs.text, '%negative_prompt%');
     assert.equal(Object.values(graph).some(node => node.class_type === 'LoraLoader'), true);
