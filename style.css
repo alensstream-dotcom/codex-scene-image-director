@@ -27,6 +27,10 @@
     display: none !important;
 }
 
+.st-chatu8-image-button.janima-invalid-image-button {
+    display: none !important;
+}
+
 /* Keep the actual st-chatu8 control in normal document flow at its native prompt anchor. */
 .mes .mes_text .janima-inline-image-anchor {
     display: block !important;
