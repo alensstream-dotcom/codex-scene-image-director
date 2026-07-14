@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isLikelyImagePrompt, parseDeclaredImageCount, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
+import { analyzeStoryboardCoverage, desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isLikelyImagePrompt, parseDeclaredImageCount, planStoryboardSlots, storyBeatGroups, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
 
 test('parses the final IMG_COUNT declaration', () => {
     assert.equal(parseDeclaredImageCount('正文\n<!--IMG_COUNT:2-->').count, 2);
@@ -8,11 +8,62 @@ test('parses the final IMG_COUNT declaration', () => {
     assert.equal(parseDeclaredImageCount('正文').count, null);
 });
 
-test('adaptive target starts at three and rises to six for fast multi-beat replies', () => {
+test('adaptive target follows distinct female story beats rather than paragraph quota', () => {
     const normal = ['她推开石门，蓝光照亮洞窟。', '少女停在湖边，握紧手中的银剑。', '她回头望向身后的伙伴。'].join('\n\n');
     assert.equal(desiredImageCount(normal), 3);
-    const fast = Array.from({ length: 24 }, (_, index) => `突然，第${index + 1}个场景发生明显动作变化。`).join('\n\n');
+    const fast = Array.from({ length: 24 }, (_, index) => `她突然冲入第${index + 1}个场景，动作与地点发生明显变化。`).join('\n\n');
     assert.equal(desiredImageCount(fast), 6);
+});
+
+test('merges repeated prose about one continuous action into one image beat', () => {
+    const text = [
+        '她抱住你，把脸埋在你的肩头。',
+        '她仍然抱着你，没有松开双臂。',
+        '她继续维持这个拥抱，只是呼吸逐渐平静。',
+    ].join('\n\n');
+    assert.equal(storyBeatGroups(text).groups.length, 1);
+    assert.equal(planStoryboardSlots(text).targetCount, 1);
+});
+
+test('continuous non-candidate bridge paragraphs do not split one action into two shots', () => {
+    const text = [
+        '艾琳在月台灯下突然抱住你，银白长发落在你的肩头，紫色眼睛因为重逢而泛着泪光。',
+        '她继续维持着同一个拥抱，双臂没有松开，只把脸更深地埋进你的胸前。',
+        '列车广播响了两遍，艾琳仍然抱着你，姿势和位置都没有改变。',
+        '她没有松开，只在你耳边轻声说终于等到你了。',
+    ].join('\n\n');
+    const result = storyBeatGroups(text);
+    assert.equal(result.groups.length, 1);
+    assert.equal(planStoryboardSlots(text).targetCount, 1);
+});
+
+test('plans chronological opening middle and ending slots for distinct changes', () => {
+    const text = [
+        '银发少女推门进入车站，抬眼找到你。',
+        '她走近后伸手递来一张银色车票。',
+        '广播响起，她忽然抓住你的手奔向月台。',
+        '列车启动前，她转身抱住你，眼里泛起泪光。',
+    ].join('\n\n');
+    const plan = planStoryboardSlots(text);
+    assert.ok(plan.targetCount >= 3);
+    assert.equal(plan.slots[0].phase, 'opening');
+    assert.equal(plan.slots.at(-1).phase, 'ending');
+    assert.ok(plan.slots[0].anchorOrder < plan.slots.at(-1).anchorOrder);
+});
+
+test('detects front-loaded buttons and an uncovered late action change', () => {
+    const prompt = action => `[masterpiece, best quality, score_7, highres, newest, safe, 1girl, solo, female focus, adult woman, silver hair, blue eyes, ${action}, cinematic medium shot]`;
+    const text = [
+        '银发少女推门进入车站。', '', prompt('entering the station'), '',
+        '她走近后伸手递来一张银色车票。', '', prompt('offering a silver ticket'), '',
+        '她仍站在售票机旁，继续递着车票。', '', prompt('offering a silver ticket with her right hand'), '',
+        '广播响起后，她忽然抓住你的手奔向月台。', '',
+        '列车启动前，她转身抱住你，眼里泛起泪光。', '',
+        '<!--IMG_COUNT:3-->',
+    ].join('\n');
+    const codes = analyzeStoryboardCoverage(text).issues.map(issue => issue.code);
+    assert.ok(codes.includes('near_duplicate_action') || codes.includes('repeated_continuous_beat'));
+    assert.ok(codes.includes('uncovered_late_beat') || codes.includes('front_loaded_storyboard'));
 });
 
 test('story candidates ignore image prompts and variable/status blocks', () => {

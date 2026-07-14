@@ -7,6 +7,7 @@ import {
     parseStrictJson,
     reinforcePromptLocal,
     replacePromptAt,
+    replaceStoryboardPrompts,
 } from '../lib/rescue-core.mjs';
 
 test('local reinforcement is deterministic and never calls fetch', () => {
@@ -63,6 +64,26 @@ test('whole-turn fill inserts only at requested paragraph', () => {
     const next = applyMissingPrompts(source, [{ after_paragraph_index: 0, prompt_tags: ['1girl', 'solo', 'Sakura', 'pink hair', 'home dress', 'upper body'] }]);
     assert.match(next, /^第一段。\n\n\[masterpiece, best quality, score_7, highres, newest, safe, 1girl/m);
     assert.match(next, /第二段。/);
+});
+
+test('storyboard replacement removes old clustered prompts and inserts a new late shot', () => {
+    const old = [
+        '她推门进入大厅。', '',
+        '[1girl, solo, female focus, adult woman, silver hair, entering, medium shot]', '',
+        '她仍站在门口。', '',
+        '[1girl, solo, female focus, adult woman, silver hair, standing, close-up]', '',
+        '她突然拔剑挡住袭击。', '',
+        '<!--IMG_COUNT:2-->',
+    ].join('\n');
+    const actionParagraph = old.split(/\n\n/).findIndex(value => value.includes('突然拔剑'));
+    const next = replaceStoryboardPrompts(old, [{
+        after_paragraph_index: actionParagraph,
+        prompt_tags: ['masterpiece', 'best quality', '1girl', 'solo', 'female focus', 'adult woman', 'silver hair', 'blue eyes', 'drawing a sword', 'protecting her companion', 'determined expression', 'dynamic medium shot'],
+    }]);
+    assert.equal(extractImagePrompts(next).length, 1);
+    assert.match(next, /突然拔剑[\s\S]*drawing a sword/);
+    assert.match(next, /IMG_COUNT:1/);
+    assert.doesNotMatch(next, /standing, close-up/);
 });
 
 test('cache key changes by message, content, prompt, and mode', () => {
