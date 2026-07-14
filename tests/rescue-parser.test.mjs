@@ -37,6 +37,43 @@ test('continuous non-candidate bridge paragraphs do not split one action into tw
     assert.equal(planStoryboardSlots(text).targetCount, 1);
 });
 
+test('adult action ledger keeps real phase changes and merges only continuous penetration', () => {
+    const text = [
+        '她解开礼服，让衣物滑落到床边。',
+        '她俯身与你进行口部互动，抬眼观察你的反应。',
+        '她引导你进入她体内，身体在接触瞬间绷紧。',
+        '她继续维持结合，反复抽送，没有改变体位。',
+        '她随后翻身骑到你身上，改变体位并掌握节奏。',
+        '她在最后一次动作中达到高潮，身体痉挛后失神地抱紧你。',
+        '事后她依偎着你休息，呼吸逐渐平静。',
+    ].join('\n\n');
+    const result = storyBeatGroups(text);
+    assert.deepEqual(result.groups.map(group => group.actionPhase), [
+        'outfit_change',
+        'oral_sex',
+        'penetration',
+        'position_change',
+        'climax',
+        'aftercare',
+    ]);
+    const plan = planStoryboardSlots(text);
+    assert.equal(plan.targetCount, 6);
+    assert.equal(plan.slots.at(-2).actionPhase, 'climax');
+    assert.match(plan.slots.at(-2).selectedBeatText, /达到高潮/);
+});
+
+test('climax outranks routine contact inside its story window', () => {
+    const text = [
+        '她轻轻抚摸你的肩膀，脸上带着潮红。',
+        '她继续贴近你，保持相同的触碰。',
+        '她终于达到高潮，抱紧你时全身颤栗，随后失神地倒在你怀里。',
+    ].join('\n\n');
+    const plan = planStoryboardSlots(text, { preferred: 1, maximum: 1 });
+    assert.equal(plan.targetCount, 1);
+    assert.equal(plan.slots[0].actionPhase, 'climax');
+    assert.match(plan.slots[0].selectedBeatText, /达到高潮/);
+});
+
 test('plans chronological opening middle and ending slots for distinct changes', () => {
     const text = [
         '银发少女推门进入车站，抬眼找到你。',
@@ -71,6 +108,19 @@ test('story candidates ignore image prompts and variable/status blocks', () => {
     const candidates = storyParagraphCandidates(text);
     assert.equal(candidates.length, 1);
     assert.match(candidates[0].text, /走入大厅/);
+});
+
+test('story candidates ignore hidden reasoning and markdown planning paragraphs', () => {
+    const text = [
+        '<thinking>',
+        '# 1.基础要求确认：本次需要规划三张图片。',
+        '# 2.剧情要求：先安排互动，再输出提示词。',
+        '</thinking>',
+        '银发少女推开门，拔剑挡住袭击。',
+    ].join('\n\n');
+    const candidates = storyParagraphCandidates(text);
+    assert.equal(candidates.length, 1);
+    assert.match(candidates[0].text, /拔剑挡住袭击/);
 });
 
 test('detects a visible woman in Chinese and English story beats without relying on prompts', () => {

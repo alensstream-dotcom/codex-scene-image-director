@@ -3,7 +3,7 @@
 正常链路：
 
 ```text
-主模型 + JANIMA v8.3 手机 Galgame 分镜世界书 → 整轮事件表与最佳女性镜头 → 本地分镜覆盖检查/女性门禁 → 智绘姬真实按钮 → JANIMA Galgame Turbo 8步工作流
+主模型 + JANIMA v8.4 手机 Galgame 事件账本世界书 → 主体/动作/对象/结果与高潮赢家 → 本地阶段覆盖检查/女性门禁 → 智绘姬真实按钮 → JANIMA Galgame Turbo 8步工作流
 ```
 
 插件默认不在对话中显示状态栏、工具栏或第二列，不占正文宽度。智绘姬按钮保留在 Prompt 的原生位置：Prompt 紧跟哪段剧情，按钮和生成图片就出现在哪段剧情下。
@@ -18,7 +18,7 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 
 然后：
 
-1. 手机下载并导入 `worldbooks/JANIMA_v8_3_Galgame_Director.json`。它保留 FM_DNA、场景变量与 UpdateVariable，并使用 SillyTavern 原生变量宏，不依赖 EJS/JS-Slash-Runner。
+1. 手机下载并导入 `worldbooks/JANIMA_v8_4_Galgame_Director.json`。它保留 FM_DNA、场景变量与 UpdateVariable，并使用 SillyTavern 原生变量宏，不依赖 EJS/JS-Slash-Runner。
 2. 关闭旧 v7.8.2 主世界书，避免两套规则同时生效；已有 FM_DNA 变量数据不用删除。
 3. 导入 `regex/JANIMA_rescue_regex.json`。
 4. 智绘姬标记设置为 `[` 和 `]`，关闭 LLM 扩写、正文二次分析、自动重写和自动风格。
@@ -29,6 +29,8 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 - 自动删除完全重复的 Prompt；不会在智绘姬按钮创建后改写其内容，避免界面新 Prompt 与实际 ComfyUI 旧 Prompt 不一致。
 - 删除完全重复的 Prompt。
 - 先把整轮正文合并成独立事件组；同一次持续拥抱、亲吻、抚摸、体位、追逐或对白反应只保留一张，不按段落凑数。
+- 为每个候选建立“主体—动作—对象—可见结果”账本；成人剧情区分脱衣、爱抚、手部/口部互动、首次进入、同体位持续、换体位、高潮结果与事后照料，不再全部合并为一个亲密动作。
+- 在每个取材窗口比较全部候选，优先选择产生关系/冲突后果、改变接触关系或体位、并有明确女性动作与结果的高潮帧；普通喘息、脸红、静态姿势和背景说明不能覆盖关键动作。
 - 如发现重复持续动作、按钮集中在前半段、后半段新转折漏图或数量与独立事件不符，静默调用酒馆当前模型一次性重排整轮 Prompt，并把按钮放回对应事件之后；快节奏且确有不同事件时才增加到4–6张。
 - 自动拦截纯男性、纯场景、纯建筑、纯道具以及载荷与正文不一致的旧按钮。动态人数、动作和身份修正由世界书在按钮创建前完成；默认关闭逐图二次模型改写，正常 Prompt 直接进入快速生成。
 - 每个可见命名角色在每张图中重复脸、发色/发型、瞳色、体型和标志服装锚点；双人图强制分角色块、左右/前后位置和独立身体。
@@ -39,7 +41,7 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 - 自动隐藏智绘姬对 `[Unnamed Persona]` 等非图像方括号的误识别按钮。
 - 可选外部 API 审计可进一步删除低价值/错误图片 Prompt；不开也不影响上述当前模型兜底，任何失败都不覆盖原文。
 
-## v8.3 世界书选图原则
+## v8.4 世界书选图原则
 
 - 每张图读取“上一张 Prompt 之后到当前插入点”的完整剧情，不只看最后一句，不使用未来剧情。
 - 从该窗口选择剧情后果、女性情绪、动作关系、视觉反差和镜头新鲜度最强的一帧。
@@ -49,6 +51,7 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 - 地点切换、新角色登场、换装、强表情、道具或动作阶段变化时增加到4张。
 - 追逐、战斗、多地点高速转场可以5–6张，硬上限6张。
 - 每个 Prompt 必须紧跟对应剧情，禁止堆到回复底部。
+- 成人窗口中的首次进入、明确换体位和高潮/射精结果是独立高显著事件；同体位的重复动作仍只保留一张。
 
 ## 测试
 

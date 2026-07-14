@@ -43,10 +43,12 @@ test('local reinforcement selects one Anima safety tag from the actual content',
     const clothedCurvy = reinforcePromptLocal('[1girl, adult woman, large breasts, formal gothic dress, upper body]');
     const nude = reinforcePromptLocal('[1girl, solo, nude, nipples, lying on bed, upper body]');
     const adult = reinforcePromptLocal('[1girl, 1boy, vaginal sex, explicit, on bed, medium shot]');
+    const mislabeledAdult = reinforcePromptLocal('[safe, 1girl, 1boy, oral sex with the male protagonist, on bed, medium shot]');
     assert.match(normal, /newest, safe, 1girl/);
     assert.match(clothedCurvy, /newest, safe, 1girl/);
     assert.match(nude, /newest, nsfw, 1girl/);
     assert.match(adult, /newest, explicit, 1girl/);
+    assert.match(mislabeledAdult, /newest, explicit, 1girl/);
     assert.doesNotMatch(adult, /, safe,/);
 });
 
