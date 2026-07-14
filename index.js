@@ -17,6 +17,7 @@ import {
     applyMissingPrompts,
     assertPromptRepairResponse,
     assertWholeTurnResponse,
+    buildInstantStoryboard,
     extractImagePrompts,
     findSelectedParagraph,
     hasVisibleFemaleStoryBeat,
@@ -38,7 +39,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.7.0';
+const EXT_VERSION = '1.8.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -51,7 +52,7 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
 const ADULT_EVENT_PHASES = new Set(['erotic_touch', 'manual_stimulation', 'oral_sex', 'penetration', 'position_change', 'climax', 'aftercare']);
 
 const DEFAULT_SETTINGS = {
-    version: 10,
+    version: 11,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -71,6 +72,8 @@ const DEFAULT_SETTINGS = {
     },
     fallback: {
         enabled: true,
+        instantLocal: true,
+        useCurrentModel: false,
         repairInvalidPrompts: false,
         semanticAudit: false,
         minimumImages: 3,
@@ -111,6 +114,7 @@ const runtime = {
     semanticAuditFinalHashes: new Map(),
     zhihuijiRescanHashes: new Set(),
     fallbackFailures: new Map(),
+    streamScanQueued: false,
     missingChatu8Warned: false,
 };
 
@@ -128,7 +132,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 10) {
+    if (!existing || Number(existing.version) < 11) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -136,7 +140,7 @@ function settings() {
             autoLocalRepair: false,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
+            fallback: { enabled: true, instantLocal: true, useCurrentModel: false, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -633,9 +637,68 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
     }
 }
 
+function recentImagePromptBefore(messageId) {
+    for (let index = Number(messageId) - 1; index >= 0; index--) {
+        const prompts = extractImagePrompts(String(chat?.[index]?.mes || chat?.[index]?.message || ''));
+        const femalePrompt = [...prompts].reverse().find(item => /\b(?:[1-6]girls?|adult women?|female focus)\b/i.test(item.prompt));
+        if (femalePrompt) return femalePrompt.prompt;
+    }
+    return '';
+}
+
+async function runInstantLocalStoryboard(messageId, text, validation) {
+    const config = settings().fallback;
+    if (!config.enabled || !config.instantLocal || config.useCurrentModel) return false;
+    if (!hasVisibleFemaleStoryBeat(text)) return false;
+    const candidates = storyParagraphCandidates(text);
+    if (!candidates.length) return false;
+    const preferred = Math.max(1, Math.min(6, Number(config.minimumImages || 3)));
+    const maximum = config.adaptive
+        ? Math.max(preferred, Math.min(6, Number(config.maximumImages || 6)))
+        : preferred;
+    const plan = planStoryboardSlots(text, { preferred, maximum });
+    if (!plan.targetCount) return false;
+    const coverage = analyzeStoryboardCoverage(text, validation.prompts, { plan });
+    if (!coverage.needsReflow) return false;
+
+    const built = buildInstantStoryboard(text, {
+        plan,
+        preferred,
+        maximum,
+        existingPrompts: validation.prompts,
+        previousPrompt: recentImagePromptBefore(messageId),
+    });
+    const next = replaceStoryboardPrompts(text, built.prompts.map(item => ({
+        after_paragraph_index: item.after_paragraph_index,
+        prompt: item.prompt,
+    })));
+    const message = chat?.[Number(messageId)];
+    if (message) {
+        message.extra ||= {};
+        message.extra.janimaStoryboardPlan = {
+            version: 3,
+            mode: 'instant-local',
+            imageCount: built.prompts.length,
+            paragraphIndexes: built.prompts.map(item => item.after_paragraph_index),
+            actionPhases: built.prompts.map(item => item.action_phase),
+            sources: built.prompts.map(item => item.source),
+        };
+    }
+    await writeMessage(messageId, next, 'janima-instant-local-storyboard');
+    setDebug(messageId, {
+        repairMode: 'instant-local-storyboard',
+        desiredImageCount: built.prompts.length,
+        insertedImageCount: built.prompts.length,
+        insertParagraphIndex: built.prompts.map(item => item.after_paragraph_index),
+        storyboardIssues: coverage.issues,
+        latencyClass: 'no-llm',
+    });
+    return true;
+}
+
 async function runAutomaticQuietFallback(messageId, text, validation) {
     const config = settings().fallback;
-    if (!config.enabled) return false;
+    if (!config.enabled || !config.useCurrentModel) return false;
     // A character greeting is the first playable Galgame scene on mobile. It
     // must receive the same inline-image rescue as later assistant replies.
     // The female-story gate prevents the fallback from inventing a woman in a
@@ -832,6 +895,7 @@ async function renderMessageCheck(messageId) {
         }
     }
     if (await runAutomaticQuietPromptRepair(messageId, text, validation)) return;
+    if (await runInstantLocalStoryboard(messageId, text, validation)) return;
     if (await runAutomaticQuietFallback(messageId, text, validation)) return;
     markZhihuijiButtonsInline(messageId);
     nudgeZhihuijiObserver(messageId, validation);
@@ -1210,7 +1274,7 @@ function settingsHtml() {
                     <b>世界书生图救援器 <small>v${EXT_VERSION}</small></b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">手机 Galgame 模式默认完全静默：后台按“上一张图之后的剧情窗口”检查 Prompt，拦截纯男性/纯场景图，并把智绘姬按钮留在对应剧情段落下。</p>
+                    <p class="notes">手机 Galgame 即时模式：世界书随正文直接写 Prompt，插件在流式回复中唤醒智绘姬；缺图时仅用本地事件账本立即补位，默认不再等待第二次 LLM。</p>
                     <h4>基础设置</h4>
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
@@ -1218,6 +1282,8 @@ function settingsHtml() {
                     ${checkRow('autoLocalRepair', '仅删除重复 Prompt（安全）')}
                     <h4>缺图自动兜底</h4>
                     ${checkRow('fallback.enabled', '镜头重复、前密后疏或漏转折时整轮重排')}
+                    ${checkRow('fallback.instantLocal', '即时本地兜底（不调用 LLM，推荐开启）')}
+                    ${checkRow('fallback.useCurrentModel', '慢速二次模型重排（会额外等待，默认关闭）')}
                     ${checkRow('fallback.repairInvalidPrompts', '二次模型改写已有 Prompt（默认关闭）')}
                     ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
@@ -1240,7 +1306,7 @@ function settingsHtml() {
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
                     ${fieldRow('chatu8.buttonWaitMs', '生成按钮等待时间 (ms)', '3500', 'number')}
-                    <p class="notes">AI 审计只有在“启用 AI 救援”并填写 API 后才会请求；失败时原正文和 Prompt 保持不变。</p>
+                    <p class="notes">只有主动开启“慢速二次模型重排”、二次改写或 API 审计时才会额外请求模型；即时本地兜底不会产生第二次聊天模型等待。</p>
                 </div>
             </div>
         </div>`;
@@ -1284,7 +1350,7 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.instantLocal', 'fallback.useCurrentModel', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
             removeLegacyConversationUi();
             if (input.name === 'chatu8.accuracyWorkflow') configureChatu8AccuracyWorkflow();
             if (settings().enabled) scanLatestAssistant();
@@ -1298,6 +1364,23 @@ function scanLatestAssistant() {
     }
 }
 
+function scheduleStreamingInlineScan() {
+    if (runtime.streamScanQueued) return;
+    runtime.streamScanQueued = true;
+    setTimeout(() => {
+        runtime.streamScanQueued = false;
+        for (let index = (chat?.length || 0) - 1; index >= 0; index--) {
+            if (!isAssistantMessage(index)) continue;
+            const validation = validateTurn(getMessageText(index));
+            if (validation.prompts.length) {
+                markZhihuijiButtonsInline(index);
+                nudgeZhihuijiObserver(index, validation);
+            }
+            return;
+        }
+    }, 120);
+}
+
 function bindEvents() {
     const onMessage = messageId => {
         if (settings().autoCheck) scheduleCheck(messageId, 120);
@@ -1305,6 +1388,8 @@ function bindEvents() {
     [event_types.MESSAGE_RECEIVED, event_types.MESSAGE_UPDATED, event_types.MESSAGE_SWIPED]
         .filter(Boolean)
         .forEach(type => eventSource.on(type, onMessage));
+    if (event_types.STREAM_TOKEN_RECEIVED) eventSource.on(event_types.STREAM_TOKEN_RECEIVED, scheduleStreamingInlineScan);
+    if (event_types.GENERATION_ENDED) eventSource.on(event_types.GENERATION_ENDED, () => setTimeout(scanLatestAssistant, 50));
     if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => setTimeout(scanLatestAssistant, 200));
     const observer = new MutationObserver(mutations => {
         for (const mutation of mutations) {
