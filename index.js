@@ -7,6 +7,7 @@ import {
     saveChatConditional,
     saveSettingsDebounced,
     this_chid,
+    updateMessageBlock,
 } from '../../../../script.js';
 import { extension_settings } from '../../../extensions.js';
 import { buildVisualDnaHint, visualLocksForText } from './lib/identity-locks.mjs';
@@ -18,6 +19,7 @@ import {
     desiredImageCount,
     extractImagePrompts,
     findSelectedParagraph,
+    hasVisibleFemaleStoryBeat,
     insertPromptAfterParagraph,
     isLikelyImagePrompt,
     makeCacheKey,
@@ -33,7 +35,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.5.2';
+const EXT_VERSION = '1.5.3';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -104,6 +106,8 @@ const runtime = {
     quietRepairInFlight: new Set(),
     semanticAuditFinalHashes: new Map(),
     zhihuijiRescanHashes: new Set(),
+    fallbackFailures: new Map(),
+    missingChatu8Warned: false,
 };
 
 function mergeDefaults(base, incoming) {
@@ -183,7 +187,14 @@ function collectCharacterDnaHints(source = '') {
 function configureChatu8AccuracyWorkflow() {
     if (!settings().chatu8.enabled || !settings().chatu8.accuracyWorkflow) return false;
     const chatu8Settings = extension_settings['st-chatu8'];
-    if (!chatu8Settings) return false;
+    if (!chatu8Settings) {
+        if (!runtime.missingChatu8Warned) {
+            runtime.missingChatu8Warned = true;
+            toast('warning', '未检测到智绘姬 st-chatu8；请先安装并启用智绘姬，否则不会出现生图按钮。');
+        }
+        return false;
+    }
+    runtime.missingChatu8Warned = false;
     const changed = installAnimaAccuracyWorkflow(chatu8Settings);
     if (changed) saveSettingsDebounced();
     return changed;
@@ -311,17 +322,14 @@ function markZhihuijiButtonsInline(messageId) {
             buttonNode.setAttribute('aria-hidden', 'true');
             return;
         }
-        const promptRecord = validation.prompts[promptCursor++];
-        if (promptRecord?.prompt && promptRecord.prompt !== rawPrompt) {
-            // Chatu8 captures its prompt inside the click-listener closure.
-            // Mutating data-* would only change the displayed/cache key while
-            // ComfyUI could still receive the old prompt. Never expose a button
-            // whose native payload cannot be proven to match the stored turn.
-            buttonNode.classList.add('janima-invalid-image-button');
-            buttonNode.style.display = 'none';
-            buttonNode.setAttribute('aria-hidden', 'true');
-            return;
-        }
+        const exactRecord = validation.prompts.find(item => item.prompt === rawPrompt);
+        const promptRecord = exactRecord || validation.prompts[promptCursor];
+        promptCursor++;
+        // Chatu8 may normalize whitespace or apply its selected preset before
+        // storing data-image-tag. On phones this made every otherwise valid
+        // button disappear. Keep the native closure/payload untouched and show
+        // it when it remains a plausible image prompt; diagnostics record the
+        // mismatch without blocking the user's Galgame flow.
         const blocked = promptRecord?.issues?.some(issue => BLOCKING_IMAGE_ISSUE_CODES.has(issue.code));
         if (blocked) {
             buttonNode.classList.add('janima-invalid-image-button');
@@ -347,6 +355,10 @@ function markZhihuijiButtonsInline(messageId) {
         zhihuijiRoute: validButtons.length ? `${VERIFIED_ZHIHUIJI_SELECTOR} native-inline-anchor` : 'waiting-for-chatu8',
         inlineButtonCount: validButtons.length,
         ignoredFalseButtonCount: buttons.length - validButtons.length,
+        nativePayloadMismatch: buttons.some(buttonNode => {
+            const raw = buttonNode.dataset.imageTag || buttonNode.dataset.link || buttonNode.dataset.change || '';
+            return isLikelyImagePrompt(raw) && !validation.prompts.some(item => item.prompt === raw);
+        }),
     });
 }
 
@@ -612,9 +624,11 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
 async function runAutomaticQuietFallback(messageId, text, validation) {
     const config = settings().fallback;
     if (!config.enabled) return false;
-    // The greeting (message 0) is character-card boilerplate, not a normal
-    // generated story turn. Never launch a slow fallback request on each reload.
-    if (Number(messageId) === 0) return false;
+    // A character greeting is the first playable Galgame scene on mobile. It
+    // must receive the same inline-image rescue as later assistant replies.
+    // The female-story gate prevents the fallback from inventing a woman in a
+    // male-only or scenery-only greeting.
+    if (!hasVisibleFemaleStoryBeat(text)) return false;
     const candidates = storyParagraphCandidates(text);
     if (!candidates.length) return false;
     const minimum = Math.max(3, Math.min(6, Number(config.minimumImages || 3)));
@@ -625,7 +639,6 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
 
     const hash = `${messageId}:${stableHash(text)}:${desired}:quiet-fallback`;
     if (runtime.fallbackHashes.has(hash) || runtime.fallbackInFlight.has(Number(messageId))) return false;
-    runtime.fallbackHashes.add(hash);
     runtime.fallbackInFlight.add(Number(messageId));
 
     try {
@@ -688,6 +701,8 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
         const blockingIssues = finalValidation.issues.filter(issue => issue.severity === 'error');
         if (blockingIssues.length) throw new Error(`补图未通过剧情/女性门禁：${blockingIssues.map(issue => issue.code).join(', ')}`);
         await writeMessage(messageId, next, 'janima-current-model-fallback');
+        runtime.fallbackHashes.add(hash);
+        runtime.fallbackFailures.delete(hash);
         setDebug(messageId, {
             repairMode: 'current-model-fallback',
             desiredImageCount: desired,
@@ -696,8 +711,14 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
         });
         return true;
     } catch (error) {
+        const failures = Number(runtime.fallbackFailures.get(hash) || 0) + 1;
+        runtime.fallbackFailures.set(hash, failures);
         setDebug(messageId, { repairMode: 'current-model-fallback', error: error.message, desiredImageCount: desired });
         console.warn(`[${EXT_NAME}] 当前模型自动补图失败，原文保持不变`, error);
+        // Mobile providers occasionally reject structured output while the
+        // just-finished story request is still settling. Retry twice without
+        // requiring a reload; do not loop indefinitely or slow every turn.
+        if (failures < 3) setTimeout(() => scheduleCheck(messageId, 0), 900 * failures);
         return false;
     } finally {
         runtime.fallbackInFlight.delete(Number(messageId));
@@ -777,11 +798,26 @@ async function writeMessage(messageId, nextText, source) {
     if (!message) throw new Error('消息不存在');
     runtime.writing.add(id);
     message.mes = nextText;
+    let initialSaveError = null;
     try {
-        await saveChatConditional?.();
+        try {
+            await saveChatConditional?.();
+        } catch (error) {
+            // A brand-new mobile chat may render message 0 before SillyTavern
+            // creates its JSONL file. The in-memory greeting is still valid;
+            // render it now so Chatu8 can create buttons, then retry persistence.
+            initialSaveError = error;
+            console.debug(`[${EXT_NAME}] 首次聊天文件尚未建立，先渲染开场白再补存`, error);
+        }
+        updateMessageBlock(id, message);
         await eventSource.emit(event_types.MESSAGE_UPDATED, id, source || EXT_ID);
     } finally {
         runtime.writing.delete(id);
+    }
+    if (initialSaveError) {
+        setTimeout(() => saveChatConditional?.().catch(error => {
+            console.debug(`[${EXT_NAME}] 等待首次用户消息时保留内存中的开场白补图`, error);
+        }), 1200);
     }
     scheduleCheck(id, 120);
 }
@@ -1231,6 +1267,8 @@ function bindEvents() {
 jQuery(async () => {
     settings();
     configureChatu8AccuracyWorkflow();
+    setTimeout(configureChatu8AccuracyWorkflow, 800);
+    setTimeout(configureChatu8AccuracyWorkflow, 2400);
     removeLegacyConversationUi();
     const container = document.querySelector('#extensions_settings') || document.querySelector('#extensions_settings2');
     if (container && !document.querySelector(SETTINGS_SELECTOR)) container.insertAdjacentHTML('beforeend', settingsHtml());

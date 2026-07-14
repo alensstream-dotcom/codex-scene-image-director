@@ -32,6 +32,10 @@ test('installer selects the native Anima workflow and isolated prompt preset onc
     assert.equal(settings.AQT_comfyui, '');
     assert.equal(settings.UCP_comfyui, ANIMA_NATIVE_NEGATIVE_TAGS.join(', '));
     assert.equal(settings.yusheid_comfyui, ANIMA_PROMPT_PRESET_ID);
+    assert.equal(settings.scriptEnabled, true);
+    assert.equal(settings.mode, 'comfyui');
+    assert.equal(settings.startTag, '[');
+    assert.equal(settings.endTag, ']');
     assert.equal(settings.yushe.默认.negativePrompt, 'low quality, wrong face');
     assert.equal(settings.yushe[ANIMA_PROMPT_PRESET_ID].negativePrompt, '');
     assert.match(settings.UCP_comfyui, /chromatic aberration/);
