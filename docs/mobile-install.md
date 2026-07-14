@@ -3,9 +3,9 @@
 ## 需要的两个核心文件
 
 - 插件安装地址：`https://github.com/alensstream-dotcom/codex-scene-image-director.git`
-- 世界书直链：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.8.0/JANIMA_v8_5_Galgame_Director.json`
+- 世界书直链：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.8.1/JANIMA_v8_5_Galgame_Director.json`
 
-必须另外安装智绘姬 `st-chatu8`，因为真正的生成图片按钮由智绘姬创建；本插件负责流式唤醒、即时本地补位、过滤和原位布局，不能代替智绘姬连接 ComfyUI。推荐同时导入正则：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.8.0/JANIMA_rescue_regex.json`，避免历史 Prompt 和 IMG_COUNT 回灌给模型。
+必须另外安装智绘姬 `st-chatu8`，因为真正的生成图片按钮由智绘姬创建；本插件负责流式唤醒、即时本地补位、过滤和原位布局，不能代替智绘姬连接 ComfyUI。推荐同时导入正则：`https://github.com/alensstream-dotcom/codex-scene-image-director/releases/download/v1.8.1/JANIMA_rescue_regex.json`，避免历史 Prompt 和 IMG_COUNT 回灌给模型。
 
 v8.5 世界书已使用 SillyTavern 原生变量宏，不需要额外安装 EJS、酒馆助手或 JS-Slash-Runner。
 

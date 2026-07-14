@@ -22,6 +22,7 @@ import {
     findSelectedParagraph,
     hasVisibleFemaleStoryBeat,
     insertPromptAfterParagraph,
+    isExplicitNoFemaleStory,
     isLikelyImagePrompt,
     makeCacheKey,
     paragraphRanges,
@@ -39,7 +40,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.8.0';
+const EXT_VERSION = '1.8.1';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -52,7 +53,7 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
 const ADULT_EVENT_PHASES = new Set(['erotic_touch', 'manual_stimulation', 'oral_sex', 'penetration', 'position_change', 'climax', 'aftercare']);
 
 const DEFAULT_SETTINGS = {
-    version: 11,
+    version: 12,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -132,7 +133,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 11) {
+    if (!existing || Number(existing.version) < 12) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -646,17 +647,30 @@ function recentImagePromptBefore(messageId) {
     return '';
 }
 
+function currentCharacterLikelyFemale() {
+    const character = characters?.[this_chid];
+    if (!character) return false;
+    const evidence = [character.name, character.description, character.personality, character.scenario, character.first_mes]
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 12000);
+    return /(?:她|少女|女孩|女人|女性|女王|公主|魔女|女仆|姐姐|妹妹|妻子|女友|\b(?:she|her|woman|girl|female|queen|princess|witch|maid|wife|girlfriend)\b)/i.test(evidence);
+}
+
 async function runInstantLocalStoryboard(messageId, text, validation) {
     const config = settings().fallback;
     if (!config.enabled || !config.instantLocal || config.useCurrentModel) return false;
-    if (!hasVisibleFemaleStoryBeat(text)) return false;
+    const previousFemalePrompt = recentImagePromptBefore(messageId);
+    const directFemale = hasVisibleFemaleStoryBeat(text);
+    const canContinueFemale = Boolean(previousFemalePrompt) || currentCharacterLikelyFemale();
+    if ((!directFemale && !canContinueFemale) || (!directFemale && isExplicitNoFemaleStory(text))) return false;
     const candidates = storyParagraphCandidates(text);
     if (!candidates.length) return false;
     const preferred = Math.max(1, Math.min(6, Number(config.minimumImages || 3)));
     const maximum = config.adaptive
         ? Math.max(preferred, Math.min(6, Number(config.maximumImages || 6)))
         : preferred;
-    const plan = planStoryboardSlots(text, { preferred, maximum });
+    const plan = planStoryboardSlots(text, { preferred, maximum, assumeFemale: !directFemale && canContinueFemale });
     if (!plan.targetCount) return false;
     const coverage = analyzeStoryboardCoverage(text, validation.prompts, { plan });
     if (!coverage.needsReflow) return false;
@@ -666,7 +680,7 @@ async function runInstantLocalStoryboard(messageId, text, validation) {
         preferred,
         maximum,
         existingPrompts: validation.prompts,
-        previousPrompt: recentImagePromptBefore(messageId),
+        previousPrompt: previousFemalePrompt,
     });
     const next = replaceStoryboardPrompts(text, built.prompts.map(item => ({
         after_paragraph_index: item.after_paragraph_index,
