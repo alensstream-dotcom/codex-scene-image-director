@@ -21,6 +21,7 @@ import {
     findSelectedParagraph,
     hasVisibleFemaleStoryBeat,
     insertPromptAfterParagraph,
+    isExplicitNoFemaleStory,
     isLikelyImagePrompt,
     makeCacheKey,
     paragraphRanges,
@@ -31,6 +32,7 @@ import {
     replaceStoryboardPrompts,
     stableHash,
     storyActionPhase,
+    storyActionTypes,
     storyParagraphCandidates,
     storySegmentsForPrompts,
     splitTags,
@@ -44,7 +46,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.9.0';
+const EXT_VERSION = '1.10.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -66,7 +68,7 @@ The quote must already exist before its packet and belong to the complete window
 [/JANIMA_STORY_EVIDENCE_V1]`;
 
 const DEFAULT_SETTINGS = {
-    version: 13,
+    version: 14,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -87,7 +89,11 @@ const DEFAULT_SETTINGS = {
     fallback: {
         enabled: true,
         evidenceRepair: true,
-        useCurrentModel: false,
+        // Story-first is the reliable mobile default: let the primary reply
+        // finish, then use one compact quiet call to plan every shot together.
+        postReplyStoryboard: true,
+        sameCallEvidence: false,
+        useCurrentModel: true,
         repairInvalidPrompts: false,
         semanticAudit: false,
         minimumImages: 3,
@@ -131,6 +137,7 @@ const runtime = {
     streamScanQueued: false,
     missingChatu8Warned: false,
     storyContractArmed: false,
+    generationActive: false,
 };
 
 function mergeDefaults(base, incoming) {
@@ -147,7 +154,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 13) {
+    if (!existing || Number(existing.version) < 14) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -155,7 +162,7 @@ function settings() {
             autoLocalRepair: false,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, evidenceRepair: true, useCurrentModel: false, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
+            fallback: { enabled: true, evidenceRepair: true, postReplyStoryboard: true, sameCallEvidence: false, useCurrentModel: true, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -213,6 +220,35 @@ function collectCharacterDnaHints(source = '') {
     }
     if (recentAnchors.length) parts.push(`RECENT INLINE VISUAL ANCHORS (newest first):\n${recentAnchors.join('\n')}`);
     return parts.join('\n\n');
+}
+
+function currentCharacterLikelyFemale() {
+    const character = characters?.[Number(this_chid)];
+    if (!character) return false;
+    const evidence = [
+        character.name,
+        character.description,
+        character.personality,
+        character.scenario,
+        character.first_mes,
+        character.data?.description,
+        character.data?.personality,
+        character.data?.scenario,
+        character.data?.first_mes,
+    ].filter(Boolean).join('\n').slice(0, 16000);
+    return /(?:她|少女|女孩|女人|女性|女王|公主|魔女|女仆|姐姐|妹妹|妻子|女友|成年女性|\b(?:she|her|woman|girl|female|queen|princess|witch|maid|wife|girlfriend|adult woman)\b)/i.test(evidence);
+}
+
+function postReplyFemaleContext(text = '') {
+    if (hasVisibleFemaleStoryBeat(text)) return { allowed: true, assumeFemale: false, source: 'direct-story' };
+    if (isExplicitNoFemaleStory(text)) return { allowed: false, assumeFemale: false, source: 'explicit-no-female' };
+    const namedFemaleLock = visualLocksForText(text).some(lock => lock.id !== 'behemoth');
+    const cardFemale = currentCharacterLikelyFemale();
+    return {
+        allowed: namedFemaleLock || cardFemale,
+        assumeFemale: namedFemaleLock || cardFemale,
+        source: namedFemaleLock ? 'named-female-lock' : cardFemale ? 'female-character-card' : 'unconfirmed',
+    };
 }
 
 function configureChatu8AccuracyWorkflow() {
@@ -514,6 +550,9 @@ function validateQuietStoryboardResponse(raw, slots) {
         const key = promptText.toLowerCase();
         if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seenPrompts.has(key)) continue;
         if (ADULT_EVENT_PHASES.has(slot.actionPhase) && storyActionPhase(promptText) !== slot.actionPhase) continue;
+        const requiredActions = new Set(slot.actions.filter(action => !['turn', 'reveal'].includes(action)));
+        const returnedActions = storyActionTypes(promptText);
+        if (requiredActions.size && !returnedActions.some(action => requiredActions.has(action))) continue;
         const checked = validateTurn(`An adult woman performs the decisive story action.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
         if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
         seenSlots.add(slotIndex);
@@ -733,19 +772,30 @@ async function runEvidencePacketStoryboard(messageId, text) {
 
 async function runAutomaticQuietFallback(messageId, text, validation) {
     const config = settings().fallback;
-    if (!config.enabled || !config.useCurrentModel) return false;
+    if (!config.enabled || !config.postReplyStoryboard || !config.useCurrentModel) return false;
     // A character greeting is the first playable Galgame scene on mobile. It
     // must receive the same inline-image rescue as later assistant replies.
     // The female-story gate prevents the fallback from inventing a woman in a
     // male-only or scenery-only greeting.
-    if (!hasVisibleFemaleStoryBeat(text)) return false;
+    const femaleContext = postReplyFemaleContext(text);
+    if (!femaleContext.allowed) {
+        setDebug(messageId, { repairMode: 'post-reply-storyboard-gate', femaleContext: femaleContext.source, desiredImageCount: 0 });
+        if (validation.prompts.length || Number(validation.declaredImageCount || 0) > 0) {
+            const cleared = replaceStoryboardPrompts(text, []);
+            if (cleared !== text) {
+                await writeMessage(messageId, cleared, 'janima-post-reply-female-gate-clear');
+                return true;
+            }
+        }
+        return false;
+    }
     const candidates = storyParagraphCandidates(text);
     if (!candidates.length) return false;
     const preferred = Math.max(1, Math.min(6, Number(config.minimumImages || 3)));
     const maximum = config.adaptive
         ? Math.max(preferred, Math.min(6, Number(config.maximumImages || 6)))
         : preferred;
-    const plan = planStoryboardSlots(text, { preferred, maximum });
+    const plan = planStoryboardSlots(text, { preferred, maximum, assumeFemale: femaleContext.assumeFemale });
     const coverage = analyzeStoryboardCoverage(text, validation.prompts, { plan });
     if (!coverage.needsReflow) return false;
     const desired = plan.targetCount;
@@ -854,17 +904,18 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
         runtime.fallbackHashes.add(hash);
         runtime.fallbackFailures.delete(hash);
         setDebug(messageId, {
-            repairMode: 'current-model-storyboard-reflow',
+            repairMode: 'post-reply-batch-storyboard',
             desiredImageCount: desired,
             insertedImageCount: shots.length,
             insertParagraphIndex: shots.map(item => item.after_paragraph_index),
             storyboardIssues: coverage.issues,
+            femaleContext: femaleContext.source,
         });
         return true;
     } catch (error) {
         const failures = Number(runtime.fallbackFailures.get(hash) || 0) + 1;
         runtime.fallbackFailures.set(hash, failures);
-        setDebug(messageId, { repairMode: 'current-model-storyboard-reflow', error: error.message, desiredImageCount: desired });
+        setDebug(messageId, { repairMode: 'post-reply-batch-storyboard', error: error.message, desiredImageCount: desired, femaleContext: femaleContext.source });
         console.warn(`[${EXT_NAME}] 当前模型自动补图失败，原文保持不变`, error);
         // Mobile providers occasionally reject structured output while the
         // just-finished story request is still settling. Retry twice without
@@ -906,10 +957,13 @@ async function runAutomaticAiAudit(messageId, text, validation) {
 async function renderMessageCheck(messageId) {
     if (!settings().enabled || !isAssistantMessage(messageId) || runtime.ignored.has(Number(messageId))) return;
     const host = messageElement(messageId);
-    if (!host) return;
-    removeLegacyConversationUi(host);
+    if (host) removeLegacyConversationUi(host);
     const text = getMessageText(messageId);
     const validation = validateTurn(text);
+    const evidencePackets = extractShotPackets(text);
+    // Do not start the post-reply model while the story is still streaming.
+    // Existing inline prompts may still be handed to Chatu8 immediately.
+    if (runtime.generationActive && !validation.prompts.length && !evidencePackets.length) return;
     const previousDebug = runtime.debugByMessage.get(Number(messageId));
     const currentHash = stableHash(text);
     setDebug(messageId, {
@@ -932,9 +986,11 @@ async function renderMessageCheck(messageId) {
     if (await runEvidencePacketStoryboard(messageId, text)) return;
     if (await runAutomaticQuietPromptRepair(messageId, text, validation)) return;
     if (await runAutomaticQuietFallback(messageId, text, validation)) return;
-    markZhihuijiButtonsInline(messageId);
-    nudgeZhihuijiObserver(messageId, validation);
-    setTimeout(() => markZhihuijiButtonsInline(messageId), 350);
+    if (host) {
+        markZhihuijiButtonsInline(messageId);
+        nudgeZhihuijiObserver(messageId, validation);
+        setTimeout(() => markZhihuijiButtonsInline(messageId), 350);
+    }
     await runAutomaticAiAudit(messageId, text, validation);
 }
 
@@ -1312,16 +1368,17 @@ function settingsHtml() {
                     <b>世界书生图救援器 <small>v${EXT_VERSION}</small></b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">手机 Galgame 剧情证据模式：正文、逐镜头原文证据和 Prompt 在同一次回复里流式写出；插件只校验原句、动作、人物 DNA 与原位按钮，不再凭动作模板猜图。</p>
+                    <p class="notes">手机 Galgame 完整剧情模式：先让正文正常写完，再用一次后台批量分镜读取整轮剧情并同时生成全部原位按钮；不会逐图重复调用模型。</p>
                     <h4>基础设置</h4>
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
                     ${checkRow('silentMode', '静默模式（不向对话插入插件界面）')}
                     ${checkRow('autoLocalRepair', '仅删除重复 Prompt（安全）')}
                     <h4>缺图自动兜底</h4>
-                    ${checkRow('fallback.enabled', '启用剧情证据校验与原位修复')}
-                    ${checkRow('fallback.evidenceRepair', '仅按同次回复原文证据修复（推荐开启）')}
-                    ${checkRow('fallback.useCurrentModel', '慢速二次模型重排（会额外等待，默认关闭）')}
+                    ${checkRow('fallback.enabled', '启用剧情理解与原位修复')}
+                    ${checkRow('fallback.postReplyStoryboard', '回复完成后一次性生成全部分镜（手机推荐）')}
+                    ${checkRow('fallback.evidenceRepair', '兼容并校验旧世界书的剧情证据包')}
+                    ${checkRow('fallback.sameCallEvidence', '实验：要求主回复同步写 Prompt（默认关闭）')}
                     ${checkRow('fallback.repairInvalidPrompts', '二次模型改写已有 Prompt（默认关闭）')}
                     ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
@@ -1344,7 +1401,7 @@ function settingsHtml() {
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
                     ${fieldRow('chatu8.buttonWaitMs', '生成按钮等待时间 (ms)', '3500', 'number')}
-                    <p class="notes">默认不会产生第二次聊天模型等待；证据缺失或不匹配时宁可拒绝错误图片，也不会凭空补写动作、人物或场景。</p>
+                    <p class="notes">默认只在正文完成后调用当前模型一次，统一判断 1–6 个最有画面感的女性剧情节点；没有可确认女性时为 0 图，不会凭空补人物。</p>
                 </div>
             </div>
         </div>`;
@@ -1388,7 +1445,7 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.evidenceRepair', 'fallback.useCurrentModel', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.postReplyStoryboard', 'fallback.evidenceRepair', 'fallback.sameCallEvidence', 'fallback.useCurrentModel', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
             removeLegacyConversationUi();
             if (input.name === 'chatu8.accuracyWorkflow') configureChatu8AccuracyWorkflow();
             if (settings().enabled) scanLatestAssistant();
@@ -1400,11 +1457,26 @@ function scanLatestAssistant() {
     let checked = 0;
     for (let index = (chat?.length || 0) - 1; index >= 0 && checked < 16; index--) {
         if (!isAssistantMessage(index)) continue;
-        const validation = validateTurn(getMessageText(index));
-        if (!validation.prompts.length && !extractShotPackets(getMessageText(index)).length) continue;
         checked++;
-        if (verifiedZhihuijiButtons(index).length < validation.prompts.length) scheduleCheck(index, 60 + checked * 35);
+        const validation = validateTurn(getMessageText(index));
+        const packets = extractShotPackets(getMessageText(index));
+        const isLatestAssistant = checked === 1;
+        // The latest completed story must be checked even when it contains
+        // zero prompts and zero evidence packets. That exact early-skip caused
+        // the phone regression where the post-reply fallback never ran.
+        if (isLatestAssistant && settings().fallback.postReplyStoryboard) {
+            scheduleCheck(index, 90);
+            continue;
+        }
+        if ((validation.prompts.length || packets.length)
+            && verifiedZhihuijiButtons(index).length < validation.prompts.length) {
+            scheduleCheck(index, 60 + checked * 35);
+        }
     }
+}
+
+function scheduleCompletedReplyScans() {
+    [60, 450, 1400].forEach(delay => setTimeout(scanLatestAssistant, delay));
 }
 
 function scheduleStreamingInlineScan() {
@@ -1425,14 +1497,19 @@ function scheduleStreamingInlineScan() {
 }
 
 function armStoryEvidenceContract(type, generationOptions = {}, dryRun = false) {
-    runtime.storyContractArmed = Boolean(
+    const foreground = Boolean(
         settings().enabled
         && settings().fallback.enabled
-        && settings().fallback.evidenceRepair
         && !dryRun
         && !generationOptions?.quiet_prompt
         && type !== 'quiet'
         && type !== 'impersonate'
+    );
+    if (foreground) runtime.generationActive = true;
+    runtime.storyContractArmed = Boolean(
+        foreground
+        && settings().fallback.evidenceRepair
+        && settings().fallback.sameCallEvidence
     );
 }
 
@@ -1451,7 +1528,10 @@ function injectTextCompletionEvidenceContract(eventData = {}) {
 
 function bindEvents() {
     const onMessage = messageId => {
-        if (settings().autoCheck) scheduleCheck(messageId, 120);
+        if (settings().autoCheck) {
+            scheduleCheck(messageId, 120);
+            scheduleCheck(messageId, 650);
+        }
     };
     [event_types.MESSAGE_RECEIVED, event_types.MESSAGE_UPDATED, event_types.MESSAGE_SWIPED]
         .filter(Boolean)
@@ -1462,9 +1542,14 @@ function bindEvents() {
     if (event_types.STREAM_TOKEN_RECEIVED) eventSource.on(event_types.STREAM_TOKEN_RECEIVED, scheduleStreamingInlineScan);
     if (event_types.GENERATION_ENDED) eventSource.on(event_types.GENERATION_ENDED, () => {
         runtime.storyContractArmed = false;
-        setTimeout(scanLatestAssistant, 50);
+        runtime.generationActive = false;
+        scheduleCompletedReplyScans();
     });
-    if (event_types.GENERATION_STOPPED) eventSource.on(event_types.GENERATION_STOPPED, () => { runtime.storyContractArmed = false; });
+    if (event_types.GENERATION_STOPPED) eventSource.on(event_types.GENERATION_STOPPED, () => {
+        runtime.storyContractArmed = false;
+        runtime.generationActive = false;
+        scheduleCompletedReplyScans();
+    });
     if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => setTimeout(scanLatestAssistant, 200));
     const visibilityObserver = new IntersectionObserver(entries => {
         for (const entry of entries) {
