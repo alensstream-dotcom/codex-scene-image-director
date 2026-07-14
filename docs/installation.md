@@ -1,8 +1,8 @@
 # 安装
 
 1. 在 SillyTavern 扩展管理器安装 `https://github.com/alensstream-dotcom/codex-scene-image-director.git`，刷新页面。
-2. 导入 `worldbooks/JANIMA_v8_3_Galgame_Director.json`。
-3. 关闭旧 v7.8.2、v7.9、v8.1、v8.2 主世界书，避免两套主生图合同同时触发；已有 FM_DNA 变量数据保留。
+2. 导入 `worldbooks/JANIMA_v8_4_Galgame_Director.json`。
+3. 关闭旧 v7.8.2、v7.9、v8.1、v8.2、v8.3 主世界书，避免两套主生图合同同时触发；已有 FM_DNA 变量数据保留。
 4. 导入 `regex/JANIMA_rescue_regex.json`，第三条 UpdateVariable 规则保持关闭，除非确实需要隐藏变量更新。
 5. 智绘姬使用 ComfyUI 模式，开始/结束标记设置为 `[` / `]`，关闭智绘姬 LLM 扩写与二次改写。
 6. 刷新后对话区域应保持单列；插件不会显示“生图检查”或 Prompt 工具栏。

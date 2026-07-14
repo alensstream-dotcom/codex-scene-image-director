@@ -27,9 +27,9 @@ test('doorway regression restores current clothing/action and excludes invented 
     for (const tag of scene.mustNotInclude) assert.ok(!scene.prompt.toLowerCase().includes(tag.toLowerCase()), tag);
 });
 
-test('v8.3 mobile worldbook plans distinct full-turn events and preserves identity locks', async () => {
+test('v8.4 mobile worldbook uses an event ledger and preserves identity locks', async () => {
     const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_0_worldbook.json', import.meta.url), 'utf8'));
-    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_3_Galgame_Director.json', import.meta.url), 'utf8'));
+    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_4_Galgame_Director.json', import.meta.url), 'utf8'));
     const entries = Object.values(mobileWorldbook.entries);
     assert.notDeepEqual(mobileWorldbook, worldbook);
     assert.equal(entries.length, 3);
@@ -39,7 +39,7 @@ test('v8.3 mobile worldbook plans distinct full-turn events and preserves identi
     assert.doesNotMatch(JSON.stringify(mobileWorldbook), /<%[_=]?/);
     assert.match(mobileWorldbook.entries['2'].content, /不依赖 EJS、酒馆助手或 JS-Slash-Runner/);
     assert.match(mobileWorldbook.entries['3'].content, /FM_DNA \/ FM_SCENE \/ FM_ANCHOR/);
-    assert.match(mobileWorldbook.entries['4'].comment, /v8\.3/);
+    assert.match(mobileWorldbook.entries['4'].comment, /v8\.4/);
     assert.equal(mobileWorldbook.entries['4'].disable, false);
     assert.equal(mobileWorldbook.entries['4'].order, 999);
     assert.match(mobileWorldbook.entries['4'].content, /整轮事件表/);
@@ -69,6 +69,12 @@ test('v8.3 mobile worldbook plans distinct full-turn events and preserves identi
     assert.match(mobileWorldbook.entries['4'].content, /不得仅因内容属于 NSFW 就省略 Prompt/);
     assert.match(mobileWorldbook.entries['4'].content, /持续的相同动作或体位只用 1 张/);
     assert.match(mobileWorldbook.entries['4'].content, /裸体镜头也不会换人/);
+    assert.match(mobileWorldbook.entries['4'].content, /主体\/发起者/);
+    assert.match(mobileWorldbook.entries['4'].content, /动作造成的可见结果/);
+    assert.match(mobileWorldbook.entries['4'].content, /成人动作阶段账本/);
+    assert.match(mobileWorldbook.entries['4'].content, /首次进入/);
+    assert.match(mobileWorldbook.entries['4'].content, /明确换体位/);
+    assert.match(mobileWorldbook.entries['4'].content, /高潮\/射精结果/);
     assert.match(mobileWorldbook.entries['4'].content, /只允许一个以 @ 开头的精确画师标签/);
     assert.match(mobileWorldbook.entries['2'].content, /PREVIOUS SHOT CONTINUITY ANCHOR/);
     assert.match(mobileWorldbook.entries['2'].content, /ANIMA STYLE ANCHOR/);

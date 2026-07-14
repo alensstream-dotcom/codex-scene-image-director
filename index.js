@@ -30,6 +30,7 @@ import {
     replacePromptAt,
     replaceStoryboardPrompts,
     stableHash,
+    storyActionPhase,
     storyParagraphCandidates,
     storySegmentsForPrompts,
     validateTurn,
@@ -37,7 +38,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.6.0';
+const EXT_VERSION = '1.7.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -47,6 +48,7 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
     'solo_relation_conflict',
     'ambiguous_named_prop',
 ]);
+const ADULT_EVENT_PHASES = new Set(['erotic_touch', 'manual_stimulation', 'oral_sex', 'penetration', 'position_change', 'climax', 'aftercare']);
 
 const DEFAULT_SETTINGS = {
     version: 10,
@@ -457,18 +459,20 @@ function validateQuietStoryboardResponse(raw, slots) {
         const slotIndex = Number(item?.slot_index ?? item?.slotIndex);
         const paragraphIndex = Number(item?.after_paragraph_index);
         const slot = slotMap.get(slotIndex);
-        if (!slot || seenSlots.has(slotIndex) || !Number.isInteger(paragraphIndex) || !slot.paragraphIndexes.includes(paragraphIndex)) continue;
+        const eventKey = String(item?.event_key || '');
+        if (!slot || seenSlots.has(slotIndex) || eventKey !== slot.eventKey || !Number.isInteger(paragraphIndex) || !slot.paragraphIndexes.includes(paragraphIndex)) continue;
         const tags = Array.isArray(item?.prompt_tags)
             ? item.prompt_tags.map(tag => String(tag).trim()).filter(Boolean)
             : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
         const promptText = tags.join(', ');
         const key = promptText.toLowerCase();
         if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seenPrompts.has(key)) continue;
+        if (ADULT_EVENT_PHASES.has(slot.actionPhase) && storyActionPhase(promptText) !== slot.actionPhase) continue;
         const checked = validateTurn(`An adult woman performs the decisive story action.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
         if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
         seenSlots.add(slotIndex);
         seenPrompts.add(key);
-        shots.push({ slot_index: slotIndex, after_paragraph_index: paragraphIndex, prompt_tags: tags });
+        shots.push({ slot_index: slotIndex, event_key: eventKey, after_paragraph_index: paragraphIndex, prompt_tags: tags });
     }
     if (shots.length !== slots.length) throw new Error(`当前模型只返回 ${shots.length}/${slots.length} 个有效独立分镜`);
     return shots.sort((a, b) => a.slot_index - b.slot_index);
@@ -663,10 +667,14 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
 
         const slotPayload = plan.slots.map(slot => ({
             slot_index: slot.slotIndex,
+            event_key: slot.eventKey,
             phase: slot.phase,
+            action_phase: slot.actionPhase,
             allowed_after_paragraph_indexes: slot.paragraphIndexes,
             complete_story_window_since_previous_shot: slot.windowText.slice(0, 2400),
-            selected_distinct_beat: slot.selectedBeatText.slice(0, 1200),
+            winning_evidence_paragraph_index: slot.selectedBeatParagraphIndex,
+            winning_evidence: slot.selectedBeatText.slice(0, 1200),
+            action_ledger: slot.eventLedger,
             local_action_types: slot.actions,
         }));
         const dnaHint = collectCharacterDnaHints(text);
@@ -674,10 +682,11 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             'You are the silent full-turn Galgame storyboard editor for a completed SillyTavern story reply.',
             `The local chronology planner found exactly ${desired} distinct visual beats. Rebuild the entire inline storyboard with exactly one shot for every supplied slot. Do not preserve bad old placement and do not add shots merely to meet a quota.`,
             'Each slot is a different event beat, not merely a different paragraph. Several paragraphs that continue the same embrace, touch, pose, sex position, conversation reaction, or unchanged action must remain one shot. Never create two shots of the same continuous action.',
-            'Story truth is the highest priority. Each shot owns complete_story_window_since_previous_shot. Read the whole window, use selected_distinct_beat as the winning moment, and never use later text.',
+            'Story truth is the highest priority. Each shot owns complete_story_window_since_previous_shot. Read the whole window and its chronological action_ledger, depict winning_evidence as the exact decisive frame, and never use later text.',
+            'Judge events as subject + physical action + receiver/object + visible result. Background explanation, dialogue reporting, repeated motion, and setup are support; a state-changing action or result is the principal event. Do not summarize the whole window into a vague pose.',
             'For every slot select the strongest existing female-led frame: consequential interaction, decisive action, emotional reversal, reveal, entrance, outfit/prop/location change, then visually specific daily action. Reject generic standing portraits and repeated camera-only variations.',
             'Every prompt must show at least one woman who actually appears in its story window. Never create a male-only portrait, scenery-only shot, or prop-only shot. A man may appear only beside a present woman, with female focus and the woman as visual lead.',
-            'Return every slot_index exactly once. after_paragraph_index must come from that slot\'s allowed_after_paragraph_indexes. Preserve chronological slot order. This prevents all buttons clustering in the first half.',
+            'Return every slot_index and its event_key exactly once. Never change or invent event_key. after_paragraph_index must come from that slot\'s allowed_after_paragraph_indexes. Preserve chronological slot order. This prevents all buttons clustering in the first half.',
             'Every prompt must be 12-48 concise English comma-separated image tags: quality, exact people count, full visual DNA for every visible named character, current clothing, action, prop, location, expression, spatial relation, shot, composition, lighting.',
             'Repeat immutable face, hair, eye, body-build, and signature clothing anchors in every prompt; a character name alone is never an identity description.',
             'For a recurring woman, copy the same immutable appearance and unchanged outfit tags from the immediately previous shot and RECENT INLINE VISUAL ANCHORS; change only story-confirmed action, expression, camera, location, or outfit.',
@@ -686,9 +695,11 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
             'Give story-current clothing or nudity state and critical prop placement one weighted phrase at 1.20-1.30. Preserve an unchanged dress or ceremonial garment, but if this story window explicitly changes or removes clothing, depict the new state instead of restoring the old outfit.',
             'This is JANIMA_v10 with the Anima/Qwen encoder. Begin every prompt with: masterpiece, best quality, score_7, highres, newest, followed by exactly one story-accurate safety tag: safe, sensitive, nsfw, or explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it between shots.',
             'Consensual adult intimacy, nudity, and explicit sex are ordinary Galgame visual beats. Never omit, fade out, or downgrade an image solely because it is NSFW; use nsfw or explicit and select the strongest story-accurate female-led moment. Keep every sexual character explicitly adult.',
+            'For adult windows, preserve the exact action phase from action_phase: undressing, erotic touch, manual stimulation, oral sex, initial penetration, continued penetration, position change, climax, or aftercare are not interchangeable. Position change and climax are mandatory new events. Continued unchanged motion is not.',
+            'Adult prompts must devote most action wording to one concrete visible interaction: stable named participant IDs, initiator, receiver, body-to-body contact, current position, and visible result. Do not replace the key act with a generic embrace, kneeling pose, blush, or bedroom portrait.',
             'Never invent a person, touch, outfit, prop, action, or location. No Chinese, prose, markdown, square brackets, explanation, or story rewrite.',
             'Every shot needs one distinct physical action signature. Changing only close-up/wide-shot, lighting, or facial wording does not make a repeated action a new shot.',
-            'Return only JSON: {"shots":[{"slot_index":0,"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
+            'Return only JSON: {"shots":[{"slot_index":0,"event_key":"0:kiss:3","after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
             `Character DNA registry:\n${dnaHint}`,
             `Existing prompts (identity reference only; placement may be wrong): ${JSON.stringify(validation.prompts.map(item => item.prompt))}`,
             `Mandatory storyboard slots: ${JSON.stringify(slotPayload)}`,
@@ -708,10 +719,11 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
                         additionalProperties: false,
                         properties: {
                             slot_index: { type: 'integer', enum: plan.slots.map(slot => slot.slotIndex) },
+                            event_key: { type: 'string', enum: plan.slots.map(slot => slot.eventKey) },
                             after_paragraph_index: { type: 'integer', enum: allAllowedIndexes },
                             prompt_tags: { type: 'array', minItems: 12, maxItems: 48, items: { type: 'string' } },
                         },
-                        required: ['slot_index', 'after_paragraph_index', 'prompt_tags'],
+                        required: ['slot_index', 'event_key', 'after_paragraph_index', 'prompt_tags'],
                     },
                 },
             },
@@ -732,10 +744,12 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
         if (message) {
             message.extra ||= {};
             message.extra.janimaStoryboardPlan = {
-                version: 1,
+                version: 2,
                 imageCount: desired,
                 paragraphIndexes: shots.map(shot => shot.after_paragraph_index),
                 actionTypes: plan.slots.map(slot => slot.actions),
+                actionPhases: plan.slots.map(slot => slot.actionPhase),
+                evidenceParagraphIndexes: plan.slots.map(slot => slot.selectedBeatParagraphIndex),
             };
         }
         await writeMessage(messageId, next, 'janima-current-model-fallback');
