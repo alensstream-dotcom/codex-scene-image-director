@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeStoryboardCoverage, buildInstantStoryboard, desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isLikelyImagePrompt, parseDeclaredImageCount, planStoryboardSlots, storyBeatGroups, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
+import { analyzeStoryboardCoverage, buildInstantStoryboard, desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isExplicitNoFemaleStory, isLikelyImagePrompt, parseDeclaredImageCount, planStoryboardSlots, storyBeatGroups, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
 
 test('parses the final IMG_COUNT declaration', () => {
     assert.equal(parseDeclaredImageCount('正文\n<!--IMG_COUNT:2-->').count, 2);
@@ -85,6 +85,25 @@ test('instant storyboard does not exhaust or stop after many consecutive turns',
         assert.ok(built.prompts.every(item => item.prompt.includes('female focus')));
         previousPrompt = built.prompts.at(-1).prompt;
     }
+});
+
+test('female continuity handles name-only prose without reopening the male-only gate', () => {
+    const nameOnly = [
+        '艾琳推门进入大厅，银发被风吹起。',
+        '艾琳拔剑挡住袭击，紫瞳盯紧敌人。',
+        '艾琳收剑抱住主角，终于露出笑容。',
+    ].join('\n\n');
+    assert.equal(hasVisibleFemaleStoryBeat(nameOnly), false);
+    assert.equal(buildInstantStoryboard(nameOnly, {
+        preferred: 3,
+        maximum: 3,
+        assumeFemale: true,
+        previousPrompt: 'Eileen, adult woman, silver-white long hair, violet eyes, navy dress',
+    }).prompts.length, 3);
+
+    const maleOnly = '一个陌生男人独自站在城堡外。\n\n镜头切到空无一人的走廊。';
+    assert.equal(isExplicitNoFemaleStory(maleOnly), true);
+    assert.equal(planStoryboardSlots(maleOnly).targetCount, 0);
 });
 
 test('adult action ledger keeps real phase changes and merges only continuous penetration', () => {
