@@ -13,10 +13,10 @@ import { extension_settings } from '../../../extensions.js';
 import { buildVisualDnaHint, visualLocksForText } from './lib/identity-locks.mjs';
 import { installAnimaAccuracyWorkflow } from './lib/anima-workflow.mjs';
 import {
+    analyzeStoryboardCoverage,
     applyMissingPrompts,
     assertPromptRepairResponse,
     assertWholeTurnResponse,
-    desiredImageCount,
     extractImagePrompts,
     findSelectedParagraph,
     hasVisibleFemaleStoryBeat,
@@ -25,8 +25,10 @@ import {
     makeCacheKey,
     paragraphRanges,
     parseStrictJson,
+    planStoryboardSlots,
     reinforcePromptLocal,
     replacePromptAt,
+    replaceStoryboardPrompts,
     stableHash,
     storyParagraphCandidates,
     storySegmentsForPrompts,
@@ -35,7 +37,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.5.3';
+const EXT_VERSION = '1.6.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -47,7 +49,7 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
 ]);
 
 const DEFAULT_SETTINGS = {
-    version: 9,
+    version: 10,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -124,7 +126,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 9) {
+    if (!existing || Number(existing.version) < 10) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -181,6 +183,14 @@ function collectCharacterDnaHints(source = '') {
     const parts = [buildVisualDnaHint(source, settings().api.characterDna, collectCharacterCardEvidence(source))];
     const variableDna = currentVariableDna();
     if (variableDna) parts.push(`CURRENT FM_DNA VARIABLE:\n${JSON.stringify(variableDna).slice(0, 3500)}`);
+    const recentAnchors = [];
+    for (let index = (chat?.length || 0) - 1; index >= 0 && recentAnchors.length < 3; index--) {
+        const prompts = extractImagePrompts(String(chat[index]?.mes || chat[index]?.message || ''));
+        for (let promptIndex = prompts.length - 1; promptIndex >= 0 && recentAnchors.length < 3; promptIndex--) {
+            recentAnchors.push(prompts[promptIndex].prompt);
+        }
+    }
+    if (recentAnchors.length) parts.push(`RECENT INLINE VISUAL ANCHORS (newest first):\n${recentAnchors.join('\n')}`);
     return parts.join('\n\n');
 }
 
@@ -435,35 +445,33 @@ function applySilentAuditPatch(text, audit) {
     return updateCountMarker(next, extractImagePrompts(next).length);
 }
 
-function anchoredStoryIndexes(text, prompts, candidates) {
-    return prompts.map(prompt => {
-        const preceding = candidates.filter(item => item.end <= prompt.start);
-        return preceding.length ? preceding[preceding.length - 1].index : null;
-    }).filter(Number.isInteger);
-}
-
-function validateQuietFallbackResponse(raw, allowedIndexes, missingCount) {
+function validateQuietStoryboardResponse(raw, slots) {
     const payload = typeof raw === 'string' ? parseStrictJson(raw) : raw;
-    if (!payload || !Array.isArray(payload.prompts)) throw new Error('当前模型未返回 prompts 数组');
-    const allowed = new Set(allowedIndexes.map(Number));
-    const seen = new Set();
-    const prompts = [];
-    for (const item of payload.prompts) {
+    const sourceShots = payload?.shots || payload?.prompts;
+    if (!Array.isArray(sourceShots)) throw new Error('当前模型未返回 shots 数组');
+    const slotMap = new Map(slots.map(slot => [Number(slot.slotIndex), slot]));
+    const seenSlots = new Set();
+    const seenPrompts = new Set();
+    const shots = [];
+    for (const item of sourceShots) {
+        const slotIndex = Number(item?.slot_index ?? item?.slotIndex);
         const paragraphIndex = Number(item?.after_paragraph_index);
-        if (!Number.isInteger(paragraphIndex) || !allowed.has(paragraphIndex)) continue;
+        const slot = slotMap.get(slotIndex);
+        if (!slot || seenSlots.has(slotIndex) || !Number.isInteger(paragraphIndex) || !slot.paragraphIndexes.includes(paragraphIndex)) continue;
         const tags = Array.isArray(item?.prompt_tags)
             ? item.prompt_tags.map(tag => String(tag).trim()).filter(Boolean)
             : String(item?.prompt || '').split(',').map(tag => tag.trim()).filter(Boolean);
         const promptText = tags.join(', ');
         const key = promptText.toLowerCase();
-        if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seen.has(key)) continue;
+        if (tags.length < 12 || tags.length > 48 || /[\u3400-\u9fff\uf900-\ufaff]/.test(promptText) || seenPrompts.has(key)) continue;
         const checked = validateTurn(`An adult woman performs the decisive story action.\n\n[${promptText}]\n\n<!--IMG_COUNT:1-->`);
         if (!checked.prompts.length || checked.issues.some(issue => issue.severity === 'error')) continue;
-        seen.add(key);
-        prompts.push({ after_paragraph_index: paragraphIndex, prompt_tags: tags });
+        seenSlots.add(slotIndex);
+        seenPrompts.add(key);
+        shots.push({ slot_index: slotIndex, after_paragraph_index: paragraphIndex, prompt_tags: tags });
     }
-    if (prompts.length < missingCount) throw new Error(`当前模型只返回 ${prompts.length}/${missingCount} 个有效 Prompt`);
-    return prompts.slice(0, missingCount);
+    if (shots.length !== slots.length) throw new Error(`当前模型只返回 ${shots.length}/${slots.length} 个有效独立分镜`);
+    return shots.sort((a, b) => a.slot_index - b.slot_index);
 }
 
 async function generateQuietFallbackPayload(prompt, schema, responseLength) {
@@ -631,89 +639,120 @@ async function runAutomaticQuietFallback(messageId, text, validation) {
     if (!hasVisibleFemaleStoryBeat(text)) return false;
     const candidates = storyParagraphCandidates(text);
     if (!candidates.length) return false;
-    const minimum = Math.max(3, Math.min(6, Number(config.minimumImages || 3)));
-    const maximum = Math.max(minimum, Math.min(6, Number(config.maximumImages || 6)));
-    const desired = config.adaptive ? desiredImageCount(text, { minimum, maximum }) : minimum;
-    const missingCount = Math.max(0, desired - validation.prompts.length);
-    if (!missingCount) return false;
+    const preferred = Math.max(1, Math.min(6, Number(config.minimumImages || 3)));
+    const maximum = config.adaptive
+        ? Math.max(preferred, Math.min(6, Number(config.maximumImages || 6)))
+        : preferred;
+    const plan = planStoryboardSlots(text, { preferred, maximum });
+    const coverage = analyzeStoryboardCoverage(text, validation.prompts, { plan });
+    if (!coverage.needsReflow) return false;
+    const desired = plan.targetCount;
 
-    const hash = `${messageId}:${stableHash(text)}:${desired}:quiet-fallback`;
+    const hash = `${messageId}:${stableHash(text)}:${plan.slots.map(slot => `${slot.slotIndex}:${slot.paragraphIndexes.join('.')}`).join('|')}:storyboard-reflow`;
     if (runtime.fallbackHashes.has(hash) || runtime.fallbackInFlight.has(Number(messageId))) return false;
     runtime.fallbackInFlight.add(Number(messageId));
 
     try {
-        const occupied = new Set(anchoredStoryIndexes(text, validation.prompts, candidates));
-        const unused = candidates.filter(item => !occupied.has(item.index));
-        const allowedCandidates = unused.length >= missingCount ? unused : candidates;
-        const allowedIndexes = allowedCandidates.map(item => item.index);
-        const paragraphPayload = allowedCandidates.slice(0, 30).map(item => ({
-            after_paragraph_index: item.index,
-            text: item.text.slice(0, 700),
+        if (desired === 0) {
+            const next = replaceStoryboardPrompts(text, []);
+            await writeMessage(messageId, next, 'janima-local-storyboard-clear');
+            runtime.fallbackHashes.add(hash);
+            setDebug(messageId, { repairMode: 'local-storyboard-clear', desiredImageCount: 0, storyboardIssues: coverage.issues });
+            return true;
+        }
+
+        const slotPayload = plan.slots.map(slot => ({
+            slot_index: slot.slotIndex,
+            phase: slot.phase,
+            allowed_after_paragraph_indexes: slot.paragraphIndexes,
+            complete_story_window_since_previous_shot: slot.windowText.slice(0, 2400),
+            selected_distinct_beat: slot.selectedBeatText.slice(0, 1200),
+            local_action_types: slot.actions,
         }));
         const dnaHint = collectCharacterDnaHints(text);
         const prompt = [
-            'You are a silent Galgame storyboard rescue pass for a completed SillyTavern story reply.',
-            `Create exactly ${missingCount} missing inline image prompts so the turn reaches ${desired} images.`,
-            'Story truth is the highest priority. Each image owns the story window after the previous image and through its insertion paragraph. Read the whole window, never only its last sentence, and never use future text.',
-            'Within each window select its strongest existing female-led visual beat: consequential interaction, decisive action, emotional reversal, reveal, entrance, outfit or prop change, then visually specific daily action. Reject generic standing portraits and repetitive reactions.',
+            'You are the silent full-turn Galgame storyboard editor for a completed SillyTavern story reply.',
+            `The local chronology planner found exactly ${desired} distinct visual beats. Rebuild the entire inline storyboard with exactly one shot for every supplied slot. Do not preserve bad old placement and do not add shots merely to meet a quota.`,
+            'Each slot is a different event beat, not merely a different paragraph. Several paragraphs that continue the same embrace, touch, pose, sex position, conversation reaction, or unchanged action must remain one shot. Never create two shots of the same continuous action.',
+            'Story truth is the highest priority. Each shot owns complete_story_window_since_previous_shot. Read the whole window, use selected_distinct_beat as the winning moment, and never use later text.',
+            'For every slot select the strongest existing female-led frame: consequential interaction, decisive action, emotional reversal, reveal, entrance, outfit/prop/location change, then visually specific daily action. Reject generic standing portraits and repeated camera-only variations.',
             'Every prompt must show at least one woman who actually appears in its story window. Never create a male-only portrait, scenery-only shot, or prop-only shot. A man may appear only beside a present woman, with female focus and the woman as visual lead.',
-            'Use the supplied after_paragraph_index values exactly and use distinct chronological paragraphs. Never insert two prompts without new story text between them.',
+            'Return every slot_index exactly once. after_paragraph_index must come from that slot\'s allowed_after_paragraph_indexes. Preserve chronological slot order. This prevents all buttons clustering in the first half.',
             'Every prompt must be 12-48 concise English comma-separated image tags: quality, exact people count, full visual DNA for every visible named character, current clothing, action, prop, location, expression, spatial relation, shot, composition, lighting.',
             'Repeat immutable face, hair, eye, body-build, and signature clothing anchors in every prompt; a character name alone is never an identity description.',
-            'For a recurring woman, copy the same immutable appearance and unchanged outfit tags from the immediately previous image prompt; change only story-confirmed action, expression, camera, location, or outfit.',
+            'For a recurring woman, copy the same immutable appearance and unchanged outfit tags from the immediately previous shot and RECENT INLINE VISUAL ANCHORS; change only story-confirmed action, expression, camera, location, or outfit.',
             'For multi-character scenes use exact count, separate character blocks, fixed left/right or front/back positions, separate bodies, and both faces visible when the story permits.',
             'Describe named props visually. Behemoth is a small stuffed demon mascot with a fabric doll body, bat wings, and an old gas mask, never a bird or real animal.',
             'Give story-current clothing or nudity state and critical prop placement one weighted phrase at 1.20-1.30. Preserve an unchanged dress or ceremonial garment, but if this story window explicitly changes or removes clothing, depict the new state instead of restoring the old outfit.',
             'This is JANIMA_v10 with the Anima/Qwen encoder. Begin every prompt with: masterpiece, best quality, score_7, highres, newest, followed by exactly one story-accurate safety tag: safe, sensitive, nsfw, or explicit. Never force safe onto adult content. Use at most one existing @artist style anchor and never invent or change it between shots.',
             'Consensual adult intimacy, nudity, and explicit sex are ordinary Galgame visual beats. Never omit, fade out, or downgrade an image solely because it is NSFW; use nsfw or explicit and select the strongest story-accurate female-led moment. Keep every sexual character explicitly adult.',
             'Never invent a person, touch, outfit, prop, action, or location. No Chinese, prose, markdown, square brackets, explanation, or story rewrite.',
-            'Return only JSON: {"prompts":[{"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
+            'Every shot needs one distinct physical action signature. Changing only close-up/wide-shot, lighting, or facial wording does not make a repeated action a new shot.',
+            'Return only JSON: {"shots":[{"slot_index":0,"after_paragraph_index":0,"prompt_tags":["masterpiece","best quality"]}]}',
             `Character DNA registry:\n${dnaHint}`,
-            `Existing valid prompts: ${JSON.stringify(validation.prompts.map(item => item.prompt))}`,
-            `Candidate story paragraphs: ${JSON.stringify(paragraphPayload)}`,
+            `Existing prompts (identity reference only; placement may be wrong): ${JSON.stringify(validation.prompts.map(item => item.prompt))}`,
+            `Mandatory storyboard slots: ${JSON.stringify(slotPayload)}`,
             `Complete story reply: ${JSON.stringify(text.slice(0, 16000))}`,
         ].join('\n');
+        const allAllowedIndexes = [...new Set(plan.slots.flatMap(slot => slot.paragraphIndexes))];
         const schema = {
             type: 'object',
             additionalProperties: false,
             properties: {
-                prompts: {
+                shots: {
                     type: 'array',
-                    minItems: missingCount,
-                    maxItems: missingCount,
+                    minItems: desired,
+                    maxItems: desired,
                     items: {
                         type: 'object',
                         additionalProperties: false,
                         properties: {
-                            after_paragraph_index: { type: 'integer', enum: allowedIndexes },
+                            slot_index: { type: 'integer', enum: plan.slots.map(slot => slot.slotIndex) },
+                            after_paragraph_index: { type: 'integer', enum: allAllowedIndexes },
                             prompt_tags: { type: 'array', minItems: 12, maxItems: 48, items: { type: 'string' } },
                         },
-                        required: ['after_paragraph_index', 'prompt_tags'],
+                        required: ['slot_index', 'after_paragraph_index', 'prompt_tags'],
                     },
                 },
             },
-            required: ['prompts'],
+            required: ['shots'],
         };
         const raw = await generateQuietFallbackPayload(prompt, schema, Math.max(1200, Number(config.responseLength || 2400)));
-        const missingPrompts = validateQuietFallbackResponse(raw, allowedIndexes, missingCount);
-        const next = updateCountMarker(applyMissingPrompts(text, missingPrompts), validation.prompts.length + missingPrompts.length);
+        const shots = validateQuietStoryboardResponse(raw, plan.slots);
+        const next = replaceStoryboardPrompts(text, shots.map(shot => ({
+            after_paragraph_index: shot.after_paragraph_index,
+            prompt: reinforcePromptLocal(shot.prompt_tags.join(', ')),
+        })));
         const finalValidation = validateTurn(next);
         const blockingIssues = finalValidation.issues.filter(issue => issue.severity === 'error');
         if (blockingIssues.length) throw new Error(`补图未通过剧情/女性门禁：${blockingIssues.map(issue => issue.code).join(', ')}`);
+        const finalCoverage = analyzeStoryboardCoverage(next, finalValidation.prompts, { preferred, maximum });
+        if (finalCoverage.needsReflow) throw new Error(`分镜覆盖仍未通过：${finalCoverage.issues.map(issue => issue.code).join(', ')}`);
+        const message = chat?.[Number(messageId)];
+        if (message) {
+            message.extra ||= {};
+            message.extra.janimaStoryboardPlan = {
+                version: 1,
+                imageCount: desired,
+                paragraphIndexes: shots.map(shot => shot.after_paragraph_index),
+                actionTypes: plan.slots.map(slot => slot.actions),
+            };
+        }
         await writeMessage(messageId, next, 'janima-current-model-fallback');
         runtime.fallbackHashes.add(hash);
         runtime.fallbackFailures.delete(hash);
         setDebug(messageId, {
-            repairMode: 'current-model-fallback',
+            repairMode: 'current-model-storyboard-reflow',
             desiredImageCount: desired,
-            insertedImageCount: missingPrompts.length,
-            insertParagraphIndex: missingPrompts.map(item => item.after_paragraph_index),
+            insertedImageCount: shots.length,
+            insertParagraphIndex: shots.map(item => item.after_paragraph_index),
+            storyboardIssues: coverage.issues,
         });
         return true;
     } catch (error) {
         const failures = Number(runtime.fallbackFailures.get(hash) || 0) + 1;
         runtime.fallbackFailures.set(hash, failures);
-        setDebug(messageId, { repairMode: 'current-model-fallback', error: error.message, desiredImageCount: desired });
+        setDebug(messageId, { repairMode: 'current-model-storyboard-reflow', error: error.message, desiredImageCount: desired });
         console.warn(`[${EXT_NAME}] 当前模型自动补图失败，原文保持不变`, error);
         // Mobile providers occasionally reject structured output while the
         // just-finished story request is still settling. Retry twice without
@@ -1164,11 +1203,11 @@ function settingsHtml() {
                     ${checkRow('silentMode', '静默模式（不向对话插入插件界面）')}
                     ${checkRow('autoLocalRepair', '仅删除重复 Prompt（安全）')}
                     <h4>缺图自动兜底</h4>
-                    ${checkRow('fallback.enabled', '少于目标数时用酒馆当前模型静默补 Prompt')}
+                    ${checkRow('fallback.enabled', '镜头重复、前密后疏或漏转折时整轮重排')}
                     ${checkRow('fallback.repairInvalidPrompts', '二次模型改写已有 Prompt（默认关闭）')}
                     ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
-                    ${fieldRow('fallback.minimumImages', '每轮最少图片', '3', 'number')}
+                    ${fieldRow('fallback.minimumImages', '常规目标图片（同一持续动作不凑数）', '3', 'number')}
                     ${fieldRow('fallback.maximumImages', '每轮最多图片', '6', 'number')}
                     ${fieldRow('fallback.responseLength', '兜底模型回复上限', '1200', 'number')}
                     <h4>API 设置</h4>
