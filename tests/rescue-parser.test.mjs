@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { desiredImageCount, extractImagePrompts, isLikelyImagePrompt, parseDeclaredImageCount, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
+import { desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isLikelyImagePrompt, parseDeclaredImageCount, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
 
 test('parses the final IMG_COUNT declaration', () => {
     assert.equal(parseDeclaredImageCount('正文\n<!--IMG_COUNT:2-->').count, 2);
@@ -20,6 +20,13 @@ test('story candidates ignore image prompts and variable/status blocks', () => {
     const candidates = storyParagraphCandidates(text);
     assert.equal(candidates.length, 1);
     assert.match(candidates[0].text, /走入大厅/);
+});
+
+test('detects a visible woman in Chinese and English story beats without relying on prompts', () => {
+    assert.equal(hasVisibleFemaleStoryBeat('少女推开车门。她朝你伸出手。'), true);
+    assert.equal(hasVisibleFemaleStoryBeat('The woman raises her lantern and smiles.'), true);
+    assert.equal(hasVisibleFemaleStoryBeat('一个男人独自穿过空城，四周只有建筑。'), false);
+    assert.equal(hasVisibleFemaleStoryBeat('[masterpiece, 1girl, female focus, upper body]'), false);
 });
 
 test('retains all count declarations for duplicate-marker diagnostics', () => {
