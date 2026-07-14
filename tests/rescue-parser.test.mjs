@@ -144,6 +144,49 @@ test('detects a visible woman in Chinese and English story beats without relying
     assert.equal(hasVisibleFemaleStoryBeat('[masterpiece, 1girl, female focus, upper body]'), false);
 });
 
+test('does not merge a new decisive action just because the sentence also says still', () => {
+    const text = [
+        '成年女性艾琳撑着透明雨伞跑到你面前，把伞倾向你。',
+        '警报灯亮起，艾琳抓住你的手奔向列车。',
+        '钢梁落下时，艾琳拔出细剑把你护在身后，一剑斩断钢梁。',
+        '列车启动后，艾琳收剑扑进你怀里吻住你，并约定下一站仍然一起走。',
+    ].join('\n\n');
+    const plan = planStoryboardSlots(text);
+    assert.equal(plan.groups.length, 4);
+    assert.equal(plan.targetCount, 4);
+    assert.equal(plan.groups[2].actionPhase, 'defend');
+    assert.equal(plan.groups[3].actionPhase, 'kiss');
+});
+
+test('ignores hidden shot packets and gives explicit no-female prose precedence', () => {
+    const text = [
+        '一个陌生男人独自站在空旷的城堡外，周围没有任何女性。',
+        '<!--JANIMA_SHOT:{"people":"1girl","action":"invented woman"}-->',
+        '[masterpiece, 1girl, female focus, invented woman, empty castle, medium shot]',
+    ].join('\n\n');
+    const candidates = storyParagraphCandidates(text);
+    assert.equal(candidates.length, 1);
+    assert.equal(hasVisibleFemaleStoryBeat(text), false);
+    assert.equal(isExplicitNoFemaleStory(text), true);
+});
+
+test('a real female entrance after a male-only transition remains eligible', () => {
+    const text = '一个男人独自穿过雨巷。\n\n随后银发少女推开门，抓住他的手跑进车站。';
+    assert.equal(hasVisibleFemaleStoryBeat(text), true);
+    assert.equal(isExplicitNoFemaleStory(text), true);
+});
+
+test('an explicit male-only paragraph resets carried female context', () => {
+    const text = [
+        '成年女性艾琳挥手告别后走出大厅。',
+        '一个男人独自留在房间里检查钥匙。',
+        '空无一人的走廊只剩下雨声。',
+    ].join('\n\n');
+    const groups = storyBeatGroups(text).groups;
+    assert.equal(groups.length, 1);
+    assert.match(groups[0].text, /艾琳/);
+});
+
 test('retains all count declarations for duplicate-marker diagnostics', () => {
     const result = parseDeclaredImageCount('<!--IMG_COUNT:1-->\n<!--IMG_COUNT:2-->');
     assert.equal(result.count, 2);

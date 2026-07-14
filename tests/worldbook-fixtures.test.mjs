@@ -27,9 +27,9 @@ test('doorway regression restores current clothing/action and excludes invented 
     for (const tag of scene.mustNotInclude) assert.ok(!scene.prompt.toLowerCase().includes(tag.toLowerCase()), tag);
 });
 
-test('v8.6 mobile worldbook uses same-call story evidence and preserves identity locks', async () => {
+test('v8.7 mobile worldbook keeps the primary reply clean for one post-reply storyboard pass', async () => {
     const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_0_worldbook.json', import.meta.url), 'utf8'));
-    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_6_Galgame_Evidence_Director.json', import.meta.url), 'utf8'));
+    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_7_Galgame_PostReply_Director.json', import.meta.url), 'utf8'));
     const entries = Object.values(mobileWorldbook.entries);
     assert.notDeepEqual(mobileWorldbook, worldbook);
     assert.equal(entries.length, 3);
@@ -37,43 +37,31 @@ test('v8.6 mobile worldbook uses same-call story evidence and preserves identity
     assert.doesNotMatch(JSON.stringify(mobileWorldbook), /<%[_=]?/);
     assert.match(mobileWorldbook.entries['2'].content, /不依赖 EJS、酒馆助手或 JS-Slash-Runner/);
     assert.match(mobileWorldbook.entries['3'].content, /FM_DNA \/ FM_SCENE \/ FM_ANCHOR/);
-    assert.match(mobileWorldbook.entries['4'].comment, /v8\.6/);
+    assert.match(mobileWorldbook.entries['4'].comment, /v8\.7/);
     assert.equal(mobileWorldbook.entries['4'].disable, false);
     assert.equal(mobileWorldbook.entries['4'].order, 999);
-    assert.match(mobileWorldbook.entries['4'].content, /JANIMA_v8_6_MOBILE_GALGAME_EVIDENCE_DIRECTOR/);
-    assert.match(mobileWorldbook.entries['4'].content, /同次直出，不等第二个 LLM/);
-    assert.match(mobileWorldbook.entries['4'].content, /插件不得凭通用动作\/场景模板猜图/);
-    assert.match(mobileWorldbook.entries['4'].content, /<!--JANIMA_SHOT:/);
-    assert.match(mobileWorldbook.entries['4'].content, /逐字存在于当前证据包之前/);
-    assert.match(mobileWorldbook.entries['4'].content, /主体\/发起者/);
-    assert.match(mobileWorldbook.entries['4'].content, /接收者\/对象/);
-    assert.match(mobileWorldbook.entries['4'].content, /正常完整女性剧情优先选择约 3 个/);
-    assert.match(mobileWorldbook.entries['4'].content, /连续拥抱、同一次亲吻/);
-    assert.match(mobileWorldbook.entries['4'].content, /正文后 40%/);
-    assert.match(mobileWorldbook.entries['4'].content, /上一张 Prompt 结束后/);
-    assert.match(mobileWorldbook.entries['4'].content, /女性 Galgame 硬门禁/);
-    assert.match(mobileWorldbook.entries['4'].content, /单男性、纯场景、纯建筑、纯道具/);
-    assert.match(mobileWorldbook.entries['4'].content, /整轮完全没有可见女性[\s\S]*IMG_COUNT:0/);
-    assert.match(mobileWorldbook.entries['4'].content, /禁止方括号选项、\[Unnamed Persona\]/);
-    assert.match(mobileWorldbook.entries['4'].content, /<!--IMG_COUNT:n-->/);
+    assert.match(mobileWorldbook.entries['4'].content, /JANIMA_v8_7_MOBILE_GALGAME_POST_REPLY_DIRECTOR/);
+    assert.match(mobileWorldbook.entries['4'].content, /图片分镜由插件在整轮回复完成后一次性读取全文并生成/);
+    assert.match(mobileWorldbook.entries['4'].content, /不输出方括号图片 Prompt、JANIMA_SHOT、IMG_COUNT/);
+    assert.match(mobileWorldbook.entries['4'].content, /插件会在回复完成后只调用当前模型一次/);
+    assert.match(mobileWorldbook.entries['4'].content, /动作发起者、接收者或对象/);
+    assert.match(mobileWorldbook.entries['4'].content, /同一拥抱、亲吻、抚摸/);
+    assert.match(mobileWorldbook.entries['4'].content, /后半段出现新的动作/);
+    assert.match(mobileWorldbook.entries['4'].content, /纯男性、空镜、纯建筑、纯道具/);
     assert.match(mobileWorldbook.entries['2'].content, /CANONICAL LOCK: Lucifer/);
     assert.match(mobileWorldbook.entries['2'].content, /CANONICAL LOCK: Leviathan/);
     assert.match(mobileWorldbook.entries['2'].content, /CANONICAL PROP LOCK: Behemoth/);
-    assert.match(mobileWorldbook.entries['4'].content, /separate bodies/);
-    assert.match(mobileWorldbook.entries['4'].content, /角色名绝不能代替外貌/);
-    assert.match(mobileWorldbook.entries['4'].content, /masterpiece, best quality, score_7, highres, newest/);
-    assert.match(mobileWorldbook.entries['4'].content, /亲密、裸露和明确性行为/);
-    assert.match(mobileWorldbook.entries['4'].content, /不得因 NSFW 省略/);
-    assert.match(mobileWorldbook.entries['4'].content, /同体位持续反复最多一张/);
+    assert.match(mobileWorldbook.entries['4'].content, /相同人物继续使用同一稳定名字/);
+    assert.match(mobileWorldbook.entries['4'].content, /成人剧情不回避/);
+    assert.match(mobileWorldbook.entries['4'].content, /自愿成人亲密与明确性行为/);
+    assert.match(mobileWorldbook.entries['4'].content, /同体位重复动作仍属于同一阶段/);
     assert.match(mobileWorldbook.entries['4'].content, /首次进入/);
     assert.match(mobileWorldbook.entries['4'].content, /明确换体位/);
-    assert.match(mobileWorldbook.entries['4'].content, /高潮\/结果/);
-    assert.match(mobileWorldbook.entries['4'].content, /一个精确 @artist/);
-    assert.match(mobileWorldbook.entries['4'].content, /Turbo 8 步/);
-    assert.match(mobileWorldbook.entries['4'].content, /不得把步数提高到 30/);
+    assert.match(mobileWorldbook.entries['4'].content, /高潮\/射精结果/);
     assert.match(mobileWorldbook.entries['2'].content, /PREVIOUS SHOT CONTINUITY ANCHOR/);
     assert.match(mobileWorldbook.entries['2'].content, /ANIMA STYLE ANCHOR/);
-    assert.match(mobileWorldbook.entries['2'].content, /SHOT PACKET CONTINUITY/);
+    assert.match(mobileWorldbook.entries['2'].content, /POST-REPLY CONTINUITY/);
+    assert.doesNotMatch(mobileWorldbook.entries['2'].content, /SHOT PACKET CONTINUITY/);
 });
 
 test('regex package has three narrow rules and preserves ordinary brackets', async () => {
@@ -102,7 +90,9 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /minimumImages:\s*3/);
     assert.match(source, /maximumImages:\s*6/);
     assert.match(source, /evidenceRepair:\s*true/);
-    assert.match(source, /useCurrentModel:\s*false/);
+    assert.match(source, /postReplyStoryboard:\s*true/);
+    assert.match(source, /sameCallEvidence:\s*false/);
+    assert.match(source, /useCurrentModel:\s*true/);
     assert.match(source, /STREAM_TOKEN_RECEIVED/);
     assert.match(source, /same-call-story-evidence/);
     assert.match(source, /CHAT_COMPLETION_PROMPT_READY/);
@@ -114,6 +104,7 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /semanticAudit:\s*false/);
     assert.match(source, /female_subject_missing/);
     assert.match(source, /story_segment_since_previous_image/);
+    assert.match(source, /returnedActions\.some\(action => requiredActions\.has\(action\)\)/);
     assert.match(source, /BLOCKING_IMAGE_ISSUE_CODES/);
     assert.match(source, /promptRecord\?\.issues\?\.some/);
     assert.doesNotMatch(source, /buttonNode\.dataset\.imageTag = promptRecord\.prompt/);
@@ -126,6 +117,12 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /janimaSemanticAuditHash/);
     assert.doesNotMatch(source, /Number\(messageId\) === 0/);
     assert.match(source, /hasVisibleFemaleStoryBeat\(text\)/);
+    assert.match(source, /isExplicitNoFemaleStory\(text\)/);
+    assert.match(source, /The latest completed story must be checked even when it contains/);
+    assert.match(source, /scheduleCompletedReplyScans/);
+    assert.match(source, /janima-post-reply-female-gate-clear/);
+    const renderCheck = source.slice(source.indexOf('async function renderMessageCheck'), source.indexOf('function scheduleCheck'));
+    assert.doesNotMatch(renderCheck, /if \(!host\) return/);
     assert.match(source, /首次聊天文件尚未建立/);
     assert.match(source, /await eventSource\.emit\(event_types\.MESSAGE_UPDATED/);
     assert.match(source, /updateMessageBlock\(id, message\)/);
