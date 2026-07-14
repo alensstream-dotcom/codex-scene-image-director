@@ -17,12 +17,10 @@ import {
     applyMissingPrompts,
     assertPromptRepairResponse,
     assertWholeTurnResponse,
-    buildInstantStoryboard,
     extractImagePrompts,
     findSelectedParagraph,
     hasVisibleFemaleStoryBeat,
     insertPromptAfterParagraph,
-    isExplicitNoFemaleStory,
     isLikelyImagePrompt,
     makeCacheKey,
     paragraphRanges,
@@ -35,12 +33,18 @@ import {
     storyActionPhase,
     storyParagraphCandidates,
     storySegmentsForPrompts,
+    splitTags,
     validateTurn,
 } from './lib/rescue-core.mjs';
+import {
+    createCharacterRegistry,
+    extractShotPackets,
+    repairStoryboardFromEvidence,
+} from './lib/story-evidence.mjs';
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.8.1';
+const EXT_VERSION = '1.9.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -52,8 +56,17 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
 ]);
 const ADULT_EVENT_PHASES = new Set(['erotic_touch', 'manual_stimulation', 'oral_sex', 'penetration', 'position_change', 'climax', 'aftercare']);
 
+const STORY_EVIDENCE_CONTRACT = `[JANIMA_STORY_EVIDENCE_V1]
+You are writing the story and its Galgame image prompts in this SAME primary reply. Never wait for a second LLM.
+Plan the whole reply first. Normally select 3 distinct female-present events across opening/middle/ending; use 4-6 only for real action/location/outfit/relationship-stage changes, and 1-2 only when the reply truly has fewer distinct visual events. Repeated continuation of one pose/action gets one shot. Every shot depicts the strongest, most consequential and most cinematic moment since the previous shot. Adult consensual story beats are not censored: distinguish undressing, erotic touch, manual/oral action, first penetration, position change, climax and aftercare; do not replace a key act with a generic embrace or portrait.
+Immediately after the story paragraph that contains each winning moment, output exactly these two lines:
+<!--JANIMA_SHOT:{"id":"s1","quote":"an exact 6-360 character verbatim substring copied from the story above","people":"1girl or 1girl and 1boy or 2girls","cast":[{"id":"stable story name, Chinese allowed","prompt_name":"stable English image-model name","dna":"English immutable adult sex, build, skin, face, hair and eye tags","outfit":"English current clothing or nudity tags","identity_change":false,"outfit_change":false}],"action":"English visible subject + physical action + receiver/object + result","setting":"English current place and critical props","expression":"English current visible emotion","composition":"English positions, shot and lighting","safety":"safe or sensitive or nsfw or explicit"}-->
+[masterpiece, best quality, score_7, highres, newest, safety, people, female focus, optional single existing @artist, separate bodies if multiple, every cast prompt_name, every cast dna, every current outfit, exact action, exact expression, exact setting, exact composition, anime coloring, visual novel CG]
+The quote must already exist before its packet and belong to the complete window after the previous shot; never quote future text or use ellipsis/paraphrase. The prompt may contain English only. Every visible woman needs full repeated immutable DNA, not just a name. Reuse the same id, prompt_name and byte-identical dna across turns; keep outfit byte-identical unless the quoted story explicitly changes/removes it. Set identity_change/outfit_change true only when the quote itself proves the change. Exact people and spatial contact must match the quote. Every shot must contain a woman truly present; never output male-only, scenery-only, building-only or prop-only shots and never invent a woman. Place no unrelated square brackets in the reply. End with exactly <!--IMG_COUNT:n--> matching the actual packet/prompt pairs.
+[/JANIMA_STORY_EVIDENCE_V1]`;
+
 const DEFAULT_SETTINGS = {
-    version: 12,
+    version: 13,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -73,7 +86,7 @@ const DEFAULT_SETTINGS = {
     },
     fallback: {
         enabled: true,
-        instantLocal: true,
+        evidenceRepair: true,
         useCurrentModel: false,
         repairInvalidPrompts: false,
         semanticAudit: false,
@@ -117,6 +130,7 @@ const runtime = {
     fallbackFailures: new Map(),
     streamScanQueued: false,
     missingChatu8Warned: false,
+    storyContractArmed: false,
 };
 
 function mergeDefaults(base, incoming) {
@@ -133,7 +147,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 12) {
+    if (!existing || Number(existing.version) < 13) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -141,7 +155,7 @@ function settings() {
             autoLocalRepair: false,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, instantLocal: true, useCurrentModel: false, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
+            fallback: { enabled: true, evidenceRepair: true, useCurrentModel: false, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -322,6 +336,26 @@ function buildSafeLocalRepair(text, validation) {
     return { changed, text: next };
 }
 
+function nativePromptContainsCanonical(rawPrompt, canonicalPrompt) {
+    const nativeTags = new Set(splitTags(rawPrompt).map(tag => tag.toLocaleLowerCase()));
+    const canonicalTags = splitTags(canonicalPrompt).map(tag => tag.toLocaleLowerCase());
+    return canonicalTags.length >= 3 && canonicalTags.every(tag => nativeTags.has(tag));
+}
+
+function discardOrHideNativeButton(buttonNode) {
+    const resultNode = buttonNode.nextElementSibling?.matches?.('.st-chatu8-image-span')
+        ? buttonNode.nextElementSibling
+        : null;
+    if (!resultNode?.textContent?.trim() && !resultNode?.querySelector?.('img,video,canvas')) {
+        resultNode?.remove();
+        buttonNode.remove();
+    } else {
+        buttonNode.classList.add('janima-invalid-image-button');
+        buttonNode.style.display = 'none';
+        buttonNode.setAttribute('aria-hidden', 'true');
+    }
+}
+
 function markZhihuijiButtonsInline(messageId) {
     if (!settings().chatu8.inlineButtons) return;
     const host = messageElement(messageId);
@@ -330,28 +364,28 @@ function markZhihuijiButtonsInline(messageId) {
     const validation = validateTurn(getMessageText(messageId));
     const buttons = [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)];
     const validButtons = [];
-    let promptCursor = 0;
+    const claimedPromptIndexes = new Set();
     buttons.forEach(buttonNode => {
         const rawPrompt = buttonNode.dataset.imageTag || buttonNode.dataset.link || buttonNode.dataset.change || '';
         if (!isLikelyImagePrompt(rawPrompt)) {
-            buttonNode.classList.add('janima-invalid-image-button');
-            buttonNode.style.display = 'none';
-            buttonNode.setAttribute('aria-hidden', 'true');
+            discardOrHideNativeButton(buttonNode);
             return;
         }
-        const exactRecord = validation.prompts.find(item => item.prompt === rawPrompt);
-        const promptRecord = exactRecord || validation.prompts[promptCursor];
-        promptCursor++;
-        // Chatu8 may normalize whitespace or apply its selected preset before
-        // storing data-image-tag. On phones this made every otherwise valid
-        // button disappear. Keep the native closure/payload untouched and show
-        // it when it remains a plausible image prompt; diagnostics record the
-        // mismatch without blocking the user's Galgame flow.
+        const promptRecordIndex = validation.prompts.findIndex(item =>
+            item.prompt === rawPrompt || nativePromptContainsCanonical(rawPrompt, item.prompt));
+        if (promptRecordIndex < 0 || claimedPromptIndexes.has(promptRecordIndex)) {
+            // Never expose a stale Chatu8 closure after evidence repair: its
+            // visible label may look current while a click still sends the old
+            // pre-repair prompt. Extra native preset tags remain compatible as
+            // long as every canonical evidence tag is still present.
+            discardOrHideNativeButton(buttonNode);
+            return;
+        }
+        claimedPromptIndexes.add(promptRecordIndex);
+        const promptRecord = validation.prompts[promptRecordIndex];
         const blocked = promptRecord?.issues?.some(issue => BLOCKING_IMAGE_ISSUE_CODES.has(issue.code));
         if (blocked) {
-            buttonNode.classList.add('janima-invalid-image-button');
-            buttonNode.style.display = 'none';
-            buttonNode.setAttribute('aria-hidden', 'true');
+            discardOrHideNativeButton(buttonNode);
             return;
         }
         const index = validButtons.length;
@@ -374,7 +408,7 @@ function markZhihuijiButtonsInline(messageId) {
         ignoredFalseButtonCount: buttons.length - validButtons.length,
         nativePayloadMismatch: buttons.some(buttonNode => {
             const raw = buttonNode.dataset.imageTag || buttonNode.dataset.link || buttonNode.dataset.change || '';
-            return isLikelyImagePrompt(raw) && !validation.prompts.some(item => item.prompt === raw);
+            return isLikelyImagePrompt(raw) && !validation.prompts.some(item => nativePromptContainsCanonical(raw, item.prompt));
         }),
     });
 }
@@ -387,9 +421,11 @@ function nudgeZhihuijiObserver(messageId, validation = validateTurn(getMessageTe
     runtime.zhihuijiRescanHashes.add(key);
 
     const wake = delay => setTimeout(() => {
+        if (verifiedZhihuijiButtons(id).length >= validation.prompts.length) return;
+        if (delay >= 700 && chat?.[id]) updateMessageBlock(id, chat[id]);
         const host = messageElement(id);
         const textRoot = host?.querySelector('.mes_text');
-        if (!textRoot || verifiedZhihuijiButtons(id).length >= validation.prompts.length) return;
+        if (!textRoot) return;
 
         // st-chatu8 2.7.x performs its native recognition from a DOM observer.
         // A transient, empty node wakes that observer without changing chat text,
@@ -405,7 +441,12 @@ function nudgeZhihuijiObserver(messageId, validation = validateTurn(getMessageTe
 
     wake(80);
     wake(700);
-    wake(Math.min(2400, Math.max(1200, Number(settings().chatu8.rescanTimeoutMs || 3500) - 700)));
+    const finalDelay = Math.min(2400, Math.max(1200, Number(settings().chatu8.rescanTimeoutMs || 3500) - 700));
+    wake(finalDelay);
+    // DOM virtualization, message edits and fast consecutive generations can
+    // remove a native button after the first observer pass. Rate-limit each
+    // pass, but allow a later backlog scan to repair the same stable message.
+    setTimeout(() => runtime.zhihuijiRescanHashes.delete(key), finalDelay + 600);
     setDebug(id, {
         zhihuijiButtonFound: false,
         zhihuijiRoute: 'native DOM observer rescan scheduled',
@@ -638,75 +679,55 @@ async function runAutomaticQuietPromptRepair(messageId, text, validation) {
     }
 }
 
-function recentImagePromptBefore(messageId) {
-    for (let index = Number(messageId) - 1; index >= 0; index--) {
-        const prompts = extractImagePrompts(String(chat?.[index]?.mes || chat?.[index]?.message || ''));
-        const femalePrompt = [...prompts].reverse().find(item => /\b(?:[1-6]girls?|adult women?|female focus)\b/i.test(item.prompt));
-        if (femalePrompt) return femalePrompt.prompt;
+function characterRegistryBefore(messageId) {
+    const records = [];
+    const start = Math.max(0, Number(messageId) - 16);
+    for (let index = start; index < Number(messageId); index++) {
+        if (!isAssistantMessage(index)) continue;
+        records.push(...extractShotPackets(getMessageText(index)).filter(item => item.packet && !item.parseError));
     }
-    return '';
+    return createCharacterRegistry(records);
 }
 
-function currentCharacterLikelyFemale() {
-    const character = characters?.[this_chid];
-    if (!character) return false;
-    const evidence = [character.name, character.description, character.personality, character.scenario, character.first_mes]
-        .filter(Boolean)
-        .join('\n')
-        .slice(0, 12000);
-    return /(?:她|少女|女孩|女人|女性|女王|公主|魔女|女仆|姐姐|妹妹|妻子|女友|\b(?:she|her|woman|girl|female|queen|princess|witch|maid|wife|girlfriend)\b)/i.test(evidence);
-}
-
-async function runInstantLocalStoryboard(messageId, text, validation) {
+async function runEvidencePacketStoryboard(messageId, text) {
     const config = settings().fallback;
-    if (!config.enabled || !config.instantLocal || config.useCurrentModel) return false;
-    const previousFemalePrompt = recentImagePromptBefore(messageId);
-    const directFemale = hasVisibleFemaleStoryBeat(text);
-    const canContinueFemale = Boolean(previousFemalePrompt) || currentCharacterLikelyFemale();
-    if ((!directFemale && !canContinueFemale) || (!directFemale && isExplicitNoFemaleStory(text))) return false;
-    const candidates = storyParagraphCandidates(text);
-    if (!candidates.length) return false;
-    const preferred = Math.max(1, Math.min(6, Number(config.minimumImages || 3)));
-    const maximum = config.adaptive
-        ? Math.max(preferred, Math.min(6, Number(config.maximumImages || 6)))
-        : preferred;
-    const plan = planStoryboardSlots(text, { preferred, maximum, assumeFemale: !directFemale && canContinueFemale });
-    if (!plan.targetCount) return false;
-    const coverage = analyzeStoryboardCoverage(text, validation.prompts, { plan });
-    if (!coverage.needsReflow) return false;
-
-    const built = buildInstantStoryboard(text, {
-        plan,
-        preferred,
-        maximum,
-        existingPrompts: validation.prompts,
-        previousPrompt: previousFemalePrompt,
-    });
-    const next = replaceStoryboardPrompts(text, built.prompts.map(item => ({
-        after_paragraph_index: item.after_paragraph_index,
-        prompt: item.prompt,
-    })));
+    if (!config.enabled || !config.evidenceRepair) return false;
+    const packets = extractShotPackets(text);
+    if (!packets.length) return false;
+    const registry = characterRegistryBefore(messageId);
+    const registryBefore = [...registry.values()].map(member => ({
+        id: member.id,
+        prompt_name: member.prompt_name,
+        dna: member.dna,
+        outfit: member.outfit,
+    }));
+    const result = repairStoryboardFromEvidence(text, { registry });
     const message = chat?.[Number(messageId)];
     if (message) {
         message.extra ||= {};
         message.extra.janimaStoryboardPlan = {
-            version: 3,
-            mode: 'instant-local',
-            imageCount: built.prompts.length,
-            paragraphIndexes: built.prompts.map(item => item.after_paragraph_index),
-            actionPhases: built.prompts.map(item => item.action_phase),
-            sources: built.prompts.map(item => item.source),
+            version: 4,
+            mode: 'same-call-story-evidence',
+            imageCount: result.shots.length,
+            shotIds: result.shots.map(item => item.packet.id),
+            quotes: result.shots.map(item => item.packet.quote),
+            actionPhases: result.shots.map(item => item.actionPhase),
+            rejectedPackets: result.errors,
+            registryBefore,
         };
     }
-    await writeMessage(messageId, next, 'janima-instant-local-storyboard');
     setDebug(messageId, {
-        repairMode: 'instant-local-storyboard',
-        desiredImageCount: built.prompts.length,
-        insertedImageCount: built.prompts.length,
-        insertParagraphIndex: built.prompts.map(item => item.after_paragraph_index),
-        storyboardIssues: coverage.issues,
-        latencyClass: 'no-llm',
+        repairMode: 'same-call-story-evidence',
+        evidencePacketCount: packets.length,
+        acceptedImageCount: result.shots.length,
+        rejectedEvidence: result.errors,
+        latencyClass: 'no-second-llm',
     });
+    if (!result.changed) {
+        await saveChatConditional?.();
+        return false;
+    }
+    await writeMessage(messageId, result.text, 'janima-story-evidence-repair');
     return true;
 }
 
@@ -908,8 +929,8 @@ async function renderMessageCheck(messageId) {
             return;
         }
     }
+    if (await runEvidencePacketStoryboard(messageId, text)) return;
     if (await runAutomaticQuietPromptRepair(messageId, text, validation)) return;
-    if (await runInstantLocalStoryboard(messageId, text, validation)) return;
     if (await runAutomaticQuietFallback(messageId, text, validation)) return;
     markZhihuijiButtonsInline(messageId);
     nudgeZhihuijiObserver(messageId, validation);
@@ -1093,9 +1114,12 @@ async function repairWholeTurn(messageId) {
 function verifiedZhihuijiButtons(messageId) {
     const host = messageElement(messageId);
     if (!host || !settings().chatu8.enabled) return [];
+    const prompts = validateTurn(getMessageText(messageId)).prompts;
     return [...host.querySelectorAll(VERIFIED_ZHIHUIJI_SELECTOR)].filter(node => {
         const rawPrompt = node.dataset.imageTag || node.dataset.link || node.dataset.change || '';
-        return node instanceof HTMLElement && isLikelyImagePrompt(rawPrompt);
+        return node instanceof HTMLElement
+            && isLikelyImagePrompt(rawPrompt)
+            && prompts.some(item => nativePromptContainsCanonical(rawPrompt, item.prompt));
     });
 }
 
@@ -1288,15 +1312,15 @@ function settingsHtml() {
                     <b>世界书生图救援器 <small>v${EXT_VERSION}</small></b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">手机 Galgame 即时模式：世界书随正文直接写 Prompt，插件在流式回复中唤醒智绘姬；缺图时仅用本地事件账本立即补位，默认不再等待第二次 LLM。</p>
+                    <p class="notes">手机 Galgame 剧情证据模式：正文、逐镜头原文证据和 Prompt 在同一次回复里流式写出；插件只校验原句、动作、人物 DNA 与原位按钮，不再凭动作模板猜图。</p>
                     <h4>基础设置</h4>
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
                     ${checkRow('silentMode', '静默模式（不向对话插入插件界面）')}
                     ${checkRow('autoLocalRepair', '仅删除重复 Prompt（安全）')}
                     <h4>缺图自动兜底</h4>
-                    ${checkRow('fallback.enabled', '镜头重复、前密后疏或漏转折时整轮重排')}
-                    ${checkRow('fallback.instantLocal', '即时本地兜底（不调用 LLM，推荐开启）')}
+                    ${checkRow('fallback.enabled', '启用剧情证据校验与原位修复')}
+                    ${checkRow('fallback.evidenceRepair', '仅按同次回复原文证据修复（推荐开启）')}
                     ${checkRow('fallback.useCurrentModel', '慢速二次模型重排（会额外等待，默认关闭）')}
                     ${checkRow('fallback.repairInvalidPrompts', '二次模型改写已有 Prompt（默认关闭）')}
                     ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
@@ -1320,7 +1344,7 @@ function settingsHtml() {
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
                     ${fieldRow('chatu8.buttonWaitMs', '生成按钮等待时间 (ms)', '3500', 'number')}
-                    <p class="notes">只有主动开启“慢速二次模型重排”、二次改写或 API 审计时才会额外请求模型；即时本地兜底不会产生第二次聊天模型等待。</p>
+                    <p class="notes">默认不会产生第二次聊天模型等待；证据缺失或不匹配时宁可拒绝错误图片，也不会凭空补写动作、人物或场景。</p>
                 </div>
             </div>
         </div>`;
@@ -1364,7 +1388,7 @@ function bindSettings() {
         if (input.type === 'number') value = Number(value);
         setPath(settings(), input.name, value);
         saveSettingsDebounced();
-        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.instantLocal', 'fallback.useCurrentModel', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
+        if (['enabled', 'silentMode', 'autoLocalRepair', 'fallback.enabled', 'fallback.evidenceRepair', 'fallback.useCurrentModel', 'fallback.repairInvalidPrompts', 'fallback.semanticAudit', 'fallback.adaptive', 'fallback.minimumImages', 'fallback.maximumImages', 'chatu8.inlineButtons', 'chatu8.accuracyWorkflow'].includes(input.name)) {
             removeLegacyConversationUi();
             if (input.name === 'chatu8.accuracyWorkflow') configureChatu8AccuracyWorkflow();
             if (settings().enabled) scanLatestAssistant();
@@ -1373,8 +1397,13 @@ function bindSettings() {
 }
 
 function scanLatestAssistant() {
-    for (let index = (chat?.length || 0) - 1; index >= 0; index--) {
-        if (isAssistantMessage(index)) { scheduleCheck(index); return; }
+    let checked = 0;
+    for (let index = (chat?.length || 0) - 1; index >= 0 && checked < 16; index--) {
+        if (!isAssistantMessage(index)) continue;
+        const validation = validateTurn(getMessageText(index));
+        if (!validation.prompts.length && !extractShotPackets(getMessageText(index)).length) continue;
+        checked++;
+        if (verifiedZhihuijiButtons(index).length < validation.prompts.length) scheduleCheck(index, 60 + checked * 35);
     }
 }
 
@@ -1395,6 +1424,31 @@ function scheduleStreamingInlineScan() {
     }, 120);
 }
 
+function armStoryEvidenceContract(type, generationOptions = {}, dryRun = false) {
+    runtime.storyContractArmed = Boolean(
+        settings().enabled
+        && settings().fallback.enabled
+        && settings().fallback.evidenceRepair
+        && !dryRun
+        && !generationOptions?.quiet_prompt
+        && type !== 'quiet'
+        && type !== 'impersonate'
+    );
+}
+
+function injectChatCompletionEvidenceContract(eventData = {}) {
+    if (!runtime.storyContractArmed || eventData.dryRun || !Array.isArray(eventData.chat)) return;
+    const alreadyPresent = eventData.chat.some(message => typeof message?.content === 'string' && message.content.includes('[JANIMA_STORY_EVIDENCE_V1]'));
+    if (alreadyPresent) return;
+    eventData.chat.unshift({ role: 'system', content: STORY_EVIDENCE_CONTRACT });
+}
+
+function injectTextCompletionEvidenceContract(eventData = {}) {
+    if (!runtime.storyContractArmed || eventData.dryRun || typeof eventData.prompt !== 'string') return;
+    if (eventData.prompt.includes('[JANIMA_STORY_EVIDENCE_V1]')) return;
+    eventData.prompt = `${eventData.prompt.trimEnd()}\n\n${STORY_EVIDENCE_CONTRACT}\n`;
+}
+
 function bindEvents() {
     const onMessage = messageId => {
         if (settings().autoCheck) scheduleCheck(messageId, 120);
@@ -1402,12 +1456,44 @@ function bindEvents() {
     [event_types.MESSAGE_RECEIVED, event_types.MESSAGE_UPDATED, event_types.MESSAGE_SWIPED]
         .filter(Boolean)
         .forEach(type => eventSource.on(type, onMessage));
+    if (event_types.GENERATION_AFTER_COMMANDS) eventSource.on(event_types.GENERATION_AFTER_COMMANDS, armStoryEvidenceContract);
+    if (event_types.CHAT_COMPLETION_PROMPT_READY) eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, injectChatCompletionEvidenceContract);
+    if (event_types.GENERATE_AFTER_COMBINE_PROMPTS) eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, injectTextCompletionEvidenceContract);
     if (event_types.STREAM_TOKEN_RECEIVED) eventSource.on(event_types.STREAM_TOKEN_RECEIVED, scheduleStreamingInlineScan);
-    if (event_types.GENERATION_ENDED) eventSource.on(event_types.GENERATION_ENDED, () => setTimeout(scanLatestAssistant, 50));
+    if (event_types.GENERATION_ENDED) eventSource.on(event_types.GENERATION_ENDED, () => {
+        runtime.storyContractArmed = false;
+        setTimeout(scanLatestAssistant, 50);
+    });
+    if (event_types.GENERATION_STOPPED) eventSource.on(event_types.GENERATION_STOPPED, () => { runtime.storyContractArmed = false; });
     if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => setTimeout(scanLatestAssistant, 200));
+    const visibilityObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const rawId = entry.target?.getAttribute?.('mesid') || entry.target?.dataset?.mesId;
+            const messageId = Number(rawId);
+            if (!Number.isInteger(messageId) || messageId < 0 || !isAssistantMessage(messageId)) continue;
+            const validation = validateTurn(getMessageText(messageId));
+            if (validation.prompts.length && verifiedZhihuijiButtons(messageId).length < validation.prompts.length) {
+                scheduleCheck(messageId, 30);
+            }
+        }
+    }, { root: document.querySelector('#chat') || null, threshold: 0.01 });
+    const observeMessage = host => {
+        if (host?.matches?.('#chat .mes') && host.dataset.janimaVisibilityObserved !== 'true') {
+            host.dataset.janimaVisibilityObserved = 'true';
+            visibilityObserver.observe(host);
+        }
+    };
+    document.querySelectorAll('#chat .mes').forEach(observeMessage);
     const observer = new MutationObserver(mutations => {
         for (const mutation of mutations) {
             const host = mutation.target?.closest?.('.mes');
+            observeMessage(host);
+            mutation.addedNodes?.forEach?.(node => {
+                if (!(node instanceof Element)) return;
+                observeMessage(node);
+                node.querySelectorAll?.('#chat .mes, .mes')?.forEach?.(observeMessage);
+            });
             const rawId = host?.getAttribute?.('mesid') || host?.dataset?.mesId;
             const messageId = Number(rawId);
             if (Number.isInteger(messageId) && messageId >= 0) markZhihuijiButtonsInline(messageId);
