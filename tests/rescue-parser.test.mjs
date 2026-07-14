@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeStoryboardCoverage, desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isLikelyImagePrompt, parseDeclaredImageCount, planStoryboardSlots, storyBeatGroups, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
+import { analyzeStoryboardCoverage, buildInstantStoryboard, desiredImageCount, extractImagePrompts, hasVisibleFemaleStoryBeat, isLikelyImagePrompt, parseDeclaredImageCount, planStoryboardSlots, storyBeatGroups, storyParagraphCandidates, storySegmentsForPrompts } from '../lib/rescue-core.mjs';
 
 test('parses the final IMG_COUNT declaration', () => {
     assert.equal(parseDeclaredImageCount('正文\n<!--IMG_COUNT:2-->').count, 2);
@@ -35,6 +35,56 @@ test('continuous non-candidate bridge paragraphs do not split one action into tw
     const result = storyBeatGroups(text);
     assert.equal(result.groups.length, 1);
     assert.equal(planStoryboardSlots(text).targetCount, 1);
+});
+
+test('instant storyboard guarantees inline prompts without a second model call', () => {
+    const text = [
+        '艾琳走进卧室，银白长发披在肩后。',
+        '她俯身与成年男性主角进行口部互动，抬眼观察他的反应。',
+        '她随后引导成年男性主角首次进入她体内，身体在接触瞬间绷紧。',
+        '她翻身骑到成年男性主角身上，明确改变体位并掌握节奏。',
+        '她在最后一次动作中达到高潮，身体痉挛后抱紧成年男性主角。',
+    ].join('\n\n');
+    const built = buildInstantStoryboard(text, {
+        preferred: 3,
+        maximum: 6,
+        previousPrompt: '1girl, adult woman, silver hair, violet eyes, slim build, black dress',
+    });
+    assert.equal(built.prompts.length, 4);
+    assert.deepEqual(built.prompts.map(item => item.action_phase), ['oral_sex', 'penetration', 'position_change', 'climax']);
+    assert.ok(built.prompts.every(item => item.source === 'instant-local'));
+    assert.ok(built.prompts.every(item => item.prompt.startsWith('[masterpiece, best quality, score_7')));
+    assert.match(built.prompts[0].prompt, /oral sex/);
+    assert.match(built.prompts[3].prompt, /orgasm/);
+    assert.ok(built.prompts.every(item => /silver hair/.test(item.prompt)));
+});
+
+test('instant storyboard reuses reply prompts in chronological order and only fills missing slots locally', () => {
+    const text = [
+        '她走进大厅，推开身后的门。',
+        '[masterpiece, best quality, score_7, safe, 1girl, female focus, adult woman, long blue hair, blue eyes, white dress, entering, grand hall, medium shot]',
+        '她突然拔剑挡在你的身前。',
+        '她随后回身抱住你，露出释然的笑容。',
+    ].join('\n\n');
+    const built = buildInstantStoryboard(text, { preferred: 3, maximum: 3 });
+    assert.equal(built.prompts.length, 3);
+    assert.equal(built.prompts[0].source, 'reply');
+    assert.deepEqual(built.prompts.slice(1).map(item => item.source), ['instant-local', 'instant-local']);
+});
+
+test('instant storyboard does not exhaust or stop after many consecutive turns', () => {
+    let previousPrompt = '1girl, adult woman, long purple hair, purple eyes, slim build, navy dress';
+    for (let turn = 0; turn < 12; turn++) {
+        const text = [
+            `第${turn + 1}轮，她突然推门进入大厅。`,
+            '她拔出短剑挡住袭来的攻击，斗篷在身后扬起。',
+            '她随后回身抱住你，露出终于放心的笑容。',
+        ].join('\n\n');
+        const built = buildInstantStoryboard(text, { preferred: 3, maximum: 3, previousPrompt });
+        assert.equal(built.prompts.length, 3);
+        assert.ok(built.prompts.every(item => item.prompt.includes('female focus')));
+        previousPrompt = built.prompts.at(-1).prompt;
+    }
 });
 
 test('adult action ledger keeps real phase changes and merges only continuous penetration', () => {

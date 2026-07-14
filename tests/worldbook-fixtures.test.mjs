@@ -27,9 +27,9 @@ test('doorway regression restores current clothing/action and excludes invented 
     for (const tag of scene.mustNotInclude) assert.ok(!scene.prompt.toLowerCase().includes(tag.toLowerCase()), tag);
 });
 
-test('v8.4 mobile worldbook uses an event ledger and preserves identity locks', async () => {
+test('v8.5 mobile worldbook streams prompts in the original reply and preserves identity locks', async () => {
     const worldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_0_worldbook.json', import.meta.url), 'utf8'));
-    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_4_Galgame_Director.json', import.meta.url), 'utf8'));
+    const mobileWorldbook = JSON.parse(await readFile(new URL('../worldbooks/JANIMA_v8_5_Galgame_Director.json', import.meta.url), 'utf8'));
     const entries = Object.values(mobileWorldbook.entries);
     assert.notDeepEqual(mobileWorldbook, worldbook);
     assert.equal(entries.length, 3);
@@ -39,10 +39,14 @@ test('v8.4 mobile worldbook uses an event ledger and preserves identity locks', 
     assert.doesNotMatch(JSON.stringify(mobileWorldbook), /<%[_=]?/);
     assert.match(mobileWorldbook.entries['2'].content, /不依赖 EJS、酒馆助手或 JS-Slash-Runner/);
     assert.match(mobileWorldbook.entries['3'].content, /FM_DNA \/ FM_SCENE \/ FM_ANCHOR/);
-    assert.match(mobileWorldbook.entries['4'].comment, /v8\.4/);
+    assert.match(mobileWorldbook.entries['4'].comment, /v8\.5/);
     assert.equal(mobileWorldbook.entries['4'].disable, false);
     assert.equal(mobileWorldbook.entries['4'].order, 999);
     assert.match(mobileWorldbook.entries['4'].content, /整轮事件表/);
+    assert.match(mobileWorldbook.entries['4'].content, /本轮所有 Prompt 必须由当前这一次剧情回复直接写出/);
+    assert.match(mobileWorldbook.entries['4'].content, /默认禁止第二次 LLM 重排/);
+    assert.match(mobileWorldbook.entries['4'].content, /一个 Prompt 的方括号闭合后，智绘姬即可立即识别按钮/);
+    assert.match(mobileWorldbook.entries['4'].content, /绝不省略后半段关键动作 Prompt/);
     assert.match(mobileWorldbook.entries['4'].content, /同一次拥抱、亲吻、抚摸/);
     assert.match(mobileWorldbook.entries['4'].content, /正文后 40%/);
     assert.match(mobileWorldbook.entries['4'].content, /只有 1 个事件组就 1 张，2 个就 2 张/);
@@ -105,6 +109,10 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /generateQuietPrompt/);
     assert.match(source, /minimumImages:\s*3/);
     assert.match(source, /maximumImages:\s*6/);
+    assert.match(source, /instantLocal:\s*true/);
+    assert.match(source, /useCurrentModel:\s*false/);
+    assert.match(source, /STREAM_TOKEN_RECEIVED/);
+    assert.match(source, /instant-local-storyboard/);
     assert.match(source, /repairInvalidPrompts:\s*false/);
     assert.match(source, /semanticAudit:\s*false/);
     assert.match(source, /female_subject_missing/);
