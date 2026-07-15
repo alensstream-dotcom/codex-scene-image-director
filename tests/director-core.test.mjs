@@ -121,6 +121,21 @@ test('fallback does not mistake a dropped sword for undressing', () => {
     assert.notEqual(packets[0].stage, 'undressing');
 });
 
+test('fallback never applies a different character bible entry by position', () => {
+    const bible = createBible();
+    bible.wrong = { id: '千纱', prompt_name: 'Chisa', dna: 'adult woman, brown hair', outfit: 'white dress' };
+    const packets = buildFallbackPackets('艾琳拔出发光细剑，正面挡下破窗而入的触手。', {
+        bible,
+        characterName: '艾琳',
+        characterVisual: 'adult woman, long silver hair, purple eyes',
+        maximum: 1,
+    });
+    assert.equal(packets.length, 1);
+    assert.equal(packets[0].cast[0].id, '艾琳');
+    assert.match(packets[0].cast[0].dna, /long silver hair/);
+    assert.doesNotMatch(packets[0].cast[0].dna, /brown hair/);
+});
+
 test('identity seed stays stable across scene wording and changes only on reroll', () => {
     const next = { ...first, id: 's2', action: 'a completely new action', setting: 'new place' };
     assert.equal(seedForPacket(first), seedForPacket(next));
