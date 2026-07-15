@@ -1458,7 +1458,7 @@ function settingsHtml() {
                     ${fieldRow('chatu8.endTag', '结束标记', ']')}
                     ${fieldRow('chatu8.rescanTimeoutMs', '重新识别超时 (ms)', '3500', 'number')}
                     ${fieldRow('chatu8.buttonWaitMs', '生成按钮等待时间 (ms)', '3500', 'number')}
-                    <p class="notes">默认只在正文完成后调用当前模型一次，统一判断 1–6 个最有画面感的女性剧情节点；没有可确认女性时为 0 图，不会凭空补人物。</p>
+                    <p class="notes">默认由主回复在末尾附带隐藏分镜账本，插件本地生成 1–6 个原位按钮，不追加第二次模型请求；没有可确认女性时为 0 图，不会凭空补人物。</p>
                 </div>
             </div>
         </div>`;

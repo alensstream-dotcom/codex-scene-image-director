@@ -86,6 +86,17 @@ test('action phase mismatch is rejected rather than turning an attack into a hug
     assert.ok(result.errors.some(issue => issue.code === 'action_phase_mismatch'));
 });
 
+test('composite action evidence is accepted when the quote and prompt share a grounded action', () => {
+    const quote = 'The adult woman Eileen grabs the male protagonist by the wrist and runs toward the clocktower entrance.';
+    const composite = packet({
+        quote,
+        action: 'Eileen gripping the male protagonist wrist while running toward the clocktower entrance',
+    });
+    const result = repairStoryboardFromEvidence(shotText(quote, composite));
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.shots.length, 1);
+});
+
 test('recurring character keeps immutable DNA and unchanged outfit across turns', () => {
     const first = repairStoryboardFromEvidence(shotText('她突然拔出银剑，挡在你的身前。', packet()));
     const registry = createCharacterRegistry(first.shots.map(item => item.packet));
@@ -174,6 +185,19 @@ test('male-only evidence cannot create a Galgame button', () => {
     assert.ok(result.errors.some(issue => issue.code === 'people_invalid' || issue.code === 'female_cast_missing'));
 });
 
+test('gerund position change and cowgirl riding remain a distinct adult stage', () => {
+    const quote = 'The adult woman Eileen changes position and rides the adult male protagonist in cowgirl position.';
+    const changed = packet({
+        quote,
+        action: 'Eileen changing position to cowgirl and riding the adult male protagonist',
+        safety: 'explicit',
+    });
+    const result = repairStoryboardFromEvidence(shotText(quote, changed));
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.shots.length, 1);
+    assert.equal(result.shots[0].actionPhase, 'position_change');
+});
+
 test('one hidden end ledger creates chronological inline prompts without another model', () => {
     const quotes = [
         '艾琳突然冲进钟楼，银白长发在风中扬起。',
@@ -196,6 +220,11 @@ test('one hidden end ledger creates chronological inline prompts without another
     assert.ok(result.text.indexOf('blocking the monster claws') < result.text.indexOf(quotes[2]));
     assert.match(result.text, /<!--JANIMA_STORYBOARD_V2:/);
     assert.match(result.text, /<!--IMG_COUNT:3-->/);
+
+    const repeated = repairStoryboardFromLedger(result.text);
+    assert.deepEqual(repeated.shots.map(item => item.packet.id), result.shots.map(item => item.packet.id));
+    assert.equal(extractImagePrompts(repeated.text).length, 3);
+    assert.equal(repeated.errors.length, 0);
 });
 
 test('end ledger rejects out-of-order reused story evidence', () => {

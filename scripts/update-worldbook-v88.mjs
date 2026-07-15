@@ -4,7 +4,9 @@ const sourceUrl = new URL('../worldbooks/JANIMA_v8_7_Galgame_PostReply_Director.
 const targetUrl = new URL('../worldbooks/JANIMA_v8_8_Galgame_SameReply_Ledger_Director.json', import.meta.url);
 const worldbook = JSON.parse(await readFile(sourceUrl, 'utf8'));
 
+worldbook.entries['2'].comment = 'DNA注入提示-JANIMA v8.8 同回复隐藏账本连续性锁';
 worldbook.entries['2'].content = worldbook.entries['2'].content
+    .replace('正文仍只负责自然叙事，后置插件会在回复完成后统一生成 Prompt。', '正文仍只负责自然叙事，并在同一次主回复末尾提交隐藏账本，插件仅在本地生成 Prompt。')
     .replace('[POST-REPLY CONTINUITY]', '[SAME-REPLY LEDGER CONTINUITY]')
     .replace('聊天中最近的内联图片 Prompt 与 FM_ANCHOR 是后置分镜的视觉账本。相同人物沿用不可变 DNA；正文未明确换装、脱衣或永久外貌变化时保持既有状态。图片偶然画错绝不反向修改账本。', '聊天中最近的 JANIMA_STORYBOARD_V2 隐藏账本与 FM_ANCHOR 是视觉连续性账本。相同 cast.id 必须沿用不可变 DNA；正文原句未明确换装、脱衣或永久外貌变化时也沿用 outfit。图片偶然画错绝不反向修改账本。')
     .replace('[/POST-REPLY CONTINUITY]', '[/SAME-REPLY LEDGER CONTINUITY]');
@@ -13,6 +15,9 @@ worldbook.entries['3'].comment = 'FM_DNA / FM_SCENE / FM_ANCHOR 更新协议 v8.
 worldbook.entries['3'].content = worldbook.entries['3'].content
     .replace(/【v8\.7】/g, '【v8.8】')
     .replace('FM_ANCHOR 与聊天中最近的内联图片 Prompt 共同保存女性稳定身份、不可变 DNA、当前服装、地点与关键道具；下一轮沿用，再由正文明确变化覆盖。', 'FM_ANCHOR 与聊天中最近的 JANIMA_STORYBOARD_V2.cast 共同保存女性稳定身份、不可变 DNA、当前服装、地点与关键道具；下一轮逐字沿用，再由正文明确变化覆盖。');
+
+worldbook.entries['3'].content = worldbook.entries['3'].content
+    .replace('主回复只写自然剧情，不自行写 Prompt。后置插件读取完整回复与既有锚点后统一生成分镜，并为重复女性复制相同的固定外貌与未变化服装标签。', '主回复先写自然剧情，并在同一次回复末尾提交隐藏分镜账本。插件只在本地把账本变成原位 Prompt，并为重复女性复制相同的固定外貌与未变化服装标签。');
 
 worldbook.entries['4'].comment = 'JANIMA v8.8 手机 Galgame 同回复隐藏账本导演';
 worldbook.entries['4'].content = `<JANIMA_v8_8_MOBILE_GALGAME_SAME_REPLY_LEDGER_DIRECTOR>
