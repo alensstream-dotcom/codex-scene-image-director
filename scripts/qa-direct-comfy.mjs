@@ -1,9 +1,11 @@
 import { writeFile } from 'node:fs/promises';
 import { buildAnimaWorkflow } from '../lib/anima-direct-workflow.mjs';
+import { compilePrompt, createBible } from '../lib/director-core.mjs';
 
 const baseUrl = String(process.env.COMFY_URL || 'http://192.168.1.12:8188').replace(/\/$/, '');
 const output = process.argv[2] || '';
 const variant = String(process.env.QA_VARIANT || 'impact');
+const qaSeed = Number(process.env.QA_SEED || 115568571);
 const scene = variant === 'aftermath'
     ? [
         'decisive action: Seraphina kneels beside a shattered black monster claw and wipes glowing blood from her silver sword',
@@ -17,17 +19,40 @@ const scene = variant === 'aftermath'
         'ruined moonlit chapel', 'determined gaze',
         'dynamic Galgame event CG, cinematic medium shot, both sword and black claw fully visible, blue rim light',
     ];
-const prompt = [
+let prompt = [
     'safe', 'masterpiece', 'best quality', 'score_7', 'highres', 'newest',
     ...scene,
     'adult woman', 'slim athletic build', 'pale skin', 'oval face',
     'long blue hair', 'amber eyes', 'white and blue combat dress',
 ].join(', ');
+let negative = 'worst quality, low quality, bad anatomy, bad hands, text, logo, watermark, blurry';
+
+if (variant === 'eileen-train') {
+    const compiled = compilePrompt({
+        id: 'eileen_train_combat',
+        quote: '暴雨中的列车车厢里，艾琳护在他身前，用发光细剑斩断敌人的武器。',
+        people: '1girl, 1boy',
+        cast: [{
+            id: '艾琳',
+            prompt_name: 'Eileen',
+            dna: 'adult woman, 银白长发, 齐刘海, 紫色眼睛, 纤细身材',
+            outfit: '湿透的深蓝制服和红色领结',
+        }],
+        action: '艾琳护在男主身前，用发光细剑斩断敌人的武器，断刃飞出。',
+        setting: '暴雨夜，破损的列车车厢，破碎车窗，电火花。',
+        expression: '坚定而紧张',
+        composition: 'dynamic medium shot, Eileen in the foreground, male partner protected behind her',
+        stage: 'combat',
+        safety: 'safe',
+    }, createBible());
+    prompt = compiled.positive;
+    negative = compiled.negative;
+}
 
 const workflow = buildAnimaWorkflow({
     positive: prompt,
-    negative: 'worst quality, low quality, bad anatomy, bad hands, text, logo, watermark, blurry',
-    seed: 115568571,
+    negative,
+    seed: qaSeed,
 });
 
 const started = performance.now();

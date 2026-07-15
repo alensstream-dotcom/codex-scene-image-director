@@ -80,14 +80,36 @@ test('locks immutable DNA and carries outfit unless story changes it', () => {
     assert.match(bible.seraphina.dna, /long blue hair/);
 });
 
-test('prompt places decisive story action before identity and uses one safety tag', () => {
+test('prompt follows Anima tag order with identity before general action and one safety tag', () => {
     const bible = createBible();
     mergePacketIntoBible(bible, first);
     const result = compilePrompt(first, bible);
-    assert.ok(result.positive.indexOf('decisive action') < result.positive.indexOf('character 1'));
-    assert.match(result.positive, /^safe,/);
+    assert.match(result.positive, /^masterpiece, best quality, score_7/);
+    assert.ok(result.positive.indexOf('1girl') < result.positive.indexOf('character 1'));
+    assert.ok(result.positive.indexOf('character 1') < result.positive.indexOf('original story action'));
     assert.match(result.positive, /long blue hair/);
     assert.doesNotMatch(result.positive, /nsfw|explicit/);
+});
+
+test('Anima prompt adds weighted English identity and concise English scene tags', () => {
+    const packet = {
+        ...first,
+        quote: '雨夜列车里，艾琳护在他身前，挥动发光细剑斩断敌人的武器。',
+        action: '艾琳护在他身前，挥动发光细剑斩断敌人的武器。',
+        setting: '暴雨中的列车车厢，破碎车窗和电火花。',
+        cast: [{
+            id: '艾琳',
+            prompt_name: 'Eileen',
+            dna: 'adult woman, 银白长发, 齐刘海, 紫色眼睛, 纤细身材',
+            outfit: '湿透的深蓝制服和红色领结',
+        }],
+    };
+    const result = compilePrompt(packet, createBible());
+    assert.match(result.positive, /\(long silver-white hair:1\.8\)/);
+    assert.match(result.positive, /\(purple eyes:1\.7\)/);
+    assert.match(result.positive, /heroine shielding her male partner/);
+    assert.match(result.positive, /enemy weapon breaking/);
+    assert.match(result.positive, /stormy night/);
 });
 
 test('duplicate continuous action is filtered but a new stage passes', () => {

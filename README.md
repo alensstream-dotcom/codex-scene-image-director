@@ -49,3 +49,7 @@ https://github.com/alensstream-dotcom/codex-scene-image-director.git
 ```powershell
 node --test tests/director-core.test.mjs tests/anima-direct-workflow.test.mjs
 ```
+
+## v2.1 模型专用提示词
+
+v2.1 会把中文剧情压缩成 Anima 更擅长的英文动作与 Danbooru 风格标签，并按官方建议使用“质量/安全 → 人数 → 人物与加权外貌 → 动作/场景”的顺序。中文原文只作为末尾证据保留；银白发、瞳色、制服与标志性配饰会用较高权重锁定。此改动不增加第二次 LLM 请求，也不改变 Turbo 8 步、CFG 1。
