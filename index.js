@@ -143,6 +143,7 @@ const runtime = {
     zhihuijiRescanHashes: new Set(),
     fallbackFailures: new Map(),
     streamScanQueued: false,
+    streamCompletionTimer: null,
     missingChatu8Warned: false,
     storyContractArmed: false,
     generationActive: false,
@@ -1577,6 +1578,15 @@ function scheduleCompletedReplyScans() {
 }
 
 function scheduleStreamingInlineScan() {
+    clearTimeout(runtime.streamCompletionTimer);
+    runtime.streamCompletionTimer = setTimeout(() => {
+        // Custom OpenAI-compatible streaming backends may omit both
+        // GENERATION_ENDED and MESSAGE_RECEIVED. A quiet token window is the
+        // final completion fallback and prevents the phone path from stalling.
+        runtime.storyContractArmed = false;
+        runtime.generationActive = false;
+        scanLatestAssistant();
+    }, 650);
     if (runtime.streamScanQueued) return;
     runtime.streamScanQueued = true;
     setTimeout(() => {
@@ -1648,11 +1658,13 @@ function bindEvents() {
     if (event_types.GENERATE_AFTER_COMBINE_PROMPTS) eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, injectTextCompletionEvidenceContract);
     if (event_types.STREAM_TOKEN_RECEIVED) eventSource.on(event_types.STREAM_TOKEN_RECEIVED, scheduleStreamingInlineScan);
     if (event_types.GENERATION_ENDED) eventSource.on(event_types.GENERATION_ENDED, () => {
+        clearTimeout(runtime.streamCompletionTimer);
         runtime.storyContractArmed = false;
         runtime.generationActive = false;
         scheduleCompletedReplyScans();
     });
     if (event_types.GENERATION_STOPPED) eventSource.on(event_types.GENERATION_STOPPED, () => {
+        clearTimeout(runtime.streamCompletionTimer);
         runtime.storyContractArmed = false;
         runtime.generationActive = false;
         scheduleCompletedReplyScans();
