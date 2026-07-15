@@ -52,11 +52,13 @@ test('strips multilingual legacy image prompts but preserves short choices and l
     const story = [
         '她拔剑挡住了巨爪。',
         '[艾琳, 银白长发, 紫色眼睛, 深蓝制服, 正面挡下巨爪, 雨夜车站, 动态中景]',
+        '[kneeling embrace kiss tears silver hair wet uniform red ribbon train roof night rain]',
         '[接受, 拒绝]',
         '[角色资料](https://example.com)',
     ].join('\n');
     const cleaned = stripLegacyImagePromptLines(story);
     assert.doesNotMatch(cleaned, /银白长发/);
+    assert.doesNotMatch(cleaned, /kneeling embrace/);
     assert.match(cleaned, /\[接受, 拒绝\]/);
     assert.match(cleaned, /\[角色资料\]\(https:\/\/example\.com\)/);
 });
@@ -134,6 +136,23 @@ test('fallback never applies a different character bible entry by position', () 
     assert.equal(packets[0].cast[0].id, '艾琳');
     assert.match(packets[0].cast[0].dna, /long silver hair/);
     assert.doesNotMatch(packets[0].cast[0].dna, /brown hair/);
+});
+
+test('fallback covers distinct early, middle, and late actions when three slots are available', () => {
+    const story = [
+        '成年女性艾琳在平台坠落边缘单手抓住他的手腕，把他拉离裂口。',
+        '救援绳荡来时，艾琳抱紧他的腰，与他一起摆荡越过断桥。',
+        '落上车顶后，艾琳跪坐喘息，随后扑进他怀中含泪亲吻。',
+    ].join('\n\n');
+    const packets = buildFallbackPackets(story, {
+        characterName: '艾琳',
+        characterVisual: 'adult woman, long silver hair, purple eyes',
+        maximum: 3,
+    });
+    assert.equal(packets.length, 3);
+    assert.match(packets[0].quote, /抓住他的手腕/);
+    assert.match(packets[1].quote, /抱紧他的腰/);
+    assert.match(packets[2].quote, /含泪亲吻/);
 });
 
 test('identity seed stays stable across scene wording and changes only on reroll', () => {
