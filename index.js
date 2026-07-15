@@ -1628,6 +1628,20 @@ function injectChatCompletionEvidenceContract(eventData = {}) {
     eventData.chat.unshift({ role: 'system', content: STORYBOARD_LEDGER_CONTRACT });
 }
 
+function ensureLatestAssistantStoryboard() {
+    for (let index = (chat?.length || 0) - 1; index >= 0; index--) {
+        if (!isAssistantMessage(index)) continue;
+        const text = getMessageText(index);
+        const validation = validateTurn(text);
+        const hasEvidence = extractShotPackets(text).length > 0 || extractStoryboardLedgers(text).length > 0;
+        const missingSemanticRepair = hasEvidence && validation.prompts.length === 0;
+        const missingButtons = validation.prompts.length > 0
+            && verifiedZhihuijiButtons(index).length < validation.prompts.length;
+        if (missingSemanticRepair || missingButtons) scheduleCheck(index, 40);
+        return;
+    }
+}
+
 function injectTextCompletionEvidenceContract(eventData = {}) {
     if (!runtime.storyContractArmed || eventData.dryRun || typeof eventData.prompt !== 'string') return;
     if (eventData.prompt.includes('[JANIMA_STORYBOARD_V2]')) return;
@@ -1718,5 +1732,9 @@ jQuery(async () => {
     bindSettings();
     bindEvents();
     scanLatestAssistant();
+    // Mobile custom backends and some launcher builds occasionally omit the
+    // expected completion events. This small latest-message heartbeat makes a
+    // finished hidden ledger self-healing without ever calling another model.
+    setInterval(ensureLatestAssistantStoryboard, 1200);
     console.info(`[${EXT_NAME}] v${EXT_VERSION} loaded in silent mode; verified Zhihuiji route: ${VERIFIED_ZHIHUIJI_SELECTOR}`);
 });

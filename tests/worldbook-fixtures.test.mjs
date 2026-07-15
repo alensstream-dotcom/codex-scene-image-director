@@ -99,6 +99,7 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /scheduleCheck\(settleId, 650\)/);
     assert.match(source, /streamCompletionTimer: null/);
     assert.match(source, /A quiet token window is the/);
+    assert.match(source, /setInterval\(ensureLatestAssistantStoryboard, 1200\)/);
     assert.match(source, /MESSAGE_RECEIVED is SillyTavern's committed assistant message/);
     assert.match(source, /same-call-story-evidence/);
     assert.match(source, /CHAT_COMPLETION_PROMPT_READY/);
