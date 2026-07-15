@@ -3,10 +3,10 @@
     "loading_order": 8,
     "requires": [],
     "optional": [],
-    "js": "index.js?v=2.0.6",
-    "css": "style.css?v=2.0.6",
+    "js": "index.js?v=2.0.7",
+    "css": "style.css?v=2.0.7",
     "author": "Codex",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "homePage": "https://github.com/alensstream-dotcom/codex-scene-image-director",
     "auto_update": true,
     "minimum_client_version": "1.12.0"

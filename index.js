@@ -34,13 +34,13 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.0.6';
+const EXT_VERSION = '2.0.7';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 26,
+    schema: 27,
     enabled: true,
     automatic: true,
     localFallback: true,
@@ -87,7 +87,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 26) {
+    if (!existing || Number(existing.schema) < 27) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
@@ -518,7 +518,7 @@ function storyCharacterContext(story = '') {
     const appearance = userText
         .split(/(?<=[。！？；\n])/)
         .map(value => value.trim())
-        .filter(value => /(?:长发|短发|头发|刘海|眼睛|眼眸|瞳|身材|体型|肤色|脸型|制服|连衣裙|裙装|衬衫|外套|领结|发带|穿着|衣着)/i.test(value))
+        .filter(value => /(?:长发|短发|刘海|眼睛|眼眸|瞳|身材|体型|肤色|脸型|制服|连衣裙|裙装|衬衫|外套|领结|发带|穿着|衣着)/i.test(value))
         .slice(-3)
         .join(' ')
         .slice(0, 1000);

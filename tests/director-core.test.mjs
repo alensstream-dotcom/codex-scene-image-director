@@ -155,6 +155,40 @@ test('fallback covers distinct early, middle, and late actions when three slots 
     assert.match(packets[2].quote, /含泪亲吻/);
 });
 
+test('decisive Chinese beats outrank transitions and a lips-touch kiss is visual', () => {
+    const story = [
+        '艾琳扣住他的手腕，拽着他跃过车厢门沿。',
+        '车窗炸开，艾琳转身挡在他前面，细剑拔出。',
+        '第一把刀劈下来时，她挥剑斩断武器，断刃插进车厢壁。',
+        '敌人退走后，艾琳收剑坐到他身旁。',
+        '她靠过来，银白长发蹭过肩膀，湿冷的嘴唇贴在他的唇上。',
+    ].join('\n\n');
+    const packets = buildFallbackPackets(story, {
+        characterName: '艾琳',
+        characterVisual: 'adult woman, long silver hair, purple eyes',
+        maximum: 3,
+    });
+    assert.equal(packets.length, 3);
+    assert.ok(packets.some(packet => /斩断武器/.test(packet.quote)));
+    assert.ok(packets.some(packet => /嘴唇贴在/.test(packet.quote)));
+    assert.ok(!packets.some(packet => /收剑坐到/.test(packet.quote)));
+});
+
+test('an explicit current-turn appearance repairs stale DNA for the same named heroine', () => {
+    const bible = createBible();
+    bible['艾琳'] = { id: '艾琳', prompt_name: 'Eileen', dna: 'adult woman, short brown hair, green eyes', outfit: '' };
+    const [packet] = buildFallbackPackets('艾琳挥剑斩断迎面砸来的锁链。', {
+        bible,
+        characterName: '艾琳',
+        characterVisual: 'adult woman, long silver hair, purple eyes',
+        maximum: 1,
+    });
+    assert.match(packet.cast[0].dna, /long silver hair/);
+    assert.equal(packet.cast[0].identity_change, true);
+    mergePacketIntoBible(bible, packet);
+    assert.match(bible['艾琳'].dna, /long silver hair/);
+});
+
 test('identity seed stays stable across scene wording and changes only on reroll', () => {
     const next = { ...first, id: 's2', action: 'a completely new action', setting: 'new place' };
     assert.equal(seedForPacket(first), seedForPacket(next));
