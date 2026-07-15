@@ -34,13 +34,13 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.0.3';
+const EXT_VERSION = '2.0.4';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 23,
+    schema: 24,
     enabled: true,
     automatic: true,
     localFallback: true,
@@ -87,7 +87,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 23) {
+    if (!existing || Number(existing.schema) < 24) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
@@ -536,6 +536,7 @@ function explicitAdultsConfirmed(packet) {
 function acceptPacket(packet, sourceText, messageId = -1) {
     const active = runtime.active;
     if (!active || active.finalized || active.packetIds.has(packet.id)) return null;
+    if (active.records.length >= Math.max(1, Number(settings().maximumShots) || 3)) return null;
     if (currentGenerationRecords(active).length >= Math.max(1, Number(settings().maximumShots) || 3)) return null;
     if (!hasFemale(packet)) return null;
     if (!explicitAdultsConfirmed(packet)) {
@@ -613,6 +614,15 @@ async function finalizeMessage(messageId, messageType = '') {
     if (!Number.isInteger(id) || id < 0 || !isAssistantMessage(id)) return;
     const committedText = String(chat[id].mes || '');
     let active = runtime.active;
+    // Streaming completion can emit MESSAGE_RECEIVED and GENERATION_ENDED for
+    // the same assistant message. The first pass already storyboarded, queued,
+    // and persisted it; never reinterpret that same reply as a new late pass.
+    if (active?.finalized
+        && Number(active.messageId) === id
+        && String(active.chatId || '') === String(getCurrentChatId?.() || '')) {
+        scheduleRender(20);
+        return;
+    }
     if (!active || active.finalized) {
         // MESSAGE_RECEIVED also fires while old chats and greeting messages are
         // restored. A short-lived GENERATION_STARTED marker distinguishes the
