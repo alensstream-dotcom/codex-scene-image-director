@@ -34,13 +34,13 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.0.1';
+const EXT_VERSION = '2.0.2';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 21,
+    schema: 22,
     enabled: true,
     automatic: true,
     localFallback: true,
@@ -87,7 +87,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 21) {
+    if (!existing || Number(existing.schema) < 22) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
@@ -259,7 +259,12 @@ function normalizeForAnchor(value = '') {
 function anchorForQuote(root, quote) {
     const wanted = normalizeForAnchor(quote);
     if (!wanted) return null;
-    const candidates = [...root.querySelectorAll(':scope > p, :scope > div, :scope > blockquote, :scope > ul > li, :scope > ol > li')];
+    // Regex scripts and card themes often wrap the final prose in several
+    // nested containers. Prefer the smallest matching descendant so a slot is
+    // inserted after the actual story paragraph instead of after the wrapper.
+    const candidates = [...root.querySelectorAll('p, blockquote, li, div')]
+        .filter(node => !node.closest('.janima-autocg-slot'))
+        .sort((a, b) => normalizeForAnchor(a.textContent).length - normalizeForAnchor(b.textContent).length);
     const exact = candidates.find(node => normalizeForAnchor(node.textContent).includes(wanted));
     if (exact) return exact;
     const fragment = wanted.slice(0, Math.min(42, wanted.length));
@@ -489,6 +494,39 @@ function currentGenerationRecords(active = runtime.active) {
     return active?.records || [];
 }
 
+function latestUserText() {
+    for (let index = (chat?.length || 0) - 1; index >= 0; index--) {
+        if (chat[index]?.is_user) return String(chat[index].mes || '');
+    }
+    return '';
+}
+
+function storyCharacterContext(story = '') {
+    const card = currentCharacterContext();
+    const userText = latestUserText().replace(/<[^>]+>/g, ' ');
+    const nameMatch = userText.match(/(?:成年)?女主(?:角)?\s*[：:，,]?\s*([A-Za-z][A-Za-z0-9 _-]{1,30}|[\u3400-\u9fff]{2,4})(?=[，,：:\s]|的)/i)
+        || String(story).match(/([A-Za-z][A-Za-z0-9 _-]{1,30}|[\u3400-\u9fff]{2,4})(?=的[^。\n]{0,16}(?:长发|短发|头发|刘海|眼睛|眼眸|瞳))/i);
+    const detectedName = String(nameMatch?.[1] || '').trim();
+    const appearance = userText
+        .split(/(?<=[。！？；\n])/)
+        .map(value => value.trim())
+        .filter(value => /(?:长发|短发|头发|刘海|眼睛|眼眸|瞳|身材|体型|肤色|脸型|制服|连衣裙|裙装|衬衫|外套|领结|发带|穿着|衣着)/i.test(value))
+        .slice(-3)
+        .join(' ')
+        .slice(0, 1000);
+    const sameAsCard = !detectedName || !card.name || detectedName.toLowerCase() === card.name.toLowerCase();
+    return {
+        name: detectedName || card.name,
+        visual: [sameAsCard ? card.visual : '', appearance ? `adult woman; ${appearance}` : ''].filter(Boolean).join(' ').slice(0, 1400),
+    };
+}
+
+function visibleStoryForMessage(messageId, fallback = '') {
+    const root = messageHost(messageId)?.querySelector('.mes_text');
+    const visible = String(root?.innerText || '').trim();
+    return visible.length >= 20 ? visible : String(fallback || '');
+}
+
 function explicitAdultsConfirmed(packet) {
     if (!['nsfw', 'explicit'].includes(packet.safety)) return true;
     if (!packet.cast?.length) return false;
@@ -507,10 +545,14 @@ function acceptPacket(packet, sourceText, messageId = -1) {
     const normalizedSource = normalizeForAnchor(sourceText);
     if (!normalizedSource.includes(normalizeForAnchor(packet.quote))) return null;
     const previous = [...recentPersistedRecords(8), ...currentGenerationRecords(active)];
-    if (isDuplicateBeat(packet, previous)) return null;
+    // Local fallback has already deduplicated the complete visible reply. Do
+    // not run it through the packet-stream history gate a second time: doing
+    // so can suppress a valid later action because an older reply used the
+    // same generic stage label.
+    if (!String(packet.id).startsWith('fallback_') && isDuplicateBeat(packet, previous)) return null;
 
     mergePacketIntoBible(active.bible, packet);
-    const compiled = compilePrompt(packet, active.bible, currentCharacterContext().visual);
+    const compiled = compilePrompt(packet, active.bible, packet.cast?.some(cast => cast.dna) ? '' : currentCharacterContext().visual);
     const resolvedMessageId = Number.isInteger(Number(messageId)) && Number(messageId) >= 0 ? Number(messageId) : latestAssistantId();
     const record = {
         id: packet.id,
@@ -598,11 +640,11 @@ async function finalizeMessage(messageId, messageType = '') {
     consumePackets(active.text, id);
 
     if (!active.records.length && settings().localFallback) {
-        const character = currentCharacterContext();
+        const cleanStory = cleanLegacyPromptLines(stripProtocol(visibleStoryForMessage(id, active.text)));
+        const character = storyCharacterContext(cleanStory);
         // Legacy worldbooks may leave visible [tag, tag, ...] paragraphs. They
         // are neither story evidence nor stable DOM anchors because we remove
         // them below, so storyboard only the clean committed prose.
-        const cleanStory = cleanLegacyPromptLines(stripProtocol(active.text));
         const fallback = buildFallbackPackets(cleanStory, {
             bible: active.bible,
             characterName: character.name,
