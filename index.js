@@ -1021,9 +1021,18 @@ async function renderMessageCheck(messageId) {
     const validation = validateTurn(text);
     const evidencePackets = extractShotPackets(text);
     const storyboardLedgers = extractStoryboardLedgers(text);
-    // Do not start the post-reply model while the story is still streaming.
-    // Existing inline prompts may still be handed to Chatu8 immediately.
-    if (runtime.generationActive && !validation.prompts.length && !evidencePackets.length && !storyboardLedgers.length) return;
+    // A hidden end ledger can become syntactically complete in the final
+    // streaming chunk before SillyTavern commits the beginning of the reply to
+    // chat[]. Parsing it at that instant can permanently reject a valid opening
+    // quote. Wait for GENERATION_ENDED before any evidence rewrite. Existing
+    // inline prompts may still be handed to Chatu8 while streaming.
+    if (runtime.generationActive) {
+        if (host && validation.prompts.length) {
+            markZhihuijiButtonsInline(messageId);
+            nudgeZhihuijiObserver(messageId, validation);
+        }
+        return;
+    }
     const previousDebug = runtime.debugByMessage.get(Number(messageId));
     const currentHash = stableHash(text);
     setDebug(messageId, {

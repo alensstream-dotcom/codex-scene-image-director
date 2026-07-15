@@ -94,6 +94,8 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.match(source, /sameCallEvidence:\s*true/);
     assert.match(source, /useCurrentModel:\s*false/);
     assert.match(source, /STREAM_TOKEN_RECEIVED/);
+    assert.match(source, /if \(runtime\.generationActive\) \{/);
+    assert.match(source, /Wait for GENERATION_ENDED before any evidence rewrite/);
     assert.match(source, /same-call-story-evidence/);
     assert.match(source, /CHAT_COMPLETION_PROMPT_READY/);
     assert.match(source, /GENERATE_AFTER_COMBINE_PROMPTS/);
