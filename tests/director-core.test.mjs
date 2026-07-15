@@ -111,6 +111,16 @@ test('fallback is local, female-gated, late-aware, and does not create scenery C
     assert.equal(buildFallbackPackets('空城里只有风吹过废墟。').length, 0);
 });
 
+test('fallback does not mistake a dropped sword for undressing', () => {
+    const packets = buildFallbackPackets('成年女战士从车顶翻回车厢，细剑脱了手，她跪落后被同伴搀扶起来。', {
+        characterName: '艾琳',
+        characterVisual: 'adult woman, long silver hair, purple eyes',
+        maximum: 1,
+    });
+    assert.equal(packets.length, 1);
+    assert.notEqual(packets[0].stage, 'undressing');
+});
+
 test('identity seed stays stable across scene wording and changes only on reroll', () => {
     const next = { ...first, id: 's2', action: 'a completely new action', setting: 'new place' };
     assert.equal(seedForPacket(first), seedForPacket(next));
