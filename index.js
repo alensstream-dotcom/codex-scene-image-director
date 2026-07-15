@@ -48,7 +48,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.11.1';
+const EXT_VERSION = '1.11.2';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -747,6 +747,8 @@ async function runSameReplyLedgerStoryboard(messageId, text) {
     if (!config.enabled || !config.evidenceRepair) return false;
     const ledgers = extractStoryboardLedgers(text);
     if (!ledgers.length) return false;
+    const sourceLedger = [...ledgers].reverse().find(item => item.payload && !item.parseError);
+    const sourceShots = sourceLedger?.payload?.shots || [];
     const registry = characterRegistryBefore(messageId);
     const registryBefore = [...registry.values()].map(member => ({
         id: member.id,
@@ -766,9 +768,9 @@ async function runSameReplyLedgerStoryboard(messageId, text) {
             imageCount: result.shots.length,
             firstPassImageCount: previousSameLedgerPlan?.firstPassImageCount ?? result.shots.length,
             passCount: Number(previousSameLedgerPlan?.passCount || 0) + 1,
-            sourceShotIds: previousSameLedgerPlan?.sourceShotIds || ledger.payload.shots.map(item => item.id),
-            sourceQuotes: previousSameLedgerPlan?.sourceQuotes || ledger.payload.shots.map(item => item.quote),
-            sourceQuoteLocations: previousSameLedgerPlan?.sourceQuoteLocations || ledger.payload.shots.map(item => text.indexOf(item.quote)),
+            sourceShotIds: previousSameLedgerPlan?.sourceShotIds || sourceShots.map(item => item.id),
+            sourceQuotes: previousSameLedgerPlan?.sourceQuotes || sourceShots.map(item => item.quote),
+            sourceQuoteLocations: previousSameLedgerPlan?.sourceQuoteLocations || sourceShots.map(item => text.indexOf(item.quote)),
             shotIds: result.shots.map(item => item.packet.id),
             quotes: result.shots.map(item => item.packet.quote),
             paragraphIndexes: result.shots.map(item => item.paragraphIndex),
