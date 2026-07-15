@@ -1,7 +1,0 @@
-{
-  "name": "两女抓袖口",
-  "story": "兰从左侧伸手抓住樱的袖口，樱在右侧回头看她。",
-  "prompt": "2girls, Sakura on the right, Lan on the left, Lan grabbing Sakura's sleeve cuff, Sakura looking back at Lan, distinct hairstyles, distinct outfits, clear spatial separation",
-  "mustInclude": ["2girls", "Sakura on the right", "Lan on the left", "clear spatial separation"],
-  "mustNotInclude": ["solo"]
-}

@@ -1,7 +1,0 @@
-{
-  "name": "门缝探头",
-  "story": "门被推开一条缝。樱探进半个脑袋，樱粉色的长发从肩头滑落。她已经换下了校服，穿着一件浅粉色的家居连衣裙，裙摆刚好到膝盖上方。",
-  "prompt": "1girl, solo, Sakura, pink long hair sliding over her shoulder, light pink home dress, skirt just above knees, peeking through a slightly opened door, doorway scene, upper body, half body visible, tight framing",
-  "mustInclude": ["1girl", "solo", "Sakura", "pink long hair", "light pink home dress", "peeking through a slightly opened door", "doorway scene", "upper body", "tight framing"],
-  "mustNotInclude": ["2girls", "hugging", "holding another girl", "school uniform"]
-}
