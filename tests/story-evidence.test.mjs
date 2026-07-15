@@ -227,6 +227,26 @@ test('one hidden end ledger creates chronological inline prompts without another
     assert.equal(repeated.errors.length, 0);
 });
 
+test('end ledger accepts Chinese and ASCII punctuation variants but never matches its own hidden copy', () => {
+    const storyQuote = '成年女性艾琳撑着透明雨伞跑到你面前，银白长发贴在肩头；她把伞倾向你。';
+    const ledgerQuote = '成年女性艾琳撑着透明雨伞跑到你面前,银白长发贴在肩头;她把伞倾向你。';
+    const input = `${storyQuote}\n\n${serializeStoryboardLedger([
+        packet({
+            id: 's1',
+            quote: ledgerQuote,
+            people: '1girl',
+            cast: [eileen()],
+            action: 'Eileen running to the male protagonist and tilting her transparent umbrella toward him',
+        }),
+    ])}`;
+    const result = repairStoryboardFromLedger(input);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.shots.length, 1);
+    assert.equal(result.shots[0].quoteStart, 0);
+    assert.ok(result.shots[0].quoteEnd < input.indexOf('<!--JANIMA_STORYBOARD_V2:'));
+    assert.equal(extractImagePrompts(result.text).length, 1);
+});
+
 test('end ledger rejects out-of-order reused story evidence', () => {
     const first = '艾琳突然冲进钟楼，银白长发在风中扬起。';
     const second = '她拔出银剑挡住怪物的利爪，把你牢牢护在身后。';

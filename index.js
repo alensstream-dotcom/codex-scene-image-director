@@ -42,6 +42,7 @@ import {
     createCharacterRegistry,
     extractShotPackets,
     extractStoryboardLedgers,
+    findQuoteEvidence,
     repairStoryboardFromEvidence,
     repairStoryboardFromLedger,
 } from './lib/story-evidence.mjs';
@@ -749,6 +750,15 @@ async function runSameReplyLedgerStoryboard(messageId, text) {
     if (!ledgers.length) return false;
     const sourceLedger = [...ledgers].reverse().find(item => item.payload && !item.parseError);
     const sourceShots = sourceLedger?.payload?.shots || [];
+    let sourceQuoteBoundary = 0;
+    const sourceQuoteLocations = sourceShots.map(item => {
+        const match = findQuoteEvidence(text, item.quote, {
+            from: sourceQuoteBoundary,
+            to: sourceLedger?.start ?? text.length,
+        });
+        if (match.start >= 0) sourceQuoteBoundary = match.end;
+        return match.start;
+    });
     const registry = characterRegistryBefore(messageId);
     const registryBefore = [...registry.values()].map(member => ({
         id: member.id,
@@ -770,7 +780,7 @@ async function runSameReplyLedgerStoryboard(messageId, text) {
             passCount: Number(previousSameLedgerPlan?.passCount || 0) + 1,
             sourceShotIds: previousSameLedgerPlan?.sourceShotIds || sourceShots.map(item => item.id),
             sourceQuotes: previousSameLedgerPlan?.sourceQuotes || sourceShots.map(item => item.quote),
-            sourceQuoteLocations: previousSameLedgerPlan?.sourceQuoteLocations || sourceShots.map(item => text.indexOf(item.quote)),
+            sourceQuoteLocations,
             shotIds: result.shots.map(item => item.packet.id),
             quotes: result.shots.map(item => item.packet.quote),
             paragraphIndexes: result.shots.map(item => item.paragraphIndex),
