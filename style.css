@@ -28,19 +28,35 @@ html[data-janima-autocg-enabled="true"] .janima-rescue-status {
 
 .janima-autocg-status {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.65rem;
     min-height: 64px;
     padding: 0.8rem 1rem;
     color: var(--SmartThemeBodyColor, #eee);
     font-size: 0.92em;
-    opacity: 0.88;
+    opacity: 0.9;
+}
+
+.janima-autocg-status-body {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.janima-autocg-error {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #ff9da6;
+    line-height: 1.35;
 }
 
 .janima-autocg-spinner {
     width: 1rem;
     height: 1rem;
     flex: 0 0 auto;
+    margin-top: 0.1rem;
     border: 2px solid currentColor;
     border-right-color: transparent;
     border-radius: 50%;
@@ -63,13 +79,18 @@ html[data-janima-autocg-enabled="true"] .janima-rescue-status {
     min-height: 30px;
     padding: 0.2rem 0.65rem;
     font-size: 0.82em;
-    opacity: 0.8;
+    opacity: 0.82;
 }
 
 .janima-autocg-settings .inline-drawer-content {
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
+}
+
+.janima-autocg-settings label:not(.checkbox_label) {
+    display: grid;
+    gap: 0.25rem;
 }
 
 .janima-autocg-settings-row {

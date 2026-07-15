@@ -1,26 +1,17 @@
-# JANIMA Galgame 自动CG v2
+# JANIMA Galgame 自动CG v2.3
 
-一个面向手机酒馆的单插件自动生图系统。它不依赖世界书、智绘姬、数据库脚本或生图正则。
+面向手机 SillyTavern + 电脑局域网 ComfyUI 的单插件自动生图系统。不依赖世界书、智绘姬、生图正则，也不依赖酒馆不存在的 `/api/sd/comfy/...` 代理路由。
 
-## 它如何工作
+## 工作方式
 
-1. 插件把一份不可见的镜头协议注入当前主模型请求。
-2. 主模型照常写剧情；遇到真正值得画的女性剧情瞬间时，在该段后附加不可见的 `JANIMA_CG` 数据包。
-3. 数据包在同一次流式回复中闭合后，插件立刻通过 SillyTavern 自带的服务端代理提交 ComfyUI。没有第二次 LLM 请求。
-4. 对应剧情下方立即出现图片槽。正文仍继续生成，输入框也不会被图片队列锁住。
-5. 图片完成后自动替换图片槽；刷新电脑或手机页面后仍从聊天数据恢复。
+1. 插件在主模型请求中注入不可见的分镜协议，不发起第二次 LLM 请求。
+2. 主模型照常写剧情，在有价值的女性剧情段落后附加不可见分镜数据；模型漏写时才使用本地规则选取 1–2 个镜头。
+3. 回复结束后，插件把分镜转换成 JANIMA/Anima 提示词。
+4. 手机浏览器直接向电脑 ComfyUI 提交原生 `POST /prompt` 请求。
+5. 插件轮询 `GET /history/{prompt_id}`，再用 `/view` 显示生成结果。
+6. 每张图按 `messageId + paragraphIndex` 插入对应消息段落下方；找不到段落时也只会追加到该消息气泡内部，不会跑到聊天底部。
 
-默认策略是普通回复 1 张主CG，只有动作、地点、服装或成人阶段真正变化时才增加到 2–3 张。连续同一动作不会重复生图；纯男性、空景、建筑和道具不会生图。
-
-## 当前电脑默认配置
-
-- ComfyUI：`http://192.168.1.12:8188`
-- 模型：`JANIMA_v10.safetensors`
-- 文本编码器：`qwen_3_06b_base.safetensors`
-- VAE：`qwen_image_vae.safetensors`
-- 加速 LoRA：`anima-turbo-lora-v0.2.safetensors`
-- 画布：768×1024
-- 8 步、CFG 1、Euler、normal
+普通回复目标是 1 张主 CG，只有动作、地点、服装或阶段真正变化时才增加到 2–3 张。纯男性、空景、建筑和纯道具不生图。
 
 ## 安装
 
@@ -30,26 +21,59 @@
 https://github.com/alensstream-dotcom/codex-scene-image-director.git
 ```
 
-刷新一次酒馆，打开扩展设置中的“JANIMA Galgame 自动CG”，点击“检测 ComfyUI”。之后正常聊天即可。
+刷新酒馆后打开“JANIMA Galgame 自动CG”。
 
-旧版迁移时请关闭 JANIMA v8.x 生图世界书和智绘姬的方括号扫描，避免旧规则继续让主模型输出第二套 Prompt。v2 本身不会读取或修改它们。
+## 手机直连 ComfyUI
 
-## 手机使用
+插件请求发生在手机浏览器中，因此 `ComfyUI 地址` 必须填写电脑的局域网地址，例如：
 
-手机只需打开电脑酒馆地址，不要把 ComfyUI 地址改成手机的 `localhost`。浏览器把生图请求发给酒馆，酒馆服务器再访问同一局域网内的 `192.168.1.12:8188`，因此没有手机跨域或本机地址错误。
+```text
+http://192.168.1.12:8188
+```
 
-## 可靠性边界
+不要填写手机端的 `127.0.0.1` 或 `localhost`。
 
-- 插件只通过酒馆保存接口写扩展设置和聊天数据，不直接改 `settings.json`。
-- ComfyUI 离线或工作流报错只会让原位图片槽显示“重绘”，不会阻止酒馆启动或继续聊天。
-- 成人镜头不会因 `nsfw` 标签被屏蔽；涉及成人内容时必须能从角色 DNA 中确认所有参与者为成年人。
+电脑启动 ComfyUI 时需要允许局域网和跨域访问，例如：
+
+```text
+python main.py --listen 0.0.0.0 --port 8188 --enable-cors-header "*"
+```
+
+然后在插件设置中点击“检测 ComfyUI”。插件依次尝试：
+
+```text
+/system_stats
+/system/stats
+/object_info
+```
+
+连接测试成功后即可正常聊天。
+
+## 默认 JANIMA 工作流
+
+- UNet：`JANIMA_v10.safetensors`
+- CLIP：`qwen_3_06b_base.safetensors`
+- VAE：`qwen_image_vae.safetensors`
+- Turbo LoRA：`anima-turbo-lora-v0.2.safetensors`
+- 分辨率：768×1024
+- 8 步、CFG 1、Euler、normal
+
+这些文件名都可以在扩展设置里修改。工作流使用 ComfyUI API JSON 的标准节点链：UNET/CLIP/VAE 加载、LoRA、CLIPTextEncode、EmptyLatentImage、KSampler、VAEDecode、SaveImage。
+
+## 本次修复
+
+- 删除 `/api/sd/comfy/ping` 和 `/api/sd/comfy/generate`。
+- 改用 ComfyUI 原生 `/prompt`、`/history/{prompt_id}`、`/view`。
+- 增加提交、轮询、超时、恢复和明确错误显示。
+- 删除 DOM 纯文本 quote 注入；图片位置改为段落索引。
+- 失败时显示具体错误，可在原位置点击“重绘”。
+- 关闭伪“角色参考图”img2img 链路，避免上一张构图污染当前剧情。
+- 保留同一次主回复中的隐藏分镜协议，不增加额外模型等待。
 
 ## 测试
 
-```powershell
-node --test tests/director-core.test.mjs tests/anima-direct-workflow.test.mjs
+```bash
+node --test tests/*.test.mjs
 ```
 
-## v2.1 模型专用提示词
-
-v2.1 会把中文剧情压缩成 Anima 更擅长的英文动作与 Danbooru 风格标签，并按官方建议使用“质量/安全 → 人数 → 人物与加权外貌 → 动作/场景”的顺序。中文原文只作为末尾证据保留；银白发、瞳色、制服与标志性配饰会用较高权重锁定。此改动不增加第二次 LLM 请求，也不改变 Turbo 8 步、CFG 1。
+测试覆盖：原生 ComfyUI 提交、Ping 端点回退、历史轮询、图片 URL 构造、剧情段落拆分和段落定位。
