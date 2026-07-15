@@ -34,13 +34,13 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.0.4';
+const EXT_VERSION = '2.0.5';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 24,
+    schema: 25,
     enabled: true,
     automatic: true,
     localFallback: true,
@@ -87,7 +87,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 24) {
+    if (!existing || Number(existing.schema) < 25) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
@@ -274,20 +274,28 @@ function anchorForQuote(root, quote) {
 function recordsForMessage(messageId) {
     const result = [];
     const seen = new Set();
-    const persisted = storageFor(chat?.[Number(messageId)])?.shots || [];
-    for (const record of persisted) {
+    const seenBeats = new Set();
+    const add = (record, replaceLive = false) => {
         const key = `${record.generationId || 'persisted'}:${record.id}`;
-        if (seen.has(key)) continue;
+        const beat = `${record.id}:${stableHash(`${record.packet?.quote || ''}|${record.packet?.action || ''}`)}`;
+        if (seen.has(key)) return;
+        const duplicateIndex = result.findIndex(item => `${item.id}:${stableHash(`${item.packet?.quote || ''}|${item.packet?.action || ''}`)}` === beat);
+        if (duplicateIndex >= 0) {
+            if (replaceLive && Number(record.createdAt || 0) < Number(result[duplicateIndex].createdAt || 0)) result[duplicateIndex] = record;
+            return;
+        }
         seen.add(key);
+        seenBeats.add(beat);
         result.push(record);
-    }
+    };
+    const persisted = storageFor(chat?.[Number(messageId)])?.shots || [];
+    for (const record of persisted) add(record);
     for (const record of runtime.jobs.values()) {
         if (Number(record.messageId) !== Number(messageId)) continue;
         const key = recordKey(record);
         const existingIndex = result.findIndex(item => `${item.generationId || 'persisted'}:${item.id}` === key);
         if (existingIndex >= 0) result[existingIndex] = record;
-        else result.push(record);
-        seen.add(key);
+        else add(record, true);
     }
     return result.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
 }
