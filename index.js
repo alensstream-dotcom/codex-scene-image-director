@@ -468,9 +468,11 @@ async function pingComfy({ notify = false } = {}) {
     }
 }
 
-function identityKeyForPacket(packet) {
+function identityKeyForPacket(packet, chatId = '') {
     const cast = (packet?.cast || []).map(item => String(item.id || '').trim().toLowerCase()).filter(Boolean).sort();
-    return cast.join('|') || '';
+    const castKey = cast.join('|');
+    if (!castKey) return '';
+    return `${String(chatId || 'unknown-chat').trim().toLowerCase()}::${castKey}`;
 }
 
 async function uploadIdentityBlob(blob, identityKey, extension = 'png') {
@@ -695,7 +697,7 @@ function acceptPacket(packet, sourceText, messageId = -1) {
         url: '',
         error: '',
         createdAt: Date.now(),
-        identityKey: identityKeyForPacket(compiled.packet),
+        identityKey: identityKeyForPacket(compiled.packet, active.chatId),
         referenceImageName: '',
     };
     active.packetIds.add(packet.id);
