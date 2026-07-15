@@ -48,7 +48,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.11.0';
+const EXT_VERSION = '1.11.1';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -1736,5 +1736,10 @@ jQuery(async () => {
     // expected completion events. This small latest-message heartbeat makes a
     // finished hidden ledger self-healing without ever calling another model.
     setInterval(ensureLatestAssistantStoryboard, 1200);
+    globalThis.JANIMA_SCENE_IMAGE_DIRECTOR = Object.freeze({
+        version: EXT_VERSION,
+        rescan: ensureLatestAssistantStoryboard,
+    });
+    document.documentElement.dataset.janimaSceneImageDirector = EXT_VERSION;
     console.info(`[${EXT_NAME}] v${EXT_VERSION} loaded in silent mode; verified Zhihuiji route: ${VERIFIED_ZHIHUIJI_SELECTOR}`);
 });
