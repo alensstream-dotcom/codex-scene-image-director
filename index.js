@@ -34,13 +34,13 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.0.7';
+const EXT_VERSION = '2.0.8';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 27,
+    schema: 28,
     enabled: true,
     automatic: true,
     localFallback: true,
@@ -87,7 +87,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 27) {
+    if (!existing || Number(existing.schema) < 28) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
