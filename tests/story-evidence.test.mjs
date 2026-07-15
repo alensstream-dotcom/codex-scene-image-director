@@ -152,6 +152,51 @@ test('story-proven outfit change is allowed while immutable face DNA stays locke
     assert.doesNotMatch(promptText, /navy military dress/);
 });
 
+test('an explicitly stated current outfit overrides stale nudity without unlocking face DNA', () => {
+    const registry = createCharacterRegistry([
+        packet({
+            quote: 'Adult woman Eileen removes her dress and becomes fully nude.',
+            cast: [eileen({ outfit: 'fully nude', outfit_change: true })],
+        }),
+    ]);
+    const quote = 'Adult woman Eileen arrives in a rain-soaked navy school uniform and red ribbon.';
+    const current = packet({
+        id: 's2',
+        quote,
+        cast: [eileen({
+            dna: 'adult woman, curvy build, tan skin, short red hair, green eyes',
+            outfit: 'navy school uniform, red ribbon',
+            outfit_change: false,
+        })],
+        action: 'Eileen arriving beside the male protagonist in her rain-soaked navy school uniform',
+    });
+    const result = repairStoryboardFromEvidence(shotText(quote, current), { registry });
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.shots.length, 1);
+    const promptText = extractImagePrompts(result.text)[0].prompt;
+    assert.match(promptText, /navy school uniform, red ribbon/);
+    assert.match(promptText, /silver-white long hair/);
+    assert.doesNotMatch(promptText, /fully nude|short red hair|green eyes/);
+});
+
+test('registry follows later explicit outfit state even when the transition happened offscreen', () => {
+    const registry = createCharacterRegistry([
+        packet({
+            id: 'a1',
+            quote: 'Adult woman Eileen removes her dress and becomes fully nude.',
+            cast: [eileen({ outfit: 'fully nude', outfit_change: true })],
+        }),
+        packet({
+            id: 's1',
+            quote: 'Adult woman Eileen waits in a dry navy school uniform and red ribbon.',
+            cast: [eileen({ outfit: 'navy school uniform, red ribbon', outfit_change: false })],
+        }),
+    ]);
+    const current = [...registry.values()][0];
+    assert.equal(current.outfit, 'navy school uniform, red ribbon');
+    assert.equal(current.outfit_change, false);
+});
+
 test('adult action stages stay distinct and remain explicit', () => {
     const stages = [
         ['她俯身为成年男主进行口交，抬眼观察他的反应。', 'Eileen performing oral sex on the adult male protagonist', 'oral_sex'],

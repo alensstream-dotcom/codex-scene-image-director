@@ -58,7 +58,7 @@ worldbook.entries['4'].content = `<JANIMA_v8_8_MOBILE_GALGAME_SAME_REPLY_LEDGER_
 # 五、人物 DNA 与状态连续性
 - cast.id 是跨回合稳定身份键；同一角色的 prompt_name 与 dna 从最近 JANIMA_STORYBOARD_V2 或 FM_DNA 逐字沿用。dna 至少包含成年人/性别、体型、肤色、脸型、发色、发长、发型/刘海和瞳色，名字不能代替外貌。
 - 正文未明确发生永久外貌变化时 identity_change=false；插件会拒绝换脸、换发色、换瞳色或换体型。
-- 正文未明确换装、脱衣或裸露变化时 outfit_change=false 且 outfit 逐字沿用；发生变化时设 true，quote 必须直接证明新状态。裸体镜头仍重复脸、头发、眼睛和体型。
+- 正文未说明服装/裸露时，outfit 逐字沿用。quote 若明确写出当前服装或裸露，outfit 必须以该可见状态为准，即使换装过程发生在镜头外；只有 quote 直接写出换装/脱衣过程时 outfit_change=true。裸体镜头仍重复脸、头发、眼睛和体型。
 - 路西法固定：Lucifer, adult woman, tall voluptuous build, pale skin, elegant oval face, very long golden-blonde hair, blue eyes, black thorn chains。
 - 利维坦固定：Leviathan, petite adult woman, slim build, pale skin, round doll-like face, long light-purple twin tails, straight bangs, large round purple eyes。
 - 贝希摩斯固定为 small black or navy stuffed demon mascot, fabric doll body, tiny bat wings, old gas mask, plush doll，绝不是鸟或真动物。

@@ -49,7 +49,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.11.3';
+const EXT_VERSION = '1.11.4';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -73,7 +73,7 @@ Normally choose 3 distinct female-present events distributed across opening, mid
 
 Every shot must contain a woman truly present in its quote/window. A man may appear only in a real interaction with her. Never invent a woman or output male-only, scenery-only, building-only or prop-only shots. action must be a literal English visual translation of quote with named initiator, receiver/object, exact contact/pose and visible result. People, clothing/nudity, props, location and emotion must match that moment.
 
-Reuse stable cast.id, prompt_name and byte-identical immutable dna across shots and turns. Keep outfit byte-identical unless quote directly proves a change; set identity_change/outfit_change true only when quote proves it. For multiple people use separate cast records and explicit positions. Adult consensual events are not censored: undressing, erotic touch, manual/oral action, first penetration, continued penetration, position change, climax and aftercare are different stages; never replace the exact stage with an embrace, kneeling portrait or vague intimacy. Use explicit for explicit contact.
+Reuse stable cast.id, prompt_name and byte-identical immutable dna across shots and turns. Keep outfit byte-identical when the story leaves clothing unspecified; if quote explicitly states the current outfit or nudity, outfit must match that visible state even when the transition happened offscreen. Set outfit_change true only for an on-page change/removal proved by quote. For multiple people use separate cast records and explicit positions. Adult consensual events are not censored: undressing, erotic touch, manual/oral action, first penetration, continued penetration, position change, climax and aftercare are different stages; never replace the exact stage with an embrace, kneeling portrait or vague intimacy. Use explicit for explicit contact.
 [/JANIMA_STORYBOARD_V2]`;
 
 const DEFAULT_SETTINGS = {
