@@ -1609,9 +1609,18 @@ function bindEvents() {
             scheduleCheck(messageId, 650);
         }
     };
-    [event_types.MESSAGE_RECEIVED, event_types.MESSAGE_UPDATED, event_types.MESSAGE_SWIPED]
+    [event_types.MESSAGE_UPDATED, event_types.MESSAGE_SWIPED]
         .filter(Boolean)
         .forEach(type => eventSource.on(type, onMessage));
+    if (event_types.MESSAGE_RECEIVED) eventSource.on(event_types.MESSAGE_RECEIVED, messageId => {
+        // MESSAGE_RECEIVED is SillyTavern's committed assistant message. Some
+        // streaming backends do not emit GENERATION_ENDED reliably, so use the
+        // committed message as the authoritative completion signal as well.
+        runtime.storyContractArmed = false;
+        runtime.generationActive = false;
+        onMessage(messageId);
+        scheduleCompletedReplyScans();
+    });
     if (event_types.GENERATION_AFTER_COMMANDS) eventSource.on(event_types.GENERATION_AFTER_COMMANDS, armStoryEvidenceContract);
     if (event_types.CHAT_COMPLETION_PROMPT_READY) eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, injectChatCompletionEvidenceContract);
     if (event_types.GENERATE_AFTER_COMBINE_PROMPTS) eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, injectTextCompletionEvidenceContract);
