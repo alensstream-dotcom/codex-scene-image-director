@@ -146,6 +146,7 @@ const runtime = {
     missingChatu8Warned: false,
     storyContractArmed: false,
     generationActive: false,
+    streamingEvidenceSettles: new Map(),
 };
 
 function mergeDefaults(base, incoming) {
@@ -1027,14 +1028,34 @@ async function renderMessageCheck(messageId) {
     // A hidden end ledger can become syntactically complete in the final
     // streaming chunk before SillyTavern commits the beginning of the reply to
     // chat[]. Parsing it at that instant can permanently reject a valid opening
-    // quote. Wait for GENERATION_ENDED before any evidence rewrite. Existing
-    // inline prompts may still be handed to Chatu8 while streaming.
+    // quote. Prefer the completion events, but some custom streaming backends do
+    // not emit them reliably. In that case require a stable full message for a
+    // short quiet window before evidence repair. Existing inline prompts may
+    // still be handed to Chatu8 while streaming.
     if (runtime.generationActive) {
-        if (host && validation.prompts.length) {
-            markZhihuijiButtonsInline(messageId);
-            nudgeZhihuijiObserver(messageId, validation);
+        if (storyboardLedgers.length || evidencePackets.length) {
+            const settleId = Number(messageId);
+            const settleHash = stableHash(text);
+            const now = Date.now();
+            const previousSettle = runtime.streamingEvidenceSettles.get(settleId);
+            if (!previousSettle || previousSettle.hash !== settleHash) {
+                runtime.streamingEvidenceSettles.set(settleId, { hash: settleHash, seenAt: now });
+                scheduleCheck(settleId, 650);
+                return;
+            }
+            const remaining = 550 - (now - previousSettle.seenAt);
+            if (remaining > 0) {
+                scheduleCheck(settleId, remaining + 40);
+                return;
+            }
+            runtime.streamingEvidenceSettles.delete(settleId);
+        } else {
+            if (host && validation.prompts.length) {
+                markZhihuijiButtonsInline(messageId);
+                nudgeZhihuijiObserver(messageId, validation);
+            }
+            return;
         }
-        return;
     }
     const previousDebug = runtime.debugByMessage.get(Number(messageId));
     const currentHash = stableHash(text);
@@ -1582,6 +1603,7 @@ function armStoryEvidenceContract(type, generationOptions = {}, dryRun = false) 
         && type !== 'impersonate'
     );
     if (foreground) runtime.generationActive = true;
+    if (foreground) runtime.streamingEvidenceSettles.clear();
     runtime.storyContractArmed = Boolean(
         foreground
         && settings().fallback.evidenceRepair
