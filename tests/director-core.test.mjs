@@ -112,6 +112,24 @@ test('Anima prompt adds weighted English identity and concise English scene tags
     assert.match(result.positive, /stormy night/);
 });
 
+test('explicit adult story stages receive direct English Anima action tags without a second model', () => {
+    const packet = {
+        ...first,
+        quote: '两名24岁成年人确认同意后，她跨坐在伴侣身上进入骑乘位并达到高潮。',
+        action: '成年女性跨坐骑乘，性交插入后达到高潮，随后事后拥抱。',
+        people: '1girl, 1boy',
+        cast: [{ id: '艾琳', prompt_name: 'Eileen', dna: '24 years old adult woman, long silver hair, purple eyes', outfit: 'nude' }],
+        stage: 'climax',
+        safety: 'explicit',
+    };
+    const result = compilePrompt(packet, createBible());
+    assert.match(result.positive, /explicit/);
+    assert.match(result.positive, /consensual adult vaginal intercourse/);
+    assert.match(result.positive, /cowgirl position/);
+    assert.match(result.positive, /adult sexual climax/);
+    assert.match(result.positive, /aftercare/);
+});
+
 test('duplicate continuous action is filtered but a new stage passes', () => {
     const repeat = { ...first, id: 's2', quote: '她仍抓着他的手腕继续拉扯。', action: 'Seraphina keeps grabbing his wrist and pulling him' };
     assert.equal(isDuplicateBeat(repeat, [first]), true);
