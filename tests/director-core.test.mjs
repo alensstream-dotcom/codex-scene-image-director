@@ -170,8 +170,23 @@ test('decisive Chinese beats outrank transitions and a lips-touch kiss is visual
     });
     assert.equal(packets.length, 3);
     assert.ok(packets.some(packet => /斩断武器/.test(packet.quote)));
-    assert.ok(packets.some(packet => /嘴唇贴在/.test(packet.quote)));
+    assert.ok(packets.some(packet => /嘴唇贴在/.test(packet.quote) && packet.stage === 'kiss'));
     assert.ok(!packets.some(packet => /收剑坐到/.test(packet.quote)));
+});
+
+test('the phrase 没打算 after lips touch is not classified as combat', () => {
+    const story = [
+        '艾琳扣住他的手腕，把他从车门边拉回来。',
+        '追兵破窗后，艾琳挥剑斩断迎面劈来的武器。',
+        '她靠进他怀里，湿冷的嘴唇贴上来，没打算松开。',
+    ].join('\n\n');
+    const packets = buildFallbackPackets(story, {
+        characterName: '艾琳',
+        characterVisual: 'adult woman, long silver hair, purple eyes',
+        maximum: 3,
+    });
+    assert.equal(packets.length, 3);
+    assert.equal(packets.at(-1).stage, 'kiss');
 });
 
 test('an explicit current-turn appearance repairs stale DNA for the same named heroine', () => {
