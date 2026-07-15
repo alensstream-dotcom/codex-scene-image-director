@@ -1,54 +1,116 @@
-.janima-rescue-settings .inline-drawer-content {
+html[data-janima-autocg-enabled="true"] .st-chatu8-image-button,
+html[data-janima-autocg-enabled="true"] .janima-rescue-panel,
+html[data-janima-autocg-enabled="true"] .janima-rescue-status {
+    display: none !important;
+}
+
+.janima-autocg-slot {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-bottom: 12px;
+    width: min(100%, 768px);
+    max-width: 100%;
+    margin: 0.65rem 0 1rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #ddd) 18%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 72%, transparent);
 }
 
-.janima-rescue-settings h4 {
-    margin: 12px 0 2px;
+.janima-autocg-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    object-fit: contain;
+    background: #0b0b0e;
 }
 
-.janima-rescue-settings label:not(.checkbox_label) {
-    display: grid;
-    gap: 4px;
+.janima-autocg-status {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 64px;
+    padding: 0.8rem 1rem;
+    color: var(--SmartThemeBodyColor, #eee);
+    font-size: 0.92em;
+    opacity: 0.88;
 }
 
-.janima-rescue-settings small,
-.janima-rescue-settings .notes {
-    opacity: 0.72;
+.janima-autocg-spinner {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: janima-autocg-spin 0.75s linear infinite;
 }
 
-/* v1.0 once appended a second column to every message. Never render conversation UI again. */
-.janima-rescue-panel,
-.janima-rescue-prompt-row,
-.janima-rescue-status,
-.janima-rescue-actions {
-    display: none !important;
+@keyframes janima-autocg-spin {
+    to { transform: rotate(360deg); }
 }
 
-.st-chatu8-image-button.janima-invalid-image-button {
-    display: none !important;
+.janima-autocg-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    padding: 0.35rem 0.5rem 0.5rem;
 }
 
-/* Keep the actual st-chatu8 control in normal document flow at its native prompt anchor. */
-.mes .mes_text .janima-inline-image-anchor {
-    display: block !important;
-    width: 100% !important;
-    clear: both !important;
+.janima-autocg-action.menu_button {
+    min-width: 0;
+    min-height: 30px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.82em;
+    opacity: 0.8;
 }
 
-.mes .mes_text .janima-inline-image-button {
-    display: block !important;
-    width: fit-content !important;
-    max-width: 100% !important;
-    margin: 8px 0 !important;
-    clear: both !important;
+.janima-autocg-settings .inline-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
 }
 
-@media (max-width: 600px) {
-    .mes .mes_text .janima-inline-image-button {
-        min-height: 38px !important;
-        padding: 7px 14px !important;
+.janima-autocg-settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.janima-autocg-connection {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9em;
+}
+
+.janima-autocg-connection::before {
+    content: '';
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: #999;
+}
+
+.janima-autocg-connection[data-state="ok"]::before { background: #42c77a; }
+.janima-autocg-connection[data-state="error"]::before { background: #e85d68; }
+.janima-autocg-connection[data-state="checking"]::before { background: #e6b84d; }
+
+@media (max-width: 700px) {
+    .janima-autocg-slot {
+        width: 100%;
+        margin: 0.55rem 0 0.85rem;
+        border-radius: 10px;
     }
+
+    .janima-autocg-status {
+        min-height: 54px;
+        padding: 0.65rem 0.8rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .janima-autocg-spinner { animation-duration: 1.5s; }
 }

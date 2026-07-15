@@ -78,7 +78,7 @@ test('regex package has three narrow rules and preserves ordinary brackets', asy
     assert.equal('[1girl, solo, Sakura, pink hair, home dress, upper body]'.replace(promptRule, ''), '');
 });
 
-test('runtime is silent and uses only the verified inline Zhihuiji button route', async () => {
+test.skip('legacy v1 Zhihuiji runtime contract', async () => {
     const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
     const workflowSource = await readFile(new URL('../lib/anima-workflow.mjs', import.meta.url), 'utf8');
     const css = await readFile(new URL('../style.css', import.meta.url), 'utf8');
@@ -144,4 +144,23 @@ test('runtime is silent and uses only the verified inline Zhihuiji button route'
     assert.doesNotMatch(source, /host\.append\(panel\)/);
     assert.match(css, /\.janima-rescue-panel[\s\S]*display:\s*none\s*!important/);
     assert.match(css, /\.janima-inline-image-button/);
+});
+
+test('v2 runtime is a single direct ComfyUI plugin with inline persistent slots', async () => {
+    const source = await readFile(new URL('../index.js', import.meta.url), 'utf8');
+    const workflowSource = await readFile(new URL('../lib/anima-direct-workflow.mjs', import.meta.url), 'utf8');
+    const css = await readFile(new URL('../style.css', import.meta.url), 'utf8');
+    assert.match(source, /\/api\/sd\/comfy\/generate/);
+    assert.match(source, /\/api\/sd\/comfy\/ping/);
+    assert.match(source, /saveBase64AsFile/);
+    assert.match(source, /setExtensionPrompt/);
+    assert.match(source, /STREAM_TOKEN_RECEIVED/);
+    assert.match(source, /janimaAutoCg/);
+    assert.match(source, /localFallback:\s*true/);
+    assert.doesNotMatch(source, /generateQuietPrompt/);
+    assert.doesNotMatch(source, /st-chatu8-image-button/);
+    assert.match(workflowSource, /anima-turbo-lora-v0\.2\.safetensors/);
+    assert.match(workflowSource, /steps:\s*8/);
+    assert.match(css, /\.janima-autocg-slot/);
+    assert.match(css, /\.st-chatu8-image-button/);
 });
