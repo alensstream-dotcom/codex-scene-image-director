@@ -35,7 +35,7 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.2.0';
+const EXT_VERSION = '2.2.1';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
