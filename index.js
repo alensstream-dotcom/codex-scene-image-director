@@ -756,15 +756,19 @@ async function runSameReplyLedgerStoryboard(messageId, text) {
     const message = chat?.[Number(messageId)];
     if (message) {
         message.extra ||= {};
+        const previousPlan = message.extra.janimaStoryboardPlan;
+        const previousSameLedgerPlan = previousPlan?.mode === 'same-reply-end-ledger' ? previousPlan : null;
         message.extra.janimaStoryboardPlan = {
             version: 5,
             mode: 'same-reply-end-ledger',
             imageCount: result.shots.length,
+            firstPassImageCount: previousSameLedgerPlan?.firstPassImageCount ?? result.shots.length,
+            passCount: Number(previousSameLedgerPlan?.passCount || 0) + 1,
             shotIds: result.shots.map(item => item.packet.id),
             quotes: result.shots.map(item => item.packet.quote),
             paragraphIndexes: result.shots.map(item => item.paragraphIndex),
             actionPhases: result.shots.map(item => item.actionPhase),
-            rejectedShots: result.errors,
+            rejectedShots: result.errors.length ? result.errors : (previousSameLedgerPlan?.rejectedShots || []),
             registryBefore,
         };
     }
