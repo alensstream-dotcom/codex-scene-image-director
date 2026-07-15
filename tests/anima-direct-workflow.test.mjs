@@ -29,3 +29,18 @@ test('profile clamps unsafe dimensions and keeps explicit fast overrides possibl
     assert.equal(profile.cfg, 0.1);
 });
 
+test('later CGs can reuse the first heroine image without adding a slow model', () => {
+    const graph = buildAnimaWorkflow({
+        positive: 'same pink-haired heroine walking home',
+        negative: 'wrong hair',
+        seed: 123,
+        referenceImage: 'janima_identity_sakura.png',
+        referenceDenoise: 0.9,
+    });
+    assert.equal(graph[10].class_type, 'LoadImage');
+    assert.equal(graph[14].class_type, 'VAEEncode');
+    assert.deepEqual(graph[11].inputs.latent_image, ['14', 0]);
+    assert.equal(graph[11].inputs.denoise, 0.9);
+    assert.equal(graph[11].inputs.steps, 8);
+});
+

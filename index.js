@@ -20,6 +20,7 @@ import {
     buildFallbackPackets,
     compilePrompt,
     createBible,
+    extractNarrativeStory,
     hasFemale,
     isDuplicateBeat,
     mergePacketIntoBible,
@@ -34,13 +35,13 @@ import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from '
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.1.1';
+const EXT_VERSION = '2.2.0';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 30,
+    schema: 31,
     enabled: true,
     automatic: true,
     localFallback: true,
@@ -50,6 +51,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     comfyUrl: 'http://192.168.1.12:8188',
     requestTimeoutMs: 45000,
     resumeInterrupted: true,
+    identityReference: true,
+    identityReferenceDenoise: 0.9,
     profile: { ...DEFAULT_ANIMA_PROFILE },
 });
 
@@ -66,6 +69,7 @@ const runtime = {
     initialized: false,
     lastGenerationStartedAt: 0,
     lastGenerationChatId: '',
+    identityReferences: new Map(),
 };
 
 function cloneDefaults() {
@@ -87,7 +91,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 30) {
+    if (!existing || Number(existing.schema) < 31) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
@@ -226,6 +230,8 @@ function serializableRecord(record) {
         error: record.error || '',
         createdAt: record.createdAt,
         completedAt: record.completedAt || 0,
+        identityKey: record.identityKey || '',
+        referenceImageName: record.referenceImageName || '',
     };
 }
 
@@ -256,19 +262,67 @@ function normalizeForAnchor(value = '') {
     return String(value).replace(/\s+/g, ' ').replace(/[\u200b-\u200d\ufeff]/g, '').trim();
 }
 
-function anchorForQuote(root, quote) {
+function textStream(root) {
+    const chars = [];
+    const points = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent || parent.closest('.janima-autocg-slot, script, style, button')) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+        },
+    });
+    while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const value = String(node.nodeValue || '');
+        for (let offset = 0; offset < value.length; offset++) {
+            const char = value[offset];
+            if (/[\u200b-\u200d\ufeff]/.test(char)) continue;
+            if (/\s/.test(char)) {
+                if (!chars.length || chars.at(-1) === ' ') continue;
+                chars.push(' ');
+            } else {
+                chars.push(char);
+            }
+            points.push({ node, offset: offset + 1 });
+        }
+    }
+    return { text: chars.join('').trim(), points };
+}
+
+function pointForQuote(root, quote) {
     const wanted = normalizeForAnchor(quote);
     if (!wanted) return null;
-    // Regex scripts and card themes often wrap the final prose in several
-    // nested containers. Prefer the smallest matching descendant so a slot is
-    // inserted after the actual story paragraph instead of after the wrapper.
-    const candidates = [...root.querySelectorAll('p, blockquote, li, div')]
-        .filter(node => !node.closest('.janima-autocg-slot'))
-        .sort((a, b) => normalizeForAnchor(a.textContent).length - normalizeForAnchor(b.textContent).length);
-    const exact = candidates.find(node => normalizeForAnchor(node.textContent).includes(wanted));
-    if (exact) return exact;
-    const fragment = wanted.slice(0, Math.min(42, wanted.length));
-    return candidates.find(node => normalizeForAnchor(node.textContent).includes(fragment)) || null;
+    const stream = textStream(root);
+    const fragments = [
+        wanted,
+        ...[120, 88, 64, 42, 26]
+            .filter(length => wanted.length >= length)
+            .map(length => wanted.slice(-length)),
+        wanted.slice(0, Math.min(42, wanted.length)),
+    ];
+    for (const fragment of fragments) {
+        const start = stream.text.lastIndexOf(fragment);
+        if (start < 0) continue;
+        const point = stream.points[start + fragment.length - 1];
+        if (point) return point;
+    }
+    return null;
+}
+
+function insertSlotAtQuote(root, quote, slot) {
+    const point = pointForQuote(root, quote);
+    if (!point) return false;
+    const semanticBlock = point.node.parentElement?.closest('p, blockquote, li');
+    if (semanticBlock && root.contains(semanticBlock)) {
+        semanticBlock.insertAdjacentElement('afterend', slot);
+        return true;
+    }
+    const range = document.createRange();
+    range.setStart(point.node, point.offset);
+    range.collapse(true);
+    range.insertNode(slot);
+    return true;
 }
 
 function recordsForMessage(messageId) {
@@ -359,17 +413,11 @@ function renderMessage(messageId) {
     const signature = stableHash(JSON.stringify(records.map(record => [record.generationId, record.id, record.status, record.url, record.retry]))).toString(36);
     if (host.dataset.janimaAutocgRender === signature && root.querySelectorAll('.janima-autocg-slot').length === records.length) return;
     root.querySelectorAll('.janima-autocg-slot').forEach(node => node.remove());
-    const tailByAnchor = new Map();
     for (const record of records) {
         const slot = buildSlot(record);
-        const anchor = anchorForQuote(root, record.packet?.quote);
-        if (!anchor) {
+        if (!insertSlotAtQuote(root, record.packet?.quote, slot)) {
             root.append(slot);
-            continue;
         }
-        const tail = tailByAnchor.get(anchor) || anchor;
-        tail.insertAdjacentElement('afterend', slot);
-        tailByAnchor.set(anchor, slot);
     }
     host.dataset.janimaAutocgRender = signature;
 }
@@ -420,6 +468,58 @@ async function pingComfy({ notify = false } = {}) {
     }
 }
 
+function identityKeyForPacket(packet) {
+    const cast = (packet?.cast || []).map(item => String(item.id || '').trim().toLowerCase()).filter(Boolean).sort();
+    return cast.join('|') || '';
+}
+
+async function uploadIdentityBlob(blob, identityKey, extension = 'png') {
+    if (!blob || !identityKey || !settings().identityReference) return '';
+    const safeExtension = /^(?:png|jpe?g|webp)$/i.test(extension) ? extension.toLowerCase().replace('jpeg', 'jpg') : 'png';
+    const name = `janima_identity_${stableHash(identityKey).toString(36)}.${safeExtension}`;
+    const form = new FormData();
+    form.append('image', blob, name);
+    form.append('type', 'input');
+    form.append('overwrite', 'true');
+    const response = await fetch(`${String(settings().comfyUrl).replace(/\/+$/, '')}/upload/image`, {
+        method: 'POST',
+        body: form,
+    });
+    if (!response.ok) throw new Error(`ComfyUI reference upload HTTP ${response.status}`);
+    const result = await response.json();
+    return [result.subfolder, result.name || name].filter(Boolean).join('/');
+}
+
+function base64Blob(data, format = 'png') {
+    const binary = atob(String(data || '').replace(/^data:[^,]+,/, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    return new Blob([bytes], { type: `image/${format === 'jpg' ? 'jpeg' : format}` });
+}
+
+async function referenceImageForRecord(record) {
+    if (!settings().identityReference || !record.identityKey) return '';
+    const live = runtime.identityReferences.get(record.identityKey);
+    if (live) return live;
+    const persisted = recentPersistedRecords(60).slice().reverse()
+        .find(item => item.identityKey === record.identityKey && item.status === 'done' && (item.referenceImageName || item.url));
+    if (!persisted) return '';
+    if (persisted.referenceImageName) {
+        runtime.identityReferences.set(record.identityKey, persisted.referenceImageName);
+        return persisted.referenceImageName;
+    }
+    try {
+        const response = await fetch(persisted.url);
+        if (!response.ok) return '';
+        const name = await uploadIdentityBlob(await response.blob(), record.identityKey, persisted.format || 'png');
+        if (name) runtime.identityReferences.set(record.identityKey, name);
+        return name;
+    } catch (error) {
+        console.debug(`[${EXT_NAME}] persisted identity reference unavailable`, error);
+        return '';
+    }
+}
+
 function enqueueRecord(record) {
     if (runtime.queue.some(item => recordKey(item) === recordKey(record))) return;
     record.status = 'queued';
@@ -439,11 +539,14 @@ async function generateRecord(record) {
     scheduleRender();
     const timer = setTimeout(() => record.controller.abort('timeout'), Math.max(10000, Number(config.requestTimeoutMs) || 45000));
     try {
+        const referenceImage = await referenceImageForRecord(record);
         const workflow = buildAnimaWorkflow({
             positive: record.prompt,
             negative: record.negative,
             seed: record.seed,
             profile: config.profile,
+            referenceImage,
+            referenceDenoise: config.identityReferenceDenoise,
         });
         const response = await fetch('/api/sd/comfy/generate', {
             method: 'POST',
@@ -464,6 +567,17 @@ async function generateRecord(record) {
         record.format = result.format || 'png';
         record.status = 'done';
         record.completedAt = Date.now();
+        if (record.identityKey) {
+            record.referenceImageName = referenceImage;
+            if (!referenceImage && config.identityReference) {
+                try {
+                    record.referenceImageName = await uploadIdentityBlob(base64Blob(result.data, result.format || 'png'), record.identityKey, result.format || 'png');
+                    if (record.referenceImageName) runtime.identityReferences.set(record.identityKey, record.referenceImageName);
+                } catch (error) {
+                    console.warn(`[${EXT_NAME}] identity reference upload skipped`, error);
+                }
+            }
+        }
         runtime.connection = { state: 'ok', message: 'ComfyUI 已连接' };
     } catch (error) {
         if (record.cancelRequested || record.controller.signal.aborted) {
@@ -513,19 +627,23 @@ function storyCharacterContext(story = '') {
     const card = currentCharacterContext();
     const userText = latestUserText().replace(/<[^>]+>/g, ' ');
     const nameMatch = userText.match(/(?:成年)?女主(?:角)?\s*[：:，,]?\s*([A-Za-z][A-Za-z0-9 _-]{1,30}|[\u3400-\u9fff]{2,4})(?=[，,：:\s]|的)/i)
-        || String(story).match(/([A-Za-z][A-Za-z0-9 _-]{1,30}|[\u3400-\u9fff]{2,4})(?=的[^。\n]{0,16}(?:长发|短发|头发|刘海|眼睛|眼眸|瞳))/i);
+        || String(story).match(/([A-Za-z][A-Za-z0-9 _-]{1,30}|[\u3400-\u9fff]{1,4})(?=的[^。\n]{0,20}(?:长发|短发|头发|刘海|马尾|眼睛|眼眸|瞳))/i)
+        || String(story).match(/(?:^|\n)([\u3400-\u9fff]{1,4})(?=(?:背着|穿着|戴着|走|跑|说|回头|抬|吃|坐|站|停))/m);
     const detectedName = String(nameMatch?.[1] || '').trim();
-    const appearance = userText
+    const appearanceSource = `${userText}\n${story}\n${card.visual}`;
+    const appearance = appearanceSource
         .split(/(?<=[。！？；\n])/)
         .map(value => value.trim())
-        .filter(value => /(?:长发|短发|刘海|眼睛|眼眸|瞳|身材|体型|肤色|脸型|制服|连衣裙|裙装|衬衫|外套|领结|发带|穿着|衣着)/i.test(value))
-        .slice(-3)
+        .filter(value => /(?:长发|短发|头发|刘海|马尾|眼睛|眼眸|瞳|身材|体型|肤色|脸型|制服|校服|连衣裙|裙装|衬衫|开衫|外套|领结|发带|书包|背包|鞋|穿着|衣着)/i.test(value))
+        .filter(value => !/(?:请写|输出|生成|生图|Prompt|测试|要求)/i.test(value))
+        .slice(0, 8)
         .join(' ')
         .slice(0, 1000);
     const sameAsCard = !detectedName || !card.name || detectedName.toLowerCase() === card.name.toLowerCase();
+    const adult = /(?:\b(?:1[89]|[2-9]\d)\s*(?:years? old|yo)\b|成人|成年|\d{2}岁)/i.test(`${userText} ${story}`);
     return {
         name: detectedName || card.name,
-        visual: [sameAsCard ? card.visual : '', appearance ? `adult woman; ${appearance}` : ''].filter(Boolean).join(' ').slice(0, 1400),
+        visual: [adult ? 'adult woman' : 'female character', appearance, sameAsCard && !appearance ? card.visual : ''].filter(Boolean).join('; ').slice(0, 1400),
     };
 }
 
@@ -577,6 +695,8 @@ function acceptPacket(packet, sourceText, messageId = -1) {
         url: '',
         error: '',
         createdAt: Date.now(),
+        identityKey: identityKeyForPacket(compiled.packet),
+        referenceImageName: '',
     };
     active.packetIds.add(packet.id);
     active.records.push(record);
@@ -599,7 +719,9 @@ function onStream(text) {
     if (!runtime.active || runtime.active.finalized) return;
     runtime.active.text = String(text || '');
     runtime.active.messageId = latestAssistantId();
-    consumePackets(runtime.active.text, runtime.active.messageId);
+    // Wait for the committed reply.  Mobile regex/database extensions can
+    // substantially rearrange or append content after streaming; accepting a
+    // partial packet here made prompts fast but detached them from final prose.
     scheduleRender(55);
 }
 
@@ -655,14 +777,10 @@ async function finalizeMessage(messageId, messageType = '') {
     active.messageId = id;
     active.text = committedText || active.text || '';
     for (const record of active.records) record.messageId = id;
-    consumePackets(active.text, id);
+    const cleanStory = cleanLegacyPromptLines(extractNarrativeStory(active.text));
 
     if (!active.records.length && settings().localFallback) {
-        const cleanStory = cleanLegacyPromptLines(stripProtocol(visibleStoryForMessage(id, active.text)));
         const character = storyCharacterContext(cleanStory);
-        // Legacy worldbooks may leave visible [tag, tag, ...] paragraphs. They
-        // are neither story evidence nor stable DOM anchors because we remove
-        // them below, so storyboard only the clean committed prose.
         const fallback = buildFallbackPackets(cleanStory, {
             bible: active.bible,
             characterName: character.name,
@@ -671,6 +789,10 @@ async function finalizeMessage(messageId, messageType = '') {
         });
         for (const packet of fallback) acceptPacket(packet, cleanStory, id);
     }
+    // A well-formed model packet is only a last-resort fallback.  The rendered
+    // full-reply director above is authoritative because its quotes and visual
+    // DNA come from the prose the user actually sees.
+    if (!active.records.length) consumePackets(active.text, id);
 
     for (const record of active.records) {
         record.messageId = id;

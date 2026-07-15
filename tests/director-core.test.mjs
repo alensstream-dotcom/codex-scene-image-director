@@ -6,6 +6,7 @@ import {
     buildFallbackPackets,
     compilePrompt,
     createBible,
+    extractNarrativeStory,
     isDuplicateBeat,
     mergePacketIntoBible,
     parseCgPackets,
@@ -63,6 +64,28 @@ test('strips multilingual legacy image prompts but preserves short choices and l
     assert.match(cleaned, /\[角色资料\]\(https:\/\/example\.com\)/);
 });
 
+test('extracts only narrative prose before mobile status and database payloads', () => {
+    const raw = [
+        '<content>',
+        '樱背着粉色书包，两条樱粉色马尾随着脚步晃动。',
+        '',
+        '放学后，她和男生并肩走过商店街，递给他一个奶油泡芙。',
+        '</content>',
+        '<status>世界：Y # 时间11:30\n当前动作：接梗回家</status>',
+        '\\n八宇式无聊死了，校长讲了半天话。\\nPS：这不是正文。',
+    ].join('\n');
+    const story = extractNarrativeStory(raw);
+    assert.match(story, /樱粉色马尾/);
+    assert.match(story, /奶油泡芙/);
+    assert.doesNotMatch(story, /当前动作|八宇式|PS/);
+    const packets = buildFallbackPackets(raw, {
+        characterName: '樱',
+        characterVisual: 'female character, 樱粉色双马尾, 粉色开衫, 校服, 粉色书包',
+        maximum: 3,
+    });
+    assert.ok(packets.every(packet => !/八宇式|当前动作/.test(packet.quote)));
+});
+
 test('locks immutable DNA and carries outfit unless story changes it', () => {
     const bible = createBible();
     mergePacketIntoBible(bible, first);
@@ -110,6 +133,29 @@ test('Anima prompt adds weighted English identity and concise English scene tags
     assert.match(result.positive, /heroine shielding her male partner/);
     assert.match(result.positive, /enemy weapon breaking/);
     assert.match(result.positive, /stormy night/);
+});
+
+test('school heroine prompt locks pink twin tails and rejects tactical drift', () => {
+    const packet = {
+        ...first,
+        people: '1girl, 1boy',
+        quote: '樱背着粉色书包，两条樱粉色马尾一跳一跳，她和男生一起走过校门。',
+        action: '樱走在男生前面，两个人一起走回家。',
+        setting: '清晨的小学校门和住宅街。',
+        cast: [{
+            id: '樱',
+            prompt_name: 'Sakura',
+            dna: 'female character, 樱粉色双马尾, 粉色眼睛',
+            outfit: '粉色开衫, 校服, 百褶裙, 粉色书包, 小皮鞋',
+        }],
+    };
+    const result = compilePrompt(packet, createBible());
+    assert.match(result.positive, /\(sakura-pink hair:1\.9\)/);
+    assert.match(result.positive, /\(twin ponytails:1\.8\)/);
+    assert.match(result.positive, /pink cardigan/);
+    assert.match(result.positive, /both clearly visible in the same frame/);
+    assert.match(result.negative, /black hair/);
+    assert.match(result.negative, /tactical outfit/);
 });
 
 test('explicit adult story stages receive direct English Anima action tags without a second model', () => {
