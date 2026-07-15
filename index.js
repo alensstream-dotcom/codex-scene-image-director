@@ -41,12 +41,14 @@ import {
 import {
     createCharacterRegistry,
     extractShotPackets,
+    extractStoryboardLedgers,
     repairStoryboardFromEvidence,
+    repairStoryboardFromLedger,
 } from './lib/story-evidence.mjs';
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.10.0';
+const EXT_VERSION = '1.11.0';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
@@ -58,17 +60,23 @@ const BLOCKING_IMAGE_ISSUE_CODES = new Set([
 ]);
 const ADULT_EVENT_PHASES = new Set(['erotic_touch', 'manual_stimulation', 'oral_sex', 'penetration', 'position_change', 'climax', 'aftercare']);
 
-const STORY_EVIDENCE_CONTRACT = `[JANIMA_STORY_EVIDENCE_V1]
-You are writing the story and its Galgame image prompts in this SAME primary reply. Never wait for a second LLM.
-Plan the whole reply first. Normally select 3 distinct female-present events across opening/middle/ending; use 4-6 only for real action/location/outfit/relationship-stage changes, and 1-2 only when the reply truly has fewer distinct visual events. Repeated continuation of one pose/action gets one shot. Every shot depicts the strongest, most consequential and most cinematic moment since the previous shot. Adult consensual story beats are not censored: distinguish undressing, erotic touch, manual/oral action, first penetration, position change, climax and aftercare; do not replace a key act with a generic embrace or portrait.
-Immediately after the story paragraph that contains each winning moment, output exactly these two lines:
-<!--JANIMA_SHOT:{"id":"s1","quote":"an exact 6-360 character verbatim substring copied from the story above","people":"1girl or 1girl and 1boy or 2girls","cast":[{"id":"stable story name, Chinese allowed","prompt_name":"stable English image-model name","dna":"English immutable adult sex, build, skin, face, hair and eye tags","outfit":"English current clothing or nudity tags","identity_change":false,"outfit_change":false}],"action":"English visible subject + physical action + receiver/object + result","setting":"English current place and critical props","expression":"English current visible emotion","composition":"English positions, shot and lighting","safety":"safe or sensitive or nsfw or explicit"}-->
-[masterpiece, best quality, score_7, highres, newest, safety, people, female focus, optional single existing @artist, separate bodies if multiple, every cast prompt_name, every cast dna, every current outfit, exact action, exact expression, exact setting, exact composition, anime coloring, visual novel CG]
-The quote must already exist before its packet and belong to the complete window after the previous shot; never quote future text or use ellipsis/paraphrase. The prompt may contain English only. Every visible woman needs full repeated immutable DNA, not just a name. Reuse the same id, prompt_name and byte-identical dna across turns; keep outfit byte-identical unless the quoted story explicitly changes/removes it. Set identity_change/outfit_change true only when the quote itself proves the change. Exact people and spatial contact must match the quote. Every shot must contain a woman truly present; never output male-only, scenery-only, building-only or prop-only shots and never invent a woman. Place no unrelated square brackets in the reply. End with exactly <!--IMG_COUNT:n--> matching the actual packet/prompt pairs.
-[/JANIMA_STORY_EVIDENCE_V1]`;
+const STORYBOARD_LEDGER_CONTRACT = `[JANIMA_STORYBOARD_V2]
+Write the natural Galgame story first. Do not write visible image prompts, image buttons, IMG_COUNT, analysis, or a storyboard table. Before generating, silently plan the complete reply and reserve enough output budget for one compact hidden ledger at the very end. Never call or wait for a second model.
+
+After the final story/variable text, output exactly one HTML comment and nothing after it:
+<!--JANIMA_STORYBOARD_V2:{"version":2,"shots":[{"id":"s1","quote":"exact 6-360 character verbatim story substring","people":"1girl or 1girl and 1boy or 2girls","cast":[{"id":"stable story name","prompt_name":"stable English image-model name","dna":"English immutable adult sex, build, skin, face, hair and eye tags","outfit":"English current clothing or nudity tags","identity_change":false,"outfit_change":false}],"action":"English initiator + exact visible physical action/contact + receiver/object + visible result","setting":"English current place and critical props","expression":"English current visible emotion","composition":"English character positions, shot and lighting","safety":"safe or sensitive or nsfw or explicit"}]}-->
+
+The ledger is authored after you know the entire reply. List shots in story order. Each quote must be copied byte-for-byte from a different completed story paragraph and must prove the decisive visible instant; never paraphrase, use ellipsis, quote future text, or reuse one continuous action. The plugin inserts each button immediately after the paragraph containing quote.
+
+Normally choose 3 distinct female-present events distributed across opening, middle and ending. Use 4-6 for real action, location, outfit, relationship, combat-result or adult-stage changes. Use 1-2 only if the whole reply truly contains fewer independent visual events. Score candidates by plot consequence, physical state/contact change, emotional intensity and visual specificity; choose the highest-scoring event in each window since the previous shot, not a generic portrait, standing pose, blush or background.
+
+Every shot must contain a woman truly present in its quote/window. A man may appear only in a real interaction with her. Never invent a woman or output male-only, scenery-only, building-only or prop-only shots. action must be a literal English visual translation of quote with named initiator, receiver/object, exact contact/pose and visible result. People, clothing/nudity, props, location and emotion must match that moment.
+
+Reuse stable cast.id, prompt_name and byte-identical immutable dna across shots and turns. Keep outfit byte-identical unless quote directly proves a change; set identity_change/outfit_change true only when quote proves it. For multiple people use separate cast records and explicit positions. Adult consensual events are not censored: undressing, erotic touch, manual/oral action, first penetration, continued penetration, position change, climax and aftercare are different stages; never replace the exact stage with an embrace, kneeling portrait or vague intimacy. Use explicit for explicit contact.
+[/JANIMA_STORYBOARD_V2]`;
 
 const DEFAULT_SETTINGS = {
-    version: 14,
+    version: 15,
     enabled: true,
     autoCheck: true,
     silentMode: true,
@@ -89,11 +97,11 @@ const DEFAULT_SETTINGS = {
     fallback: {
         enabled: true,
         evidenceRepair: true,
-        // Story-first is the reliable mobile default: let the primary reply
-        // finish, then use one compact quiet call to plan every shot together.
-        postReplyStoryboard: true,
-        sameCallEvidence: false,
-        useCurrentModel: true,
+        // The primary response ends with a hidden full-story ledger. Local
+        // code turns it into buttons with no second model request.
+        postReplyStoryboard: false,
+        sameCallEvidence: true,
+        useCurrentModel: false,
         repairInvalidPrompts: false,
         semanticAudit: false,
         minimumImages: 3,
@@ -154,7 +162,7 @@ function mergeDefaults(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.version) < 14) {
+    if (!existing || Number(existing.version) < 15) {
         const api = existing?.api || {};
         const chatu8 = existing?.chatu8 || {};
         extension_settings[EXT_ID] = mergeDefaults(DEFAULT_SETTINGS, {
@@ -162,7 +170,7 @@ function settings() {
             autoLocalRepair: false,
             selectionFill: false,
             api: { enabled: false, autoAudit: true, url: api.url || '', key: api.key || '', model: api.model || '', timeoutMs: api.timeoutMs || 10000 },
-            fallback: { enabled: true, evidenceRepair: true, postReplyStoryboard: true, sameCallEvidence: false, useCurrentModel: true, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
+            fallback: { enabled: true, evidenceRepair: true, postReplyStoryboard: false, sameCallEvidence: true, useCurrentModel: false, repairInvalidPrompts: false, semanticAudit: false, minimumImages: 3, maximumImages: 6, adaptive: true, responseLength: 1200 },
             chatu8: { enabled: true, inlineButtons: true, accuracyWorkflow: true, startTag: chatu8.startTag || '[', endTag: chatu8.endTag || ']' },
         });
     } else {
@@ -723,9 +731,56 @@ function characterRegistryBefore(messageId) {
     const start = Math.max(0, Number(messageId) - 16);
     for (let index = start; index < Number(messageId); index++) {
         if (!isAssistantMessage(index)) continue;
-        records.push(...extractShotPackets(getMessageText(index)).filter(item => item.packet && !item.parseError));
+        const previousText = getMessageText(index);
+        records.push(...extractShotPackets(previousText).filter(item => item.packet && !item.parseError));
+        for (const ledger of extractStoryboardLedgers(previousText)) {
+            if (ledger.payload && !ledger.parseError) records.push(...ledger.payload.shots);
+        }
     }
     return createCharacterRegistry(records);
+}
+
+async function runSameReplyLedgerStoryboard(messageId, text) {
+    const config = settings().fallback;
+    if (!config.enabled || !config.evidenceRepair) return false;
+    const ledgers = extractStoryboardLedgers(text);
+    if (!ledgers.length) return false;
+    const registry = characterRegistryBefore(messageId);
+    const registryBefore = [...registry.values()].map(member => ({
+        id: member.id,
+        prompt_name: member.prompt_name,
+        dna: member.dna,
+        outfit: member.outfit,
+    }));
+    const result = repairStoryboardFromLedger(text, { registry });
+    const message = chat?.[Number(messageId)];
+    if (message) {
+        message.extra ||= {};
+        message.extra.janimaStoryboardPlan = {
+            version: 5,
+            mode: 'same-reply-end-ledger',
+            imageCount: result.shots.length,
+            shotIds: result.shots.map(item => item.packet.id),
+            quotes: result.shots.map(item => item.packet.quote),
+            paragraphIndexes: result.shots.map(item => item.paragraphIndex),
+            actionPhases: result.shots.map(item => item.actionPhase),
+            rejectedShots: result.errors,
+            registryBefore,
+        };
+    }
+    setDebug(messageId, {
+        repairMode: 'same-reply-end-ledger',
+        storyboardLedgerCount: ledgers.length,
+        acceptedImageCount: result.shots.length,
+        rejectedStoryboardShots: result.errors,
+        latencyClass: 'zero-second-llm',
+    });
+    if (!result.changed) {
+        await saveChatConditional?.();
+        return false;
+    }
+    await writeMessage(messageId, result.text, 'janima-same-reply-ledger');
+    return true;
 }
 
 async function runEvidencePacketStoryboard(messageId, text) {
@@ -961,9 +1016,10 @@ async function renderMessageCheck(messageId) {
     const text = getMessageText(messageId);
     const validation = validateTurn(text);
     const evidencePackets = extractShotPackets(text);
+    const storyboardLedgers = extractStoryboardLedgers(text);
     // Do not start the post-reply model while the story is still streaming.
     // Existing inline prompts may still be handed to Chatu8 immediately.
-    if (runtime.generationActive && !validation.prompts.length && !evidencePackets.length) return;
+    if (runtime.generationActive && !validation.prompts.length && !evidencePackets.length && !storyboardLedgers.length) return;
     const previousDebug = runtime.debugByMessage.get(Number(messageId));
     const currentHash = stableHash(text);
     setDebug(messageId, {
@@ -983,6 +1039,7 @@ async function renderMessageCheck(messageId) {
             return;
         }
     }
+    if (await runSameReplyLedgerStoryboard(messageId, text)) return;
     if (await runEvidencePacketStoryboard(messageId, text)) return;
     if (await runAutomaticQuietPromptRepair(messageId, text, validation)) return;
     if (await runAutomaticQuietFallback(messageId, text, validation)) return;
@@ -1368,7 +1425,7 @@ function settingsHtml() {
                     <b>世界书生图救援器 <small>v${EXT_VERSION}</small></b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                 </div>
                 <div class="inline-drawer-content">
-                    <p class="notes">手机 Galgame 完整剧情模式：先让正文正常写完，再用一次后台批量分镜读取整轮剧情并同时生成全部原位按钮；不会逐图重复调用模型。</p>
+                    <p class="notes">手机 Galgame 即时模式：主回复末尾同步写入不可见的全文分镜账本；插件只做本地校验和原位按钮布局，默认不再发起第二次模型请求。</p>
                     <h4>基础设置</h4>
                     ${checkRow('enabled', '启用救援插件')}
                     ${checkRow('autoCheck', '自动检查最新回复')}
@@ -1376,9 +1433,9 @@ function settingsHtml() {
                     ${checkRow('autoLocalRepair', '仅删除重复 Prompt（安全）')}
                     <h4>缺图自动兜底</h4>
                     ${checkRow('fallback.enabled', '启用剧情理解与原位修复')}
-                    ${checkRow('fallback.postReplyStoryboard', '回复完成后一次性生成全部分镜（手机推荐）')}
-                    ${checkRow('fallback.evidenceRepair', '兼容并校验旧世界书的剧情证据包')}
-                    ${checkRow('fallback.sameCallEvidence', '实验：要求主回复同步写 Prompt（默认关闭）')}
+                    ${checkRow('fallback.postReplyStoryboard', '缺账本时调用模型慢速补图（默认关闭）')}
+                    ${checkRow('fallback.evidenceRepair', '校验隐藏分镜账本与人物连续性')}
+                    ${checkRow('fallback.sameCallEvidence', '主回复末尾同步生成隐藏分镜账本（手机推荐）')}
                     ${checkRow('fallback.repairInvalidPrompts', '二次模型改写已有 Prompt（默认关闭）')}
                     ${checkRow('fallback.semanticAudit', '逐图 AI 深度重审（较慢，默认关闭）')}
                     ${checkRow('fallback.adaptive', '快节奏/多转场时自动增加图片')}
@@ -1460,6 +1517,7 @@ function scanLatestAssistant() {
         checked++;
         const validation = validateTurn(getMessageText(index));
         const packets = extractShotPackets(getMessageText(index));
+        const ledgers = extractStoryboardLedgers(getMessageText(index));
         const isLatestAssistant = checked === 1;
         // The latest completed story must be checked even when it contains
         // zero prompts and zero evidence packets. That exact early-skip caused
@@ -1468,8 +1526,10 @@ function scanLatestAssistant() {
             scheduleCheck(index, 90);
             continue;
         }
-        if ((validation.prompts.length || packets.length)
-            && verifiedZhihuijiButtons(index).length < validation.prompts.length) {
+        const needsSemanticRepair = packets.length > 0 || ledgers.length > 0;
+        const needsButtonRestore = validation.prompts.length > 0
+            && verifiedZhihuijiButtons(index).length < validation.prompts.length;
+        if (needsSemanticRepair || needsButtonRestore) {
             scheduleCheck(index, 60 + checked * 35);
         }
     }
@@ -1515,15 +1575,15 @@ function armStoryEvidenceContract(type, generationOptions = {}, dryRun = false) 
 
 function injectChatCompletionEvidenceContract(eventData = {}) {
     if (!runtime.storyContractArmed || eventData.dryRun || !Array.isArray(eventData.chat)) return;
-    const alreadyPresent = eventData.chat.some(message => typeof message?.content === 'string' && message.content.includes('[JANIMA_STORY_EVIDENCE_V1]'));
+    const alreadyPresent = eventData.chat.some(message => typeof message?.content === 'string' && message.content.includes('[JANIMA_STORYBOARD_V2]'));
     if (alreadyPresent) return;
-    eventData.chat.unshift({ role: 'system', content: STORY_EVIDENCE_CONTRACT });
+    eventData.chat.unshift({ role: 'system', content: STORYBOARD_LEDGER_CONTRACT });
 }
 
 function injectTextCompletionEvidenceContract(eventData = {}) {
     if (!runtime.storyContractArmed || eventData.dryRun || typeof eventData.prompt !== 'string') return;
-    if (eventData.prompt.includes('[JANIMA_STORY_EVIDENCE_V1]')) return;
-    eventData.prompt = `${eventData.prompt.trimEnd()}\n\n${STORY_EVIDENCE_CONTRACT}\n`;
+    if (eventData.prompt.includes('[JANIMA_STORYBOARD_V2]')) return;
+    eventData.prompt = `${eventData.prompt.trimEnd()}\n\n${STORYBOARD_LEDGER_CONTRACT}\n`;
 }
 
 function bindEvents() {

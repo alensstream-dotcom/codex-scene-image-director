@@ -4,7 +4,9 @@ import {
     createCharacterRegistry,
     extractShotPackets,
     repairStoryboardFromEvidence,
+    repairStoryboardFromLedger,
     serializeShotPacket,
+    serializeStoryboardLedger,
 } from '../lib/story-evidence.mjs';
 import { extractImagePrompts } from '../lib/rescue-core.mjs';
 
@@ -170,4 +172,50 @@ test('male-only evidence cannot create a Galgame button', () => {
     const result = repairStoryboardFromEvidence(shotText('男人独自站在空无一人的走廊里。', maleOnly));
     assert.equal(result.shots.length, 0);
     assert.ok(result.errors.some(issue => issue.code === 'people_invalid' || issue.code === 'female_cast_missing'));
+});
+
+test('one hidden end ledger creates chronological inline prompts without another model', () => {
+    const quotes = [
+        '艾琳突然冲进钟楼，银白长发在风中扬起。',
+        '她拔出银剑挡住怪物的利爪，把你牢牢护在身后。',
+        '危机解除后，艾琳转身抱住你，主动吻上你的嘴唇。',
+    ];
+    const shots = [
+        packet({ id: 's1', quote: quotes[0], people: '1girl', cast: [eileen()], action: 'Eileen rushing into the clocktower through the open door' }),
+        packet({ id: 's2', quote: quotes[1], action: 'Eileen drawing her silver sword, blocking the monster claws, and shielding the male protagonist behind her' }),
+        packet({ id: 's3', quote: quotes[2], action: 'Eileen embracing and kissing the male protagonist on the lips after the battle' }),
+    ];
+    const story = quotes.join('\n\n');
+    const input = `${story}\n\n${serializeStoryboardLedger(shots)}`;
+    const result = repairStoryboardFromLedger(input);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.shots.length, 3);
+    assert.equal(extractImagePrompts(result.text).length, 3);
+    assert.ok(result.text.indexOf('rushing into the clocktower') > result.text.indexOf(quotes[0]));
+    assert.ok(result.text.indexOf('rushing into the clocktower') < result.text.indexOf(quotes[1]));
+    assert.ok(result.text.indexOf('blocking the monster claws') < result.text.indexOf(quotes[2]));
+    assert.match(result.text, /<!--JANIMA_STORYBOARD_V2:/);
+    assert.match(result.text, /<!--IMG_COUNT:3-->/);
+});
+
+test('end ledger rejects out-of-order reused story evidence', () => {
+    const first = '艾琳突然冲进钟楼，银白长发在风中扬起。';
+    const second = '她拔出银剑挡住怪物的利爪，把你牢牢护在身后。';
+    const input = `${first}\n\n${second}\n\n${serializeStoryboardLedger([
+        packet({ id: 's1', quote: second, action: 'Eileen blocking the monster claws with her sword' }),
+        packet({ id: 's2', quote: first, people: '1girl', cast: [eileen()], action: 'Eileen rushing into the clocktower' }),
+    ])}`;
+    const result = repairStoryboardFromLedger(input);
+    assert.equal(result.shots.length, 1);
+    assert.ok(result.errors.some(issue => issue.code === 'ledger_quote_not_in_order' || issue.code === 'quote_not_in_window'));
+});
+
+test('end ledger rejects a generic pose that does not match the quoted action', () => {
+    const quote = '艾琳猛然挥剑劈向扑来的怪物，剑锋斩断了它的利爪。';
+    const input = `${quote}\n\n${serializeStoryboardLedger([
+        packet({ quote, action: 'Eileen standing still and smiling softly for a portrait' }),
+    ])}`;
+    const result = repairStoryboardFromLedger(input);
+    assert.equal(result.shots.length, 0);
+    assert.ok(result.errors.some(issue => issue.code === 'action_phase_mismatch' || issue.code === 'action_semantics_mismatch'));
 });
