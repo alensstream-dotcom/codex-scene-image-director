@@ -10,6 +10,7 @@ import {
     mergePacketIntoBible,
     parseCgPackets,
     seedForPacket,
+    stripLegacyImagePromptLines,
     stripProtocol,
 } from '../lib/director-core.mjs';
 
@@ -45,6 +46,19 @@ test('parses complete same-response packets and strips protocol', () => {
 test('ignores an incomplete streaming marker until it closes', () => {
     const partial = `正文<!--JANIMA_CG:{"id":"s1","quote":"尚未结束"`;
     assert.equal(parseCgPackets(partial).packets.length, 0);
+});
+
+test('strips multilingual legacy image prompts but preserves short choices and links', () => {
+    const story = [
+        '她拔剑挡住了巨爪。',
+        '[艾琳, 银白长发, 紫色眼睛, 深蓝制服, 正面挡下巨爪, 雨夜车站, 动态中景]',
+        '[接受, 拒绝]',
+        '[角色资料](https://example.com)',
+    ].join('\n');
+    const cleaned = stripLegacyImagePromptLines(story);
+    assert.doesNotMatch(cleaned, /银白长发/);
+    assert.match(cleaned, /\[接受, 拒绝\]/);
+    assert.match(cleaned, /\[角色资料\]\(https:\/\/example\.com\)/);
 });
 
 test('locks immutable DNA and carries outfit unless story changes it', () => {

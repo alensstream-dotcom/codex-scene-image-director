@@ -27,26 +27,26 @@ import {
     seedForPacket,
     serializeBible,
     stableHash,
+    stripLegacyImagePromptLines,
     stripProtocol,
 } from './lib/director-core.mjs';
 import { buildAnimaWorkflow, buildComfyProxyBody, DEFAULT_ANIMA_PROFILE } from './lib/anima-direct-workflow.mjs';
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = 'JANIMA Galgame 自动CG';
-const EXT_VERSION = '2.0.0';
+const EXT_VERSION = '2.0.1';
 const SETTINGS_SELECTOR = '#janima_autocg_settings';
 const PROMPT_KEY = 'JANIMA_AUTO_CG_V2_DIRECTOR';
 const STORAGE_KEY = 'janimaAutoCg';
-const LEGACY_PROMPT_LINE_RE = /^\s*\[(?=[^\]\n]*(?:1girl|2girls|masterpiece|best quality))(?=(?:[^,\]\n]*,){5,})[^\]\n]+\]\s*$/gim;
 
 const DEFAULT_SETTINGS = Object.freeze({
-    schema: 20,
+    schema: 21,
     enabled: true,
     automatic: true,
     localFallback: true,
     cleanLegacyPrompts: true,
     maximumShots: 3,
-    fallbackShots: 2,
+    fallbackShots: 3,
     comfyUrl: 'http://192.168.1.12:8188',
     requestTimeoutMs: 45000,
     resumeInterrupted: true,
@@ -64,6 +64,8 @@ const runtime = {
     observer: null,
     eventsBound: false,
     initialized: false,
+    lastGenerationStartedAt: 0,
+    lastGenerationChatId: '',
 };
 
 function cloneDefaults() {
@@ -85,7 +87,7 @@ function mergeKnown(base, incoming) {
 
 function settings() {
     const existing = extension_settings[EXT_ID];
-    if (!existing || Number(existing.schema) < 20) {
+    if (!existing || Number(existing.schema) < 21) {
         extension_settings[EXT_ID] = cloneDefaults();
         saveSettingsDebounced?.();
     } else {
@@ -187,10 +189,13 @@ function foregroundGeneration(type, options = {}, dryRun = false) {
 function beginGeneration(type, options = {}, dryRun = false) {
     if (!foregroundGeneration(type, options, dryRun)) return;
     refreshDirectorPrompt();
+    const currentChatId = String(getCurrentChatId?.() || '');
+    runtime.lastGenerationStartedAt = Date.now();
+    runtime.lastGenerationChatId = currentChatId;
     const generationId = `${Date.now().toString(36)}-${++runtime.generationSerial}`;
     runtime.active = {
         id: generationId,
-        chatId: String(getCurrentChatId?.() || ''),
+        chatId: currentChatId,
         text: '',
         messageId: -1,
         packetIds: new Set(),
@@ -198,6 +203,7 @@ function beginGeneration(type, options = {}, dryRun = false) {
         bible: buildCurrentBible(),
         finalized: false,
     };
+    console.debug(`[${EXT_NAME}] foreground generation started`, { generationId, type, chatId: currentChatId });
 }
 
 function recordKey(record) {
@@ -547,20 +553,30 @@ function onStream(text) {
 }
 
 function cleanLegacyPromptLines(text) {
-    return settings().cleanLegacyPrompts ? String(text).replace(LEGACY_PROMPT_LINE_RE, '').replace(/\n{3,}/g, '\n\n').trimEnd() : String(text);
+    return settings().cleanLegacyPrompts ? stripLegacyImagePromptLines(text) : String(text);
 }
 
-async function finalizeMessage(messageId) {
+function canCreateLateForegroundSession(messageId, messageType, committedText) {
+    if (/<!--\s*JANIMA_CG(?:_END)?\s*:/i.test(committedText)) return true;
+    const restoredTypes = new Set(['first_message', 'extension', 'command']);
+    const currentChatId = String(getCurrentChatId?.() || '');
+    return !restoredTypes.has(String(messageType || '').toLowerCase())
+        && messageId === latestAssistantId()
+        && runtime.lastGenerationChatId === currentChatId
+        && Date.now() - runtime.lastGenerationStartedAt < 180000;
+}
+
+async function finalizeMessage(messageId, messageType = '') {
     const id = Number(messageId);
     if (!Number.isInteger(id) || id < 0 || !isAssistantMessage(id)) return;
     const committedText = String(chat[id].mes || '');
     let active = runtime.active;
     if (!active || active.finalized) {
         // MESSAGE_RECEIVED also fires while old chats and greeting messages are
-        // being restored. Only create a late session when the committed reply
-        // actually carries our protocol; otherwise a page load could generate
-        // new images for historical messages.
-        if (!/<!--\s*JANIMA_CG(?:_END)?\s*:/i.test(committedText)) {
+        // restored. A short-lived GENERATION_STARTED marker distinguishes the
+        // newest real foreground reply from those historical events, even when
+        // the main model ignored our hidden packet protocol.
+        if (!canCreateLateForegroundSession(id, messageType, committedText)) {
             scheduleRender(20);
             return;
         }
@@ -583,13 +599,17 @@ async function finalizeMessage(messageId) {
 
     if (!active.records.length && settings().localFallback) {
         const character = currentCharacterContext();
-        const fallback = buildFallbackPackets(active.text, {
+        // Legacy worldbooks may leave visible [tag, tag, ...] paragraphs. They
+        // are neither story evidence nor stable DOM anchors because we remove
+        // them below, so storyboard only the clean committed prose.
+        const cleanStory = cleanLegacyPromptLines(stripProtocol(active.text));
+        const fallback = buildFallbackPackets(cleanStory, {
             bible: active.bible,
             characterName: character.name,
             characterVisual: character.visual,
             maximum: Math.min(settings().fallbackShots, settings().maximumShots),
         });
-        for (const packet of fallback) acceptPacket(packet, active.text, id);
+        for (const packet of fallback) acceptPacket(packet, cleanStory, id);
     }
 
     for (const record of active.records) {
@@ -603,6 +623,12 @@ async function finalizeMessage(messageId) {
         updateMessageBlock(id, chat[id]);
     }
     active.finalized = true;
+    console.debug(`[${EXT_NAME}] foreground reply finalized`, {
+        generationId: active.id,
+        messageId: id,
+        messageType,
+        shots: active.records.length,
+    });
     await saveChatConditional?.();
     refreshDirectorPrompt();
     scheduleRender(20);
@@ -678,6 +704,8 @@ function onChatChanged() {
     }
     if (runtime.running?.chatId && runtime.running.chatId !== current) cancelRecord(runtime.running);
     runtime.active = null;
+    runtime.lastGenerationStartedAt = 0;
+    runtime.lastGenerationChatId = current;
     refreshDirectorPrompt();
     setTimeout(() => {
         resumeInterruptedJobs();
@@ -772,9 +800,10 @@ function bindSettings() {
 function bindEvents() {
     if (runtime.eventsBound) return;
     runtime.eventsBound = true;
-    if (event_types.GENERATION_AFTER_COMMANDS) eventSource.on(event_types.GENERATION_AFTER_COMMANDS, beginGeneration);
+    const startEvent = event_types.GENERATION_STARTED || event_types.GENERATION_AFTER_COMMANDS;
+    if (startEvent) eventSource.on(startEvent, beginGeneration);
     if (event_types.STREAM_TOKEN_RECEIVED) eventSource.on(event_types.STREAM_TOKEN_RECEIVED, onStream);
-    if (event_types.MESSAGE_RECEIVED) eventSource.on(event_types.MESSAGE_RECEIVED, messageId => void finalizeMessage(messageId));
+    if (event_types.MESSAGE_RECEIVED) eventSource.on(event_types.MESSAGE_RECEIVED, (messageId, messageType) => void finalizeMessage(messageId, messageType));
     if (event_types.GENERATION_ENDED) eventSource.on(event_types.GENERATION_ENDED, () => {
         const id = latestAssistantId();
         if (id >= 0 && runtime.active && !runtime.active.finalized) void finalizeMessage(id);
@@ -824,6 +853,19 @@ jQuery(async () => {
         ping: () => pingComfy({ notify: true }),
         render: renderAll,
         queueLength: () => runtime.queue.length + (runtime.running ? 1 : 0),
+        state: () => ({
+            active: runtime.active ? {
+                id: runtime.active.id,
+                chatId: runtime.active.chatId,
+                messageId: runtime.active.messageId,
+                finalized: runtime.active.finalized,
+                records: runtime.active.records.length,
+            } : null,
+            queue: runtime.queue.length,
+            running: runtime.running ? recordKey(runtime.running) : null,
+            lastGenerationStartedAt: runtime.lastGenerationStartedAt,
+            currentChatId: String(getCurrentChatId?.() || ''),
+        }),
     });
     document.documentElement.dataset.janimaAutocgVersion = EXT_VERSION;
     console.info(`[${EXT_NAME}] v${EXT_VERSION} loaded; direct ComfyUI route=${settings().comfyUrl}; profile=${settings().profile.steps} steps`);
