@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    buildPromptFromShotPacket,
     createCharacterRegistry,
     extractShotPackets,
     repairStoryboardFromEvidence,
@@ -43,6 +44,12 @@ const packet = (overrides = {}) => ({
 function shotText(story, value, prompt = '') {
     return `${story}\n\n${serializeShotPacket(value)}${prompt ? `\n\n${prompt}` : ''}`;
 }
+
+test('Anima prompt front-loads the decisive story action before long character DNA', () => {
+    const promptText = buildPromptFromShotPacket(packet());
+    assert.ok(promptText.indexOf('drawing a silver sword') < promptText.indexOf('silver-white long hair'));
+    assert.ok(promptText.indexOf('shattered window') < promptText.indexOf('navy military dress'));
+});
 
 test('same-call packet produces a canonical inline prompt from exact story evidence', () => {
     const story = '钟楼的玻璃在震动。她突然拔出银剑，挡在你的身前。';

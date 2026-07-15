@@ -49,7 +49,7 @@ import {
 
 const EXT_ID = 'codex_scene_image_director';
 const EXT_NAME = '世界书生图救援器';
-const EXT_VERSION = '1.11.4';
+const EXT_VERSION = '1.11.5';
 const SETTINGS_SELECTOR = '#janima_rescue_settings';
 const VERIFIED_ZHIHUIJI_SELECTOR = '.st-chatu8-image-button';
 const BLOCKING_IMAGE_ISSUE_CODES = new Set([
