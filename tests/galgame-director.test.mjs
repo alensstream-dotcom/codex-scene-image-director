@@ -164,6 +164,26 @@ test('normal cafe story keeps the three cinematic beats instead of static transi
     assert.equal(repaired.some(scene => /kiss/i.test(scene.packet.stage)), true);
 });
 
+test('live station-cafe fallback keeps one action per shot and never carries old props or weather forward', () => {
+    const liveStory = [
+        '站台尽头的小咖啡店还亮着灯。艾琳走向柜台，湿掉的深蓝制服在木地板上滴下一串水印。',
+        '他刚坐下，艾琳就端着两杯咖啡过来。她把其中一杯推到他面前，杯口冒着热气。',
+        '艾琳绕过桌子坐到他旁边，卡座皮垫陷下去一块。她抬手，用拇指擦掉他唇上的奶泡。',
+        '她站起来，他也跟着起身。',
+        '推门出去时晨光已经铺满站台。艾琳穿着湿透的深蓝制服和红色领结环住他的腰，抬头吻住他的嘴唇。',
+    ].join('\n\n');
+    const bible = createBible();
+    bible.heroine = { id: 'heroine', prompt_name: 'heroine', dna: '', outfit: 'school uniform' };
+    const scenes = completeScenes({ story: liveStory, parsedScenes: [], bible, settings: { minimumShots: 3, maximumShots: 6 } });
+    assert.deepEqual(scenes.map(scene => scene.packet.stage), ['coffee_handoff', 'wiping', 'kiss']);
+    assert.equal(scenes.some(scene => /站起来，他也跟着起身/.test(scene.anchor)), false);
+    assert.doesNotMatch(scenes[0].prompt, /wiping milk foam|right thumb/i);
+    assert.doesNotMatch(scenes[1].prompt, /handing a steaming coffee|active heavy rain/i);
+    assert.doesNotMatch(scenes[2].prompt, /steaming coffee cup|wiping milk foam|active heavy rain/i);
+    assert.ok(scenes.every(scene => /dark navy uniform/i.test(scene.packet.cast[0].outfit)));
+    assert.match(scenes[2].packet.cast[0].outfit, /red ribbon tie/);
+});
+
 test('local completion supplies valid scenes when the model times out', () => {
     const bible = createBible();
     bible['樱'] = { id: '樱', prompt_name: 'Sakura', dna: 'adult woman, sakura-pink twin tails, purple eyes', outfit: 'pink cardigan, school uniform' };

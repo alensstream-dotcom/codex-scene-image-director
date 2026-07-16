@@ -152,7 +152,7 @@ test('Anima prompt adds strong natural-language identity and concise English sce
     assert.match(result.positive, /striking purple eyes/);
     assert.match(result.positive, /heroine shielding her male partner/);
     assert.match(result.positive, /enemy weapon breaking/);
-    assert.match(result.positive, /stormy night/);
+    assert.match(result.positive, /active heavy rain/);
 });
 
 test('school heroine prompt locks pink twin tails and rejects tactical drift', () => {
