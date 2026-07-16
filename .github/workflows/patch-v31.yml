@@ -1,0 +1,98 @@
+name: patch-v31
+on:
+  push:
+    branches: [chatgpt/v3.1-scene-lock]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v3.1-scene-lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch runtime
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('index-v3.js').read_text(encoding='utf-8')
+          src = src.replace("const EXT_VERSION = '3.0.0';", "const EXT_VERSION = '3.1.0';")
+          src = src.replace("schema: 70,", "schema: 71,")
+          src = src.replace("showSceneDetails: true,", "showSceneDetails: true,\n    manualCharacterLock: '',\n    manualOutfitLock: '',")
+          marker = "import {\n    DEFAULT_V3_NEGATIVE,"
+          insert = "import { buildSceneLock, findBestDomAnchor } from './lib/scene-lock-v3.mjs';\n"
+          if insert not in src:
+              src = src.replace(marker, insert + marker)
+          old = """            const compiled = composeV3Prompt(shot, {
+                fixedPositive: config.fixedPositive,
+                fixedNegative: config.fixedNegative,
+            });"""
+          new = """            const sceneLock = buildSceneLock({
+                story,
+                paragraphIndex: shot.paragraphIndex,
+                card: currentCharacterContext(),
+                manualCharacterLock: config.manualCharacterLock,
+                manualOutfitLock: config.manualOutfitLock,
+            });
+            const compiled = composeV3Prompt({
+                ...shot,
+                prompt: `${sceneLock.positive}, ${shot.prompt}`,
+                negative: `${sceneLock.negative}, ${shot.negative || ''}`,
+            }, {
+                fixedPositive: config.fixedPositive,
+                fixedNegative: config.fixedNegative,
+            });"""
+          if old not in src:
+              raise SystemExit('compile target missing')
+          src = src.replace(old, new)
+          old_render = """        const index = clampParagraphIndex(record.paragraphIndex, blocks.length);
+        const anchor = lastByParagraph.get(index) || blocks[index];
+        anchor.insertAdjacentElement('afterend', slot);
+        lastByParagraph.set(index, slot);"""
+          new_render = """        const index = clampParagraphIndex(record.paragraphIndex, blocks.length);
+        const matched = findBestDomAnchor(blocks, record.anchor || record.quote, index) || blocks[index];
+        const matchedIndex = Math.max(0, blocks.indexOf(matched));
+        const anchor = lastByParagraph.get(matchedIndex) || matched;
+        anchor.insertAdjacentElement('afterend', slot);
+        lastByParagraph.set(matchedIndex, slot);"""
+          if old_render not in src:
+              raise SystemExit('render target missing')
+          src = src.replace(old_render, new_render)
+          settings_old = """        <label>固定正面提示词<textarea class=\"text_pole\" name=\"fixedPositive\" rows=\"4\"></textarea></label>
+        <label>固定负面提示词<textarea class=\"text_pole\" name=\"fixedNegative\" rows=\"5\"></textarea></label>"""
+          settings_new = """        <label>角色固定描述（可留空自动提取）<textarea class=\"text_pole\" name=\"manualCharacterLock\" rows=\"3\" placeholder=\"例如：adult woman, long black hair, golden eyes, oval face\"></textarea></label>
+        <label>当前服装强制描述（可留空自动提取）<textarea class=\"text_pole\" name=\"manualOutfitLock\" rows=\"3\" placeholder=\"例如：white hanfu, pale blue sash, silver hairpin\"></textarea></label>
+        <label>固定正面提示词<textarea class=\"text_pole\" name=\"fixedPositive\" rows=\"4\"></textarea></label>
+        <label>固定负面提示词<textarea class=\"text_pole\" name=\"fixedNegative\" rows=\"5\"></textarea></label>"""
+          if settings_old not in src:
+              raise SystemExit('settings target missing')
+          src = src.replace(settings_old, settings_new)
+          src = src.replace('V3 由主模型在写完整段剧情后一次性挑选镜头并直接写完整英文场景 Prompt。插件不再拆成 action/setting/expression 后二次拼接；本地规则只负责缺失镜头和成人阶段硬覆盖。', 'V3.1 在 V3 直出分镜基础上增加角色、服装、时代和场景锁，并按真实 DOM 文本锚定图片位置。非校园剧情会强制排除学院装、校服、西式制服和无关服装。')
+          Path('index-v3.1.js').write_text(src, encoding='utf-8')
+
+          manifest = Path('manifest.json').read_text(encoding='utf-8')
+          manifest = manifest.replace('index-v3.js?v=3.0.0', 'index-v3.1.js?v=3.1.0')
+          manifest = manifest.replace('style.css?v=3.0.0', 'style.css?v=3.1.0')
+          manifest = manifest.replace('"version": "3.0.0"', '"version": "3.1.0"')
+          Path('manifest.json').write_text(manifest, encoding='utf-8')
+
+          workflow = Path('.github/workflows/test.yml').read_text(encoding='utf-8')
+          workflow = workflow.replace('node --check index-v3.js', 'node --check index-v3.1.js')
+          if 'node --check lib/scene-lock-v3.mjs' not in workflow:
+              workflow = workflow.replace('node --check lib/director-v3.mjs', 'node --check lib/director-v3.mjs\n          node --check lib/scene-lock-v3.mjs')
+          Path('.github/workflows/test.yml').write_text(workflow, encoding='utf-8')
+          PY
+          node --check index-v3.1.js
+          node --check lib/scene-lock-v3.mjs
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index-v3.1.js manifest.json .github/workflows/test.yml
+          git commit -m "fix: add V3.1 character outfit and DOM scene locks"
+          git push origin HEAD:chatgpt/v3.1-scene-lock
