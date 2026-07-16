@@ -1,116 +1,109 @@
-html[data-janima-autocg-enabled="true"] .st-chatu8-image-button,
-html[data-janima-autocg-enabled="true"] .janima-rescue-panel,
-html[data-janima-autocg-enabled="true"] .janima-rescue-status {
-    display: none !important;
-}
+@import url('./styles/main.css');
+@import url('./styles/forms.css');
+@import url('./styles/modals.css');
+@import url('./styles/cache.css');
+@import url('./styles/image_cache.css');
+@import url('./styles/fab.css');
+@import url('./styles/about.css');
+@import url('./styles/responsive.css');
+@import url('./styles/vocabulary.css');
+@import url('./styles/banana.css');
+@import url('./styles/send_data.css');
+@import url('./styles/preset-entries.css');
+@import url('./styles/popup.css');
+@import url('./styles/collapse.css');
+@import url('./styles/vibeGroupEditor.css');
+@import url('./styles/charRefGroupEditor.css');
+@import url('./styles/knowledgeBase.css');
+@import url('./styles/help-tip.css');
 
-.janima-autocg-slot {
-    box-sizing: border-box;
+/* Sub-navigation styles */
+.st-chatu8-sub-nav {
     display: flex;
-    flex-direction: column;
-    width: min(100%, 768px);
-    max-width: 100%;
-    margin: 0.65rem 0 1rem;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #ddd) 18%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 72%, transparent);
+    border-bottom: 1px solid var(--st-chatu8-border-color);
+    margin-bottom: 20px;
 }
 
-.janima-autocg-image {
+.st-chatu8-sub-nav-link {
+    padding: 10px 15px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    /* Overlap with parent border */
+    color: var(--st-chatu8-text-color);
+    text-decoration: none;
+    transition: all 0.2s ease-in-out;
+}
+
+.st-chatu8-sub-nav-link:hover {
+    background-color: var(--st-chatu8-hover-bg-color);
+}
+
+.st-chatu8-sub-nav-link.active {
+    border-bottom-color: var(--st-chatu8-accent-color);
+    color: var(--st-chatu8-accent-color);
+    font-weight: bold;
+}
+
+/* Sub-tab content container */
+.st-chatu8-sub-tab-content {
+    display: none;
+}
+
+.st-chatu8-sub-tab-content[style*="display: block"] {
     display: block;
-    width: 100%;
-    height: auto;
-    max-height: none;
-    object-fit: contain;
-    background: #0b0b0e;
 }
 
-.janima-autocg-status {
+/* User 人设生成 - 类型选择器样式 */
+.ch-persona-gen-type-selector {
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
-    gap: 0.65rem;
-    min-height: 64px;
-    padding: 0.8rem 1rem;
-    color: var(--SmartThemeBodyColor, #eee);
-    font-size: 0.92em;
-    opacity: 0.88;
+    gap: 8px;
 }
 
-.janima-autocg-spinner {
-    width: 1rem;
-    height: 1rem;
-    flex: 0 0 auto;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
-    border-radius: 50%;
-    animation: janima-autocg-spin 0.75s linear infinite;
+.ch-persona-gen-type-selector label {
+    font-weight: 500;
+    color: var(--st-chatu8-text-primary);
 }
 
-@keyframes janima-autocg-spin {
-    to { transform: rotate(360deg); }
-}
-
-.janima-autocg-controls {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.35rem;
-    padding: 0.35rem 0.5rem 0.5rem;
-}
-
-.janima-autocg-action.menu_button {
-    min-width: 0;
-    min-height: 30px;
-    padding: 0.2rem 0.65rem;
-    font-size: 0.82em;
+/* 统一控制 token 占用的样式 */
+.st-chatu8-token-display {
+    font-size: 0.85em;
+    color: inherit;
+    margin-top: 4px;
     opacity: 0.8;
+    font-weight: 600;
+}
+/* Galgame director patch: settings only. It never adds a chat sidebar/panel. */
+.codex-galgame-director-settings {
+    border: 1px solid color-mix(in srgb, var(--st-chatu8-accent-color, #ff78b7) 55%, transparent);
+    background: color-mix(in srgb, var(--st-chatu8-accent-color, #ff78b7) 7%, transparent);
 }
 
-.janima-autocg-settings .inline-drawer-content {
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
+.codex-galgame-version {
+    margin-left: .35em;
+    padding: .12em .45em;
+    border-radius: 999px;
+    font-size: .68em;
+    font-weight: 600;
+    color: var(--st-chatu8-accent-color, #ff78b7);
+    background: color-mix(in srgb, var(--st-chatu8-accent-color, #ff78b7) 14%, transparent);
 }
 
-.janima-autocg-settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+.codex-galgame-help,
+.codex-galgame-status {
+    color: var(--st-chatu8-text-secondary, #aaa);
+    font-size: 12px;
+    line-height: 1.55;
 }
 
-.janima-autocg-connection {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.9em;
-}
-
-.janima-autocg-connection::before {
-    content: '';
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 50%;
-    background: #999;
-}
-
-.janima-autocg-connection[data-state="ok"]::before { background: #42c77a; }
-.janima-autocg-connection[data-state="error"]::before { background: #e85d68; }
-.janima-autocg-connection[data-state="checking"]::before { background: #e6b84d; }
+.codex-galgame-status[data-kind="working"] { color: #e8b84d; }
+.codex-galgame-status[data-kind="ok"] { color: #54c792; }
+.codex-galgame-status[data-kind="error"] { color: #ef6b73; }
 
 @media (max-width: 700px) {
-    .janima-autocg-slot {
-        width: 100%;
-        margin: 0.55rem 0 0.85rem;
-        border-radius: 10px;
+    .codex-galgame-director-settings .st-chatu8-grid {
+        grid-template-columns: 1fr;
     }
-
-    .janima-autocg-status {
-        min-height: 54px;
-        padding: 0.65rem 0.8rem;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .janima-autocg-spinner { animation-duration: 1.5s; }
 }
