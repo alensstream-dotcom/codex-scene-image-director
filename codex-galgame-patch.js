@@ -26,7 +26,7 @@ import {
 import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.2.0';
+const PATCH_VERSION = '3.2.1';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -428,18 +428,34 @@ function bindDirectorUi() {
         if (!element) continue;
         if (element.type === 'checkbox') element.checked = state[key] !== false;
         else element.value = state[key] ?? DEFAULT_DIRECTOR_SETTINGS[key] ?? '';
-        element.addEventListener(element.type === 'checkbox' ? 'change' : 'input', () => {
-            state[key] = element.type === 'checkbox'
+        const syncField = () => {
+            // directorState() deliberately normalizes/replaces the nested
+            // settings object. Never keep writing to the stale object that
+            // existed when this panel was first bound.
+            const currentState = directorState();
+            currentState[key] = element.type === 'checkbox'
                 ? element.checked
                 : element.type === 'number' ? Number(element.value) : element.value;
             configureBasePlugin();
-        });
+        };
+        element.addEventListener(element.type === 'checkbox' ? 'change' : 'input', syncField);
+        if (element.type !== 'checkbox') element.addEventListener('change', syncField);
     }
     document.getElementById('codex-galgame-test')?.addEventListener('click', async () => {
         const button = document.getElementById('codex-galgame-test');
         button.disabled = true;
         setStatus('正在测试 DeepSeek 单次导演请求…', 'working');
         try {
+            // Read the live form once more before testing. This also protects
+            // mobile browsers whose password manager may not emit input.
+            for (const [key, element] of Object.entries(fields)) {
+                if (!element) continue;
+                const currentState = directorState();
+                currentState[key] = element.type === 'checkbox'
+                    ? element.checked
+                    : element.type === 'number' ? Number(element.value) : element.value;
+            }
+            configureBasePlugin();
             const config = normalizeDirectorSettings(directorState());
             const messages = [{ role: 'system', content: 'Return only {"ok":true} as JSON.' }, { role: 'user', content: 'test' }];
             await requestStoryboard(messages, { ...config, maxTokens: 32, timeoutMs: Math.min(config.timeoutMs, 8000) });
