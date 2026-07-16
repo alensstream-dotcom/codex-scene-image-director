@@ -3,8 +3,6 @@ name: install-v4
 on:
   pull_request:
     branches: [master]
-  push:
-    branches: [chatgpt/v4-quiet-director]
 
 permissions:
   contents: write
@@ -19,101 +17,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Materialize V4 sources
+      - name: Materialize and test V4
         shell: bash
         run: |
           gzip -dc .bootstrap/director-v4.mjs.gz > lib/director-v4.mjs
           gzip -dc .bootstrap/index-v4.js.gz > index-v4.js
           python - <<'PY'
           from pathlib import Path
-
-          p = Path('lib/director-v4.mjs')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace("""export function nsfwLevelForText(text = '', requested = 0) {
-              const number = Number(requested);
-              if (Number.isFinite(number) && number >= 0 && number <= 3) {
-                  if (number > 0) return Math.round(number);
-              }
-              if (EXPLICIT_RE.test(text)) return 3;
-              if (INTIMATE_RE.test(text)) return 1;
-              return 0;
-          }""", """export function nsfwLevelForText(text = '', requested = 0) {
-              const requestedLevel = Number.isFinite(Number(requested)) ? Math.max(0, Math.min(3, Math.round(Number(requested)))) : 0;
-              const detectedLevel = EXPLICIT_RE.test(text) ? 3 : INTIMATE_RE.test(text) ? 1 : 0;
-              return Math.max(requestedLevel, detectedLevel);
-          }""")
-          insert = """
-          function peopleForText(text = '') {
-              const twoWomen = /(?:她们|两名女子|两个女人|二女|姐妹|师姐妹|2girls|two women|two girls)/i.test(text);
-              const female = FEMALE_RE.test(text);
-              const male = /(?:他|男子|男人|男主|丈夫|男友|公子|少年|man|men|boy|boys|husband|boyfriend|male)/i.test(text);
-              const pair = /(?:两人|二人|彼此|双方|couple|lovers|both)/i.test(text);
-              if (twoWomen) return '2girls';
-              if (female && male) return '1girl, 1boy';
-              if (female && pair) return '1girl, 1boy';
-              return female ? '1girl' : '';
-          }
-          """
-          s = s.replace("function fallbackAction(text = '', stage = '') {", insert + "\nfunction fallbackAction(text = '', stage = '') {")
-          s = s.replace("people: FEMALE_RE.test(window) ? '1girl' : '',", "people: peopleForText(window),")
-          s = s.replace("const conflict = /^(?:sfw|safe|fully clothed|clothed|no nudity|no nude|no sex|nsfw|nude|naked|explicit|erotic|sex|breasts?|nipples?|pussy|vagina|penis|cum)$/i;", "const conflict = /(?:^|\\b)(?:sfw|safe|fully clothed|no nudity|no nude|no sex|forbid nudity|censored nudity|nsfw|nude|naked|explicit|erotic|sex|breasts?|nipples?|pussy|vagina|penis|cum)(?:$|\\b)/i;")
-          p.write_text(s, encoding='utf-8')
-
-          p = Path('index-v4.js')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace("    setExtensionPrompt,\n", "")
-          s = s.replace("""    for (const key of ['JANIMA_AUTO_CG_V3_DIRECT_STORYBOARD', 'JANIMA_AUTO_CG_V4_DIRECTOR', 'JANIMA_AUTO_CG_V3_DIRECTOR']) {
-              try { setExtensionPrompt(key, ''); } catch { /* old prompt key absent */ }
-          }
-          """, "")
-          old = """        const identityKey = settings().manualCharacterLock
-                      || planner.parsed.characters.map(item => `${item.name}:${item.identity}`).join('|')
-                      || currentCharacterContext().name
-                      || String(getCurrentChatId?.() || 'janima');
-                  const records = [];
-                  for (const shot of plan.shots) {
-                      const compiled = composePromptV4(shot, {
-                          fixedPositive: settings().fixedPositive,
-                          fixedNegative: settings().fixedNegative,
-                          manualCharacterLock: settings().manualCharacterLock,
-                          manualOutfitLock: settings().manualOutfitLock,
-                          identityMemory: identityMemory(),
-                      });"""
-          new = """        const sharedIdentity = planner.parsed.characters
-                      .map(item => [item.name, item.identity].filter(Boolean).join(', '))
-                      .filter(Boolean)
-                      .join(', ');
-                  const sharedOutfit = planner.parsed.characters
-                      .map(item => item.outfit)
-                      .filter(Boolean)
-                      .join(', ');
-                  const identityKey = settings().manualCharacterLock
-                      || sharedIdentity
-                      || currentCharacterContext().name
-                      || String(getCurrentChatId?.() || 'janima');
-                  const records = [];
-                  for (const shot of plan.shots) {
-                      const lockedShot = {
-                          ...shot,
-                          characterTags: [sharedIdentity, shot.characterTags].filter(Boolean).join(', '),
-                          outfitTags: shot.outfitTags || sharedOutfit,
-                      };
-                      const compiled = composePromptV4(lockedShot, {
-                          fixedPositive: settings().fixedPositive,
-                          fixedNegative: settings().fixedNegative,
-                          manualCharacterLock: settings().manualCharacterLock,
-                          manualOutfitLock: settings().manualOutfitLock,
-                          identityMemory: sharedIdentity || identityMemory(),
-                      });"""
-          if old not in s:
-              raise SystemExit('V4 identity block not found')
-          s = s.replace(old, new)
-          s = s.replace("                shot,\n                prompt: compiled.positive,", "                shot: lockedShot,\n                prompt: compiled.positive,")
-          p.write_text(s, encoding='utf-8')
-
-          manifest = Path('manifest.json').read_text(encoding='utf-8')
           import json
-          data = json.loads(manifest)
+
+          data = json.loads(Path('manifest.json').read_text(encoding='utf-8'))
           data['js'] = 'index-v4.js?v=4.0.0'
           data['css'] = 'style.css?v=4.0.0'
           data['version'] = '4.0.0'
