@@ -170,17 +170,19 @@ test('live station-cafe fallback keeps one action per shot and never carries old
         '他刚坐下，艾琳就端着两杯咖啡过来。她把其中一杯推到他面前，杯口冒着热气。',
         '艾琳绕过桌子坐到他旁边，卡座皮垫陷下去一块。她抬手，用拇指擦掉他唇上的奶泡。',
         '她站起来，他也跟着起身。',
-        '推门出去时晨光已经铺满站台。艾琳穿着湿透的深蓝制服和红色领结环住他的腰，抬头吻住他的嘴唇。',
+        '推门出去时晨光已经铺满站台。银白长发、齐刘海和紫色眼睛的艾琳穿着湿透的深蓝制服和红色领结环住他的腰，抬头吻住他的嘴唇。',
     ].join('\n\n');
     const bible = createBible();
     bible.heroine = { id: 'heroine', prompt_name: 'heroine', dna: '', outfit: 'school uniform' };
     const scenes = completeScenes({ story: liveStory, parsedScenes: [], bible, settings: { minimumShots: 3, maximumShots: 6 } });
     assert.deepEqual(scenes.map(scene => scene.packet.stage), ['coffee_handoff', 'wiping', 'kiss']);
+    assert.match(scenes[0].anchor, /推到他面前/);
     assert.equal(scenes.some(scene => /站起来，他也跟着起身/.test(scene.anchor)), false);
     assert.doesNotMatch(scenes[0].prompt, /wiping milk foam|right thumb/i);
     assert.doesNotMatch(scenes[1].prompt, /handing a steaming coffee|active heavy rain/i);
     assert.doesNotMatch(scenes[2].prompt, /steaming coffee cup|wiping milk foam|active heavy rain/i);
     assert.ok(scenes.every(scene => /dark navy uniform/i.test(scene.packet.cast[0].outfit)));
+    assert.ok(scenes.every(scene => /silver-white hair/i.test(scene.packet.cast[0].dna)));
     assert.match(scenes[2].packet.cast[0].outfit, /red ribbon tie/);
 });
 
