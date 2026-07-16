@@ -25,7 +25,7 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.0';
+const PATCH_VERSION = '3.0.1';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -105,6 +105,7 @@ function configureBasePlugin() {
     root.comfyui_height = 1024;
     root.comfyui_steps = 8;
     root.cfg_comfyui = 1;
+    root.comfyui_seed = 1548236793;
     root.sampler_name = 'euler';
     root.scheduler = 'normal';
     root.negativePrompt_comfyui = [

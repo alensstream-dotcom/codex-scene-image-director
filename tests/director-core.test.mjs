@@ -111,6 +111,8 @@ test('prompt follows Anima tag order with identity before general action and one
     assert.ok(result.positive.indexOf('1girl') < result.positive.indexOf('character 1'));
     assert.ok(result.positive.indexOf('character 1') < result.positive.indexOf('original story action'));
     assert.match(result.positive, /long blue hair/);
+    assert.match(result.positive, /fingers visibly circling his sleeve cuff/);
+    assert.match(result.positive, /arms extended between them/);
     assert.doesNotMatch(result.positive, /nsfw|explicit/);
 });
 

@@ -110,6 +110,8 @@ test('normal female reply targets three shots, fast plot can scale, and requests
     assert.equal(messages.length, 2);
     assert.match(messages[0].content, /Never front-load/);
     assert.match(messages[0].content, /Sexual scenes are forbidden/);
+    assert.match(messages[0].content, /Physical accuracy is mandatory/);
+    assert.match(messages[0].content, /body part \+ contact \+ direction/);
     assert.ok(messages[1].content.length < 12000);
 });
 
@@ -127,4 +129,3 @@ test('story cleaner removes mobile status/database payload but preserves narrati
     assert.match(cleaned, /樱松开书包带/);
     assert.doesNotMatch(cleaned, /database|时间：18:00/);
 });
-
