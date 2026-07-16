@@ -22,9 +22,12 @@ jobs:
 
           director = Path('lib/director-v4.mjs')
           text = director.read_text(encoding='utf-8')
-
+          text = text.replace(
+              "if (/做饭|烹饪|厨房|cook|kitchen/i.test(text)) return 'cooking';",
+              "if (/做饭|做鱼|烹鱼|烹饪|下厨|厨房|灶台|cook|kitchen/i.test(text)) return 'cooking';",
+          )
           marker = "function fallbackAction(text = '', stage = '') {"
-          people_helper = """function peopleForText(text = '') {
+          helper = """function peopleForText(text = '') {
               const twoWomen = /(?:她们|两名女子|两个女人|二女|姐妹|师姐妹|2girls|two women|two girls)/i.test(text);
               const female = FEMALE_RE.test(text);
               const male = /(?:他|男子|男人|男主|丈夫|男友|公子|少年|man|men|boy|boys|husband|boyfriend|male)/i.test(text);
@@ -37,8 +40,7 @@ jobs:
 
           """
           if 'function peopleForText' not in text:
-              text = text.replace(marker, people_helper + marker)
-
+              text = text.replace(marker, helper + marker)
           start = text.index('function makeFallbackShot(paragraph, index, all) {')
           end = text.index('\nexport function buildFallbackShotsV4', start)
           replacement = """function makeFallbackShot(paragraph, index, all) {
@@ -78,20 +80,9 @@ jobs:
 
           runtime = Path('index-v4.js')
           source = runtime.read_text(encoding='utf-8')
-          old = """        const identityKey = settings().manualCharacterLock
-                      || planner.parsed.characters.map(item => `${item.name}:${item.identity}`).join('|')
-                      || currentCharacterContext().name
-                      || String(getCurrentChatId?.() || 'janima');
-                  const records = [];
-                  for (const shot of plan.shots) {
-                      const compiled = composePromptV4(shot, {
-                          fixedPositive: settings().fixedPositive,
-                          fixedNegative: settings().fixedNegative,
-                          manualCharacterLock: settings().manualCharacterLock,
-                          manualOutfitLock: settings().manualOutfitLock,
-                          identityMemory: identityMemory(),
-                      });"""
-          new = """        const globalCharacters = planner.parsed.characters;
+          start = source.index('        const identityKey = settings().manualCharacterLock')
+          end = source.index('            const record = {', start)
+          replacement = """        const globalCharacters = planner.parsed.characters;
                   const globalIdentityKey = globalCharacters.map(item => `${item.name}:${item.identity}`).join('|');
                   const identityKey = settings().manualCharacterLock
                       || globalIdentityKey
@@ -118,13 +109,16 @@ jobs:
                           manualCharacterLock: settings().manualCharacterLock,
                           manualOutfitLock: settings().manualOutfitLock,
                           identityMemory: stableIdentity || identityMemory(),
-                      });"""
-          if old not in source:
-              raise SystemExit('runtime identity block missing')
-          source = source.replace(old, new)
-          source = source.replace("                shot,\n                prompt: compiled.positive,", "                shot: lockedShot,\n                prompt: compiled.positive,")
+                      });
+          """
+          source = source[:start] + replacement + source[end:]
+          record_end = source.index('            records.push(record);', start)
+          record_part = source[start:record_end]
+          record_part = record_part.replace('                shot,\n', '                shot: lockedShot,\n', 1)
+          source = source[:start] + record_part + source[record_end:]
           runtime.write_text(source, encoding='utf-8')
           PY
+          if ! grep -q "fallback action uses the current paragraph" tests/director-v4.test.mjs; then
           cat >> tests/director-v4.test.mjs <<'EOF'
 
           test('fallback action uses the current paragraph instead of leaking an earlier scene', () => {
@@ -136,6 +130,7 @@ jobs:
               assert.doesNotMatch(kitchen.actionTags, /sword|hand over hand/);
           });
           EOF
+          fi
           node --check index-v4.js
           node --check lib/director-v4.mjs
           node --test tests/director-v4.test.mjs
