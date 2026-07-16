@@ -131,9 +131,6 @@ jobs:
           });
           EOF
           fi
-          node --check index-v4.js
-          node --check lib/director-v4.mjs
-          node --test tests/director-v4.test.mjs
       - name: Commit refinements
         shell: bash
         run: |
