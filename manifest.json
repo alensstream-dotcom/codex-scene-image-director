@@ -3,10 +3,10 @@
     "loading_order": 8,
     "requires": [],
     "optional": [],
-    "js": "index-v3.js?v=3.0.0",
-    "css": "style.css?v=3.0.0",
+    "js": "index-v3.1.js?v=3.1.0",
+    "css": "style.css?v=3.1.0",
     "author": "Codex / ChatGPT",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "homePage": "https://github.com/alensstream-dotcom/codex-scene-image-director",
     "auto_update": true,
     "minimum_client_version": "1.12.0"
