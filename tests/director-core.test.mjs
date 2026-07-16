@@ -103,17 +103,18 @@ test('locks immutable DNA and carries outfit unless story changes it', () => {
     assert.match(bible.seraphina.dna, /long blue hair/);
 });
 
-test('prompt follows Anima tag order with identity before general action and one safety tag', () => {
+test('prompt follows Anima natural-language order with identity before action and no numeric weights', () => {
     const bible = createBible();
     mergePacketIntoBible(bible, first);
     const result = compilePrompt(first, bible);
-    assert.match(result.positive, /^masterpiece, best quality, score_7/);
+    assert.match(result.positive, /^highly detailed anime visual novel illustration/);
     assert.ok(result.positive.indexOf('1girl') < result.positive.indexOf('character 1'));
     assert.ok(result.positive.indexOf('character 1') < result.positive.indexOf('original story action'));
     assert.match(result.positive, /long blue hair/);
     assert.match(result.positive, /fingers visibly circling his sleeve cuff/);
     assert.match(result.positive, /arms extended between them/);
     assert.doesNotMatch(result.positive, /nsfw|explicit/);
+    assert.doesNotMatch(result.positive, /masterpiece|score_\d|\([^)]*:\d+(?:\.\d+)?\)/i);
 });
 
 test('strips an untagged worldbook planning preamble before storyboarding', () => {
@@ -127,13 +128,13 @@ test('male interaction prompts strongly distinguish the companion from the heroi
     const bible = createBible();
     mergePacketIntoBible(bible, first);
     const result = compilePrompt(first, bible);
-    assert.match(result.positive, /one adult man:1\.45/);
-    assert.match(result.positive, /masculine male face:1\.3/);
+    assert.match(result.positive, /one clearly adult man/);
+    assert.match(result.positive, /clearly masculine male face/);
     assert.match(result.negative, /2girls/);
     assert.match(result.negative, /duplicate heroine/);
 });
 
-test('Anima prompt adds weighted English identity and concise English scene tags', () => {
+test('Anima prompt adds strong natural-language identity and concise English scene tags', () => {
     const packet = {
         ...first,
         quote: '雨夜列车里，艾琳护在他身前，挥动发光细剑斩断敌人的武器。',
@@ -147,8 +148,8 @@ test('Anima prompt adds weighted English identity and concise English scene tags
         }],
     };
     const result = compilePrompt(packet, createBible());
-    assert.match(result.positive, /\(long silver-white hair:1\.8\)/);
-    assert.match(result.positive, /\(purple eyes:1\.7\)/);
+    assert.match(result.positive, /strikingly consistent silver-white hair/);
+    assert.match(result.positive, /striking purple eyes/);
     assert.match(result.positive, /heroine shielding her male partner/);
     assert.match(result.positive, /enemy weapon breaking/);
     assert.match(result.positive, /stormy night/);
@@ -169,8 +170,8 @@ test('school heroine prompt locks pink twin tails and rejects tactical drift', (
         }],
     };
     const result = compilePrompt(packet, createBible());
-    assert.match(result.positive, /\(sakura-pink hair:1\.9\)/);
-    assert.match(result.positive, /\(twin ponytails:1\.8\)/);
+    assert.match(result.positive, /strikingly consistent sakura-pink hair/);
+    assert.match(result.positive, /clearly visible twin ponytails/);
     assert.match(result.positive, /pink cardigan/);
     assert.match(result.positive, /both clearly visible in the same frame/);
     assert.match(result.negative, /black hair/);

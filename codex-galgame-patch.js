@@ -23,10 +23,10 @@ import {
     parseDirectorResponse,
     processingKey,
 } from './lib/galgame-director.mjs';
-import { createBible } from './lib/director-core.mjs';
+import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.9';
+const PATCH_VERSION = '3.1.0';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -96,7 +96,10 @@ function configureBasePlugin() {
     root.newlineFixEnabled = true;
     root.insertOriginalText = true;
     root.dbclike = false;
-    root.zidongdianji = state.autoGenerate !== false;
+    // The director creates grounded inline buttons. Rendering is always a
+    // deliberate player action so an unwanted candidate never consumes time.
+    state.autoGenerate = false;
+    root.zidongdianji = false;
     root.zidongdianji2 = false;
     root.enablePregen = false;
     root.autoLLMImageGen = false;
@@ -290,32 +293,6 @@ function sanitizeRenderedButtons(messageId) {
     return [...buttons].filter(button => button.dataset.codexDirectorButton === 'true');
 }
 
-function autoClickRenderedButtons(messageId, attempt = 0) {
-    const buttons = sanitizeRenderedButtons(messageId);
-    let pending = 0;
-    buttons.forEach((button, directorIndex) => {
-        const accepted = button.disabled
-            || button.dataset.loading === 'true'
-            || /loading|generating/i.test(button.className)
-            || button.dataset.codexAutoAccepted === 'true';
-        if (accepted) return;
-        pending++;
-        button.dataset.codexAutoClickAttempt = String(attempt + 1);
-        setTimeout(() => {
-            if (!button.isConnected || button.disabled || button.dataset.loading === 'true') return;
-            button.click();
-            setTimeout(() => {
-                if (button.disabled || button.dataset.loading === 'true' || /loading|generating/i.test(button.className)) {
-                    button.dataset.codexAutoAccepted = 'true';
-                }
-            }, 300);
-        }, directorIndex * 100);
-    });
-    if (pending && attempt < 6) {
-        setTimeout(() => autoClickRenderedButtons(messageId, attempt + 1), 1800 + attempt * 350);
-    }
-}
-
 async function refreshMessage(messageId) {
     const scroll = document.getElementById('chat');
     const top = scroll?.scrollTop;
@@ -324,9 +301,6 @@ async function refreshMessage(messageId) {
     setTimeout(() => {
         window.dispatchEvent(new CustomEvent('st-chatu8-config-updated'));
     }, 50);
-    if (directorState().autoGenerate !== false) {
-        setTimeout(() => autoClickRenderedButtons(messageId), 1200);
-    }
 }
 
 async function processMessage(messageId, messageType = '') {
@@ -360,8 +334,9 @@ async function processMessage(messageId, messageType = '') {
             warn('导演请求未完成，立即使用本地回退：', error?.message || error);
         }
 
+        // Model-level character data establishes immutable identity only. The
+        // selected scenes below own the chronological outfit snapshots.
         mergeCharactersIntoBible(bible, parsed.characters);
-        syncChatU8Characters(parsed.characters, bible);
         const scenes = completeScenes({ story, parsedScenes: parsed.scenes, bible, settings: config });
         if (!scenes.length) {
             message.extra ||= {};
@@ -371,6 +346,12 @@ async function processMessage(messageId, messageType = '') {
             setStatus('本轮没有可安全生成的女性剧情镜头。', 'idle');
             return;
         }
+        for (const scene of scenes) mergePacketIntoBible(bible, scene.packet);
+        const synchronizedCharacters = [...new Map([
+            ...parsed.characters,
+            ...scenes.flatMap(scene => scene.packet.cast || []),
+        ].filter(item => item?.id).map(item => [item.id.toLowerCase(), item])).values()];
+        syncChatU8Characters(synchronizedCharacters, bible);
 
         const insertion = composeDirectedMessage(raw, story, scenes);
         if (!insertion.inserted) throw new Error('选中的原文锚点无法原位插入');
@@ -379,7 +360,14 @@ async function processMessage(messageId, messageType = '') {
         message.extra.codexGalgameDirector = {
             key: processingKey(insertion.message),
             source,
-            scenes: scenes.map(scene => ({ anchor: scene.anchor, stage: scene.packet.stage, cast: scene.packet.cast.map(item => item.id) })),
+            scenes: scenes.map(scene => ({
+                anchor: scene.anchor,
+                stage: scene.packet.stage,
+                cast: scene.packet.cast.map(item => item.id),
+                outfits: Object.fromEntries(scene.packet.cast.map(item => [item.id, item.outfit])),
+                evidenceWindow: scene.evidenceWindow,
+                audit: scene.audit,
+            })),
             elapsedMs: Math.round(performance.now() - started),
             version: PATCH_VERSION,
         };
@@ -425,7 +413,6 @@ function bindDirectorUi() {
     const state = directorState();
     const fields = {
         enabled: document.getElementById('codex-galgame-enabled'),
-        autoGenerate: document.getElementById('codex-galgame-auto'),
         apiUrl: document.getElementById('codex-galgame-api-url'),
         apiKey: document.getElementById('codex-galgame-api-key'),
         model: document.getElementById('codex-galgame-model'),

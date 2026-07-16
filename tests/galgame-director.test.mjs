@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    DEFAULT_DIRECTOR_SETTINGS,
     buildDirectorMessages,
     cleanStory,
     composeDirectedMessage,
@@ -10,7 +11,7 @@ import {
     mergeCharactersIntoBible,
     parseDirectorResponse,
 } from '../lib/galgame-director.mjs';
-import { createBible } from '../lib/director-core.mjs';
+import { buildFallbackPackets, createBible, mergePacketIntoBible } from '../lib/director-core.mjs';
 
 const story = [
     '清晨的校门前，成年女性樱背着粉色书包跑来，樱粉色双马尾在肩后跃动。她笑着抓住我的手腕，把我从自行车旁拉到自己面前。',
@@ -58,6 +59,13 @@ test('one response covers early, middle and late story beats and inserts prompts
     }
 });
 
+test('out-of-order model anchors are independently grounded and restored to story order', () => {
+    const reversed = { ...response, scenes: [...response.scenes].reverse() };
+    const parsed = parseDirectorResponse(reversed, { story, bible: createBible(), settings: { minimumShots: 3, maximumShots: 6 } });
+    assert.equal(parsed.scenes.length, 3);
+    assert.deepEqual(parsed.scenes.map(scene => scene.anchor), response.scenes.map(scene => scene.anchor));
+});
+
 test('character identity remains locked while an explicit outfit change is accepted', () => {
     const bible = createBible();
     mergeCharactersIntoBible(bible, parseDirectorResponse(response, { story, bible }).characters);
@@ -74,9 +82,9 @@ test('character identity remains locked while an explicit outfit change is accep
         }],
     };
     const parsed = parseDirectorResponse(nextResponse, { story: nextStory, bible });
-    mergeCharactersIntoBible(bible, parsed.characters);
+    for (const scene of parsed.scenes) mergePacketIntoBible(bible, scene.packet);
     assert.match(bible['樱'].dna, /sakura-pink twin tails/);
-    assert.equal(bible['樱'].outfit, 'white evening dress');
+    assert.match(bible['樱'].outfit, /white evening dress/);
 });
 
 test('repeated action, pure male/scenery, and sexual minor scenes are rejected', () => {
@@ -99,7 +107,12 @@ test('repeated action, pure male/scenery, and sexual minor scenes are rejected',
         ],
     };
     const parsed = parseDirectorResponse(unsafeResponse, { story: unsafeStory, bible: createBible() });
-    assert.equal(parsed.scenes.length, 1);
+    assert.equal(parsed.scenes.length, 1, JSON.stringify(parsed.scenes.map(scene => ({
+        anchor: scene.anchor,
+        stage: scene.packet.stage,
+        cast: scene.packet.cast.map(item => ({ id: item.id, age: item.age })),
+        evidenceWindow: scene.evidenceWindow,
+    }))));
     assert.equal(parsed.scenes[0].packet.cast[0].id, '艾琳');
 });
 
@@ -141,7 +154,7 @@ test('normal cafe story keeps the three cinematic beats instead of static transi
     const cafeBible = createBible();
     cafeBible['艾琳'] = { id: '艾琳', prompt_name: 'Eileen', sex: 'female', age: 'adult', dna: 'adult woman, long silver hair, purple eyes', outfit: 'dark navy uniform' };
     const selected = completeScenes({ story: cafeStory, parsedScenes: scenes, bible: cafeBible, settings: { minimumShots: 3, maximumShots: 6 } });
-    assert.deepEqual(selected.map(scene => scene.packet.stage), ['serving coffee', 'wiping milk foam', 'kissing']);
+    assert.deepEqual(selected.map(scene => scene.packet.stage), ['coffee_handoff', 'wiping', 'kiss']);
 
     const incompleteModelPick = scenes.filter(scene => ['wiping milk foam', 'kissing', 'parting'].includes(scene.packet.stage));
     const repaired = completeScenes({ story: cafeStory, parsedScenes: incompleteModelPick, bible: cafeBible, settings: { minimumShots: 3, maximumShots: 6 } });
@@ -157,6 +170,139 @@ test('local completion supplies valid scenes when the model times out', () => {
     const scenes = completeScenes({ story, parsedScenes: [], bible, settings: { minimumShots: 3, maximumShots: 6 } });
     assert.equal(scenes.length, 3);
     assert.match(scenes.at(-1).anchor, /吻住了我/);
+});
+
+test('each final prompt window starts after the previous selected image and contains no future plot', () => {
+    const bible = createBible();
+    bible['樱'] = { id: '樱', prompt_name: 'Sakura', dna: 'adult woman, sakura-pink twin tails, purple eyes', outfit: 'pink cardigan, school uniform' };
+    const clean = cleanStory(story);
+    const scenes = completeScenes({ story, parsedScenes: [], bible, settings: { minimumShots: 3, maximumShots: 6 } });
+    let previousEnd = 0;
+    scenes.forEach((scene, index) => {
+        assert.equal(scene.evidenceWindow, clean.slice(previousEnd, scene.end));
+        assert.equal(scene.evidenceWindow.includes(scene.anchor), true);
+        if (scenes[index + 1]) assert.equal(scene.evidenceWindow.includes(scenes[index + 1].anchor), false);
+        previousEnd = scene.end;
+    });
+});
+
+test('a one-shot model answer is repaired to three manual buttons from exact story beats', () => {
+    const shortStory = [
+        '成年女性艾琳穿着深蓝制服，把热咖啡递进他的手里。',
+        '她用拇指擦掉他唇边的奶泡，两个人的脸靠得很近。',
+        '她环住他的腰，抬头吻住他的嘴唇。',
+    ].join('\n\n');
+    const modelOnlyFoundOne = {
+        characters: [{
+            name: '艾琳', english_name: 'Eileen', sex: 'female', age: 'adult',
+            identity: '24 years old adult woman, long silver hair, purple eyes',
+            outfit: 'dark navy uniform',
+        }],
+        scenes: [{
+            anchor: '成年女性艾琳穿着深蓝制服，把热咖啡递进他的手里。',
+            female_names: ['艾琳'], stage: 'coffee', action_key: 'Eileen hands him coffee',
+            people: '1girl, 1boy', prompt: 'coffee handoff', outfits: { 艾琳: 'dark navy uniform' }, safety: 'safe',
+        }],
+    };
+    const bible = createBible();
+    const parsed = parseDirectorResponse(modelOnlyFoundOne, { story: shortStory, bible });
+    mergeCharactersIntoBible(bible, parsed.characters);
+    const repaired = completeScenes({
+        story: shortStory,
+        parsedScenes: parsed.scenes,
+        bible,
+        settings: { minimumShots: 3, maximumShots: 6 },
+    });
+    assert.equal(DEFAULT_DIRECTOR_SETTINGS.autoGenerate, false);
+    assert.equal(repaired.length, 3);
+    assert.deepEqual(repaired.map(scene => scene.packet.stage), ['coffee_handoff', 'wiping', 'kiss']);
+    assert.ok(repaired.every(scene => shortStory.includes(scene.anchor)));
+});
+
+test('outfit is resolved at each anchor and model wardrobe hallucinations are discarded', () => {
+    const outfitStory = [
+        '24岁成年女性艾琳身穿深蓝色制服和红色领结，把热咖啡递进成年男友的手里。',
+        '她明确换上白色晚礼服，在宴会厅旋身挡住袭来的利刃，裙摆在灯下扬起。',
+        '危险解除后，她脱下白色晚礼服，赤裸着跨坐到成年男友身上亲吻他。',
+    ].join('\n\n');
+    const raw = {
+        characters: [{
+            name: '艾琳', english_name: 'Eileen', sex: 'female', age: 'adult',
+            identity: '24 years old adult woman, long silver hair, purple eyes',
+            outfit: 'black tactical suit',
+        }],
+        scenes: [
+            { anchor: outfitStory.split('\n\n')[0], female_names: ['艾琳'], stage: 'coffee', action_key: 'coffee', people: '1girl, 1boy', prompt: 'black tactical suit on a train', outfits: { 艾琳: 'black tactical suit' }, safety: 'safe' },
+            { anchor: outfitStory.split('\n\n')[1], female_names: ['艾琳'], stage: 'combat', action_key: 'blocks the blade', people: '1girl, 1boy', prompt: 'black tactical suit', outfits: { 艾琳: 'black tactical suit' }, safety: 'safe' },
+            { anchor: outfitStory.split('\n\n')[2], female_names: ['艾琳'], stage: 'straddle', action_key: 'kisses him', people: '1girl, 1boy', prompt: 'black tactical suit', outfits: { 艾琳: 'black tactical suit' }, safety: 'nsfw' },
+        ],
+    };
+    const bible = createBible();
+    bible['艾琳'] = {
+        id: '艾琳', prompt_name: 'Eileen', dna: '24 years old adult woman, long silver hair, purple eyes', outfit: 'casual clothes',
+    };
+    const parsed = parseDirectorResponse(raw, { story: outfitStory, bible });
+    const scenes = completeScenes({ story: outfitStory, parsedScenes: parsed.scenes, bible, settings: { minimumShots: 3, maximumShots: 3 } });
+    assert.equal(scenes.length, 3);
+    assert.match(scenes[0].packet.cast[0].outfit, /dark navy uniform/);
+    assert.match(scenes[0].packet.cast[0].outfit, /red ribbon tie/);
+    assert.match(scenes[1].packet.cast[0].outfit, /white evening dress/);
+    assert.equal(scenes[2].packet.cast[0].outfit, 'completely nude');
+    assert.ok(scenes.every(scene => !/black tactical|casual clothes/i.test(scene.prompt)));
+});
+
+test('adult NSFW fast plot selects each decisive stage and skips the static setup', () => {
+    const adultStory = [
+        '24岁成年女性艾琳走进卧室，只是站在床边看着她25岁的成年男友。',
+        '她脱下深蓝制服和内衣，赤裸身体跪到他的腿间。',
+        '她在双方同意后开始口交，双手扶住成年男友的腰。',
+        '随后成年男友进入她，双方继续自愿性交。',
+        '她跨坐在成年男友身上切换成骑乘位，双手按住他的胸口。',
+        '节奏加快，艾琳仰起头，在骑乘位达到高潮。',
+    ].join('\n\n');
+    const bible = createBible();
+    bible['艾琳'] = {
+        id: '艾琳', prompt_name: 'Eileen', dna: '24 years old adult woman, long silver hair, purple eyes', outfit: 'dark navy uniform',
+    };
+    const localPackets = buildFallbackPackets(adultStory, { bible, minimum: 5, maximum: 5 });
+    assert.deepEqual(
+        localPackets.map(packet => packet.stage),
+        ['undressing', 'oral', 'penetration', 'position_change', 'climax'],
+        JSON.stringify(localPackets.map(packet => ({ stage: packet.stage, quote: packet.quote }))),
+    );
+    const scenes = completeScenes({ story: adultStory, parsedScenes: [], bible, settings: { minimumShots: 3, maximumShots: 6 } });
+    assert.equal(scenes.length, 5);
+    assert.deepEqual(
+        scenes.map(scene => scene.packet.stage),
+        ['undressing', 'oral', 'penetration', 'position_change', 'climax'],
+        JSON.stringify(scenes.map(scene => ({ stage: scene.packet.stage, anchor: scene.anchor }))),
+    );
+    assert.equal(scenes.some(scene => /只是站在床边/.test(scene.anchor)), false);
+    assert.equal(scenes.at(-1).anchor.includes('达到高潮'), true);
+});
+
+test('unsupported model locations, props, actions and outfits cannot reach the final prompt', () => {
+    const groundedStory = '成年女性艾琳身穿深蓝制服，在站台咖啡店把冒着热气的咖啡杯递进成年男友手里。';
+    const bible = createBible();
+    bible['艾琳'] = {
+        id: '艾琳', prompt_name: 'Eileen', dna: 'adult woman, long silver hair, purple eyes', outfit: 'dark navy uniform',
+    };
+    const parsed = parseDirectorResponse({
+        characters: [{ name: '艾琳', english_name: 'Eileen', sex: 'female', age: 'adult', identity: bible['艾琳'].dna, outfit: 'black dress' }],
+        scenes: [{
+            anchor: groundedStory,
+            female_names: ['艾琳'], stage: 'sword fight', action_key: 'Eileen draws a sword inside a moving train',
+            people: '1girl, 1boy', prompt: 'black dress, sword duel, moving train', outfits: { 艾琳: 'black dress' }, safety: 'safe',
+        }],
+    }, { story: groundedStory, bible });
+    assert.equal(parsed.scenes.length, 1);
+    const [scene] = completeScenes({ story: groundedStory, parsedScenes: parsed.scenes, bible, settings: { minimumShots: 3, maximumShots: 3 } });
+    assert.ok(scene.audit.rejectedConcepts.includes('sword'));
+    assert.ok(scene.audit.rejectedConcepts.includes('train'));
+    assert.match(scene.prompt, /coffee/i);
+    assert.match(scene.prompt, /dark navy uniform/i);
+    assert.doesNotMatch(scene.prompt, /moving train|sword duel|draws a sword|black dress/i);
+    assert.match(scene.evidenceWindow, /咖啡杯递进/);
 });
 
 test('story cleaner removes mobile status/database payload but preserves narrative', () => {
