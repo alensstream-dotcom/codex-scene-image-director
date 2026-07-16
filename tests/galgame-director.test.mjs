@@ -188,6 +188,32 @@ test('live station-cafe fallback keeps one action per shot and never carries old
     assert.match(scenes[2].packet.cast[0].outfit, /red ribbon tie/);
 });
 
+test('global optimizer reserves early middle and late coverage even when model candidates front-load', () => {
+    const neutralA = '两个人继续谈论旅途中的见闻，窗外的光线缓慢移动。'.repeat(9);
+    const neutralB = '他们又安静地聊了一会儿，时间在平稳的对话中流逝。'.repeat(9);
+    const spreadStory = [
+        '成年女性艾琳在咖啡店把热咖啡推到成年男友手里。她立刻又环住他的腰主动亲吻。',
+        neutralA,
+        '走到长廊中段时，艾琳靠近成年男友，用拇指擦掉他唇边残留的奶泡。',
+        neutralB,
+        '抵达站台尽头后，艾琳拔剑挡住袭击，旋身斩断敌人的武器，断刃飞落在地。',
+    ].join('\n\n');
+    const bible = createBible();
+    bible['艾琳'] = { id: '艾琳', prompt_name: 'Eileen', dna: 'adult woman, long silver hair, purple eyes', outfit: 'dark navy uniform' };
+    const earlyOnly = [
+        { anchor: '成年女性艾琳在咖啡店把热咖啡推到成年男友手里。', position: 0, end: 25, packet: { stage: 'coffee_handoff', action: 'coffee handoff', quote: 'coffee', cast: [{ id: '艾琳' }] } },
+        { anchor: '她立刻又环住他的腰主动亲吻。', position: 26, end: 42, packet: { stage: 'kiss', action: 'kiss', quote: 'kiss', cast: [{ id: '艾琳' }] } },
+    ].map(scene => ({ ...scene, prompt: scene.packet.action, negative: '' }));
+    const selected = completeScenes({ story: spreadStory, parsedScenes: earlyOnly, bible, settings: { minimumShots: 3, maximumShots: 3 } });
+    const ratios = selected.map(scene => scene.position / spreadStory.length);
+    assert.equal(selected.length, 3);
+    assert.ok(ratios.some(value => value < 1 / 3), JSON.stringify(ratios));
+    assert.ok(ratios.some(value => value >= 1 / 3 && value < 2 / 3), JSON.stringify(ratios));
+    assert.ok(ratios.some(value => value >= 2 / 3), JSON.stringify(ratios));
+    assert.ok(selected.some(scene => scene.packet.stage === 'wiping'));
+    assert.ok(selected.some(scene => /combat/.test(scene.packet.stage)));
+});
+
 test('local completion supplies valid scenes when the model times out', () => {
     const bible = createBible();
     bible['樱'] = { id: '樱', prompt_name: 'Sakura', dna: 'adult woman, sakura-pink twin tails, purple eyes', outfit: 'pink cardigan, school uniform' };

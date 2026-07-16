@@ -26,7 +26,7 @@ import {
 import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.1.3';
+const PATCH_VERSION = '3.2.0';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -324,6 +324,7 @@ async function processMessage(messageId, messageType = '') {
         const lastUser = [...chat.slice(0, id)].reverse().find(item => item?.is_user)?.mes || '';
         let parsed = { characters: [], scenes: [] };
         let source = 'DeepSeek';
+        let fallbackReason = '';
         setStatus(`正在理解本轮完整剧情，目标 ${wanted} 个镜头…`, 'working');
         try {
             const messages = buildDirectorMessages({ story, lastUserMessage: lastUser, bible, settings: config });
@@ -331,6 +332,7 @@ async function processMessage(messageId, messageType = '') {
             parsed = parseDirectorResponse(content, { story, bible, settings: config });
         } catch (error) {
             source = '本地快速回退';
+            fallbackReason = String(error?.message || error).slice(0, 240);
             warn('导演请求未完成，立即使用本地回退：', error?.message || error);
         }
 
@@ -360,6 +362,7 @@ async function processMessage(messageId, messageType = '') {
         message.extra.codexGalgameDirector = {
             key: processingKey(insertion.message),
             source,
+            fallbackReason,
             scenes: scenes.map(scene => ({
                 anchor: scene.anchor,
                 stage: scene.packet.stage,
@@ -375,7 +378,8 @@ async function processMessage(messageId, messageType = '') {
         await saveChatConditional();
         await refreshMessage(id);
         const elapsed = ((performance.now() - started) / 1000).toFixed(1);
-        setStatus(`已用 ${source} 在 ${elapsed}s 内原位插入 ${insertion.inserted} 个镜头；人物与服装已自动记忆。`, 'ok');
+        const sourceLabel = fallbackReason ? `${source}（${fallbackReason}）` : source;
+        setStatus(`已用 ${sourceLabel} 在 ${elapsed}s 内原位插入 ${insertion.inserted} 个镜头；人物与服装已自动记忆。`, 'ok');
         log(`楼层 ${id}: ${insertion.inserted} 个原位镜头，${elapsed}s，来源=${source}`);
         document.documentElement.dataset.codexGalgameDirector = `complete:${id}:${insertion.inserted}`;
     })().catch(error => {
