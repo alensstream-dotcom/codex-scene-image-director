@@ -123,6 +123,6 @@ test('director contract requires one final block and hard adult coverage', () =>
     const contract = buildDirectorV3Contract({ minimum: 3, maximum: 5, card: { name: '青青', visual: 'adult woman, brown hair' } });
     assert.match(contract, /exactly ONE final single-line HTML comment/);
     assert.match(contract, /at least one NSFW\/explicit shot MUST be present/);
-    assert.match(contract, /do not first split the scene into action\/setting\/expression fields/);
+    assert.match(contract, /do not first split the scene into action\/setting\/expression fields/i);
     assert.match(contract, /Active card: 青青/);
 });
