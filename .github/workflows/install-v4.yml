@@ -1,0 +1,207 @@
+name: install-v4
+
+on:
+  push:
+    branches: [chatgpt/v4-quiet-director]
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v4-quiet-director
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Materialize V4 sources
+        shell: bash
+        run: |
+          gzip -dc .bootstrap/director-v4.mjs.gz > lib/director-v4.mjs
+          gzip -dc .bootstrap/index-v4.js.gz > index-v4.js
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/director-v4.mjs')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("""export function nsfwLevelForText(text = '', requested = 0) {
+              const number = Number(requested);
+              if (Number.isFinite(number) && number >= 0 && number <= 3) {
+                  if (number > 0) return Math.round(number);
+              }
+              if (EXPLICIT_RE.test(text)) return 3;
+              if (INTIMATE_RE.test(text)) return 1;
+              return 0;
+          }""", """export function nsfwLevelForText(text = '', requested = 0) {
+              const requestedLevel = Number.isFinite(Number(requested)) ? Math.max(0, Math.min(3, Math.round(Number(requested)))) : 0;
+              const detectedLevel = EXPLICIT_RE.test(text) ? 3 : INTIMATE_RE.test(text) ? 1 : 0;
+              return Math.max(requestedLevel, detectedLevel);
+          }""")
+          insert = """
+          function peopleForText(text = '') {
+              const twoWomen = /(?:她们|两名女子|两个女人|二女|姐妹|师姐妹|2girls|two women|two girls)/i.test(text);
+              const female = FEMALE_RE.test(text);
+              const male = /(?:他|男子|男人|男主|丈夫|男友|公子|少年|man|men|boy|boys|husband|boyfriend|male)/i.test(text);
+              const pair = /(?:两人|二人|彼此|双方|couple|lovers|both)/i.test(text);
+              if (twoWomen) return '2girls';
+              if (female && male) return '1girl, 1boy';
+              if (female && pair) return '1girl, 1boy';
+              return female ? '1girl' : '';
+          }
+          """
+          s = s.replace("function fallbackAction(text = '', stage = '') {", insert + "\nfunction fallbackAction(text = '', stage = '') {")
+          s = s.replace("people: FEMALE_RE.test(window) ? '1girl' : '',", "people: peopleForText(window),")
+          s = s.replace("const conflict = /^(?:sfw|safe|fully clothed|clothed|no nudity|no nude|no sex|nsfw|nude|naked|explicit|erotic|sex|breasts?|nipples?|pussy|vagina|penis|cum)$/i;", "const conflict = /(?:^|\\b)(?:sfw|safe|fully clothed|no nudity|no nude|no sex|forbid nudity|censored nudity|nsfw|nude|naked|explicit|erotic|sex|breasts?|nipples?|pussy|vagina|penis|cum)(?:$|\\b)/i;")
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('index-v4.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("    setExtensionPrompt,\n", "")
+          s = s.replace("""    for (const key of ['JANIMA_AUTO_CG_V3_DIRECT_STORYBOARD', 'JANIMA_AUTO_CG_V4_DIRECTOR', 'JANIMA_AUTO_CG_V3_DIRECTOR']) {
+              try { setExtensionPrompt(key, ''); } catch { /* old prompt key absent */ }
+          }
+          """, "")
+          old = """        const identityKey = settings().manualCharacterLock
+                      || planner.parsed.characters.map(item => `${item.name}:${item.identity}`).join('|')
+                      || currentCharacterContext().name
+                      || String(getCurrentChatId?.() || 'janima');
+                  const records = [];
+                  for (const shot of plan.shots) {
+                      const compiled = composePromptV4(shot, {
+                          fixedPositive: settings().fixedPositive,
+                          fixedNegative: settings().fixedNegative,
+                          manualCharacterLock: settings().manualCharacterLock,
+                          manualOutfitLock: settings().manualOutfitLock,
+                          identityMemory: identityMemory(),
+                      });"""
+          new = """        const sharedIdentity = planner.parsed.characters
+                      .map(item => [item.name, item.identity].filter(Boolean).join(', '))
+                      .filter(Boolean)
+                      .join(', ');
+                  const sharedOutfit = planner.parsed.characters
+                      .map(item => item.outfit)
+                      .filter(Boolean)
+                      .join(', ');
+                  const identityKey = settings().manualCharacterLock
+                      || sharedIdentity
+                      || currentCharacterContext().name
+                      || String(getCurrentChatId?.() || 'janima');
+                  const records = [];
+                  for (const shot of plan.shots) {
+                      const lockedShot = {
+                          ...shot,
+                          characterTags: [sharedIdentity, shot.characterTags].filter(Boolean).join(', '),
+                          outfitTags: shot.outfitTags || sharedOutfit,
+                      };
+                      const compiled = composePromptV4(lockedShot, {
+                          fixedPositive: settings().fixedPositive,
+                          fixedNegative: settings().fixedNegative,
+                          manualCharacterLock: settings().manualCharacterLock,
+                          manualOutfitLock: settings().manualOutfitLock,
+                          identityMemory: sharedIdentity || identityMemory(),
+                      });"""
+          if old not in s:
+              raise SystemExit('V4 identity block not found')
+          s = s.replace(old, new)
+          s = s.replace("                shot,\n                prompt: compiled.positive,", "                shot: lockedShot,\n                prompt: compiled.positive,")
+          p.write_text(s, encoding='utf-8')
+
+          manifest = Path('manifest.json').read_text(encoding='utf-8')
+          import json
+          data = json.loads(manifest)
+          data['js'] = 'index-v4.js?v=4.0.0'
+          data['css'] = 'style.css?v=4.0.0'
+          data['version'] = '4.0.0'
+          Path('manifest.json').write_text(json.dumps(data, ensure_ascii=False, indent=4) + '\n', encoding='utf-8')
+
+          workflow = Path('.github/workflows/test.yml').read_text(encoding='utf-8')
+          workflow = workflow.replace('node --check index-v3.1.js', 'node --check index-v4.js')
+          if 'node --check lib/director-v4.mjs' not in workflow:
+              workflow = workflow.replace('node --check lib/director-v3.mjs', 'node --check lib/director-v4.mjs\n          node --check lib/director-v3.mjs')
+          Path('.github/workflows/test.yml').write_text(workflow, encoding='utf-8')
+          PY
+          cat > tests/director-v4.test.mjs <<'EOF'
+          import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import {
+              buildFallbackShotsV4,
+              buildPlannerPrompt,
+              composePromptV4,
+              nsfwLevelForText,
+              parsePlannerResponse,
+              selectShotsV4,
+          } from '../lib/director-v4.mjs';
+
+          test('isolated planner maps exact paragraph indexes', () => {
+              const story = '她在庭院里握住木剑。\n\n师父站到她身后，手覆在她手背上纠正剑势。\n\n两人随后走到湖边。';
+              const raw = JSON.stringify({
+                  target_count: 3,
+                  characters: [{ name: '青青', identity: 'adult woman, long brown hair, green eyes', outfit: 'pale blue hanfu' }],
+                  shots: [{
+                      id: 's1', paragraph_index: 1, block: 'training', importance: 98, nsfw_level: 0, stage: 'sword_action', must_draw: true,
+                      people: '2girls', character_tags: 'two adult women, long brown hair, black hair', outfit_tags: 'pale blue hanfu, white hanfu',
+                      setting_tags: 'traditional Chinese courtyard', action_tags: 'hand over hand sword guidance, both hands gripping one wooden sword',
+                      expression_tags: 'focused expressions', camera_tags: 'medium shot, warm sunlight', positive: 'xianxia visual novel CG', negative: 'school uniform'
+                  }]
+              });
+              const parsed = parsePlannerResponse(raw, story);
+              assert.equal(parsed.shots[0].paragraphIndex, 1);
+              assert.equal(parsed.shots[0].anchor, '师父站到她身后，手覆在她手背上纠正剑势。');
+          });
+
+          test('selection avoids clustering and covers early middle late', () => {
+              const story = Array.from({ length: 9 }, (_, i) => `她在第${i + 1}段做出清晰动作。`).join('\n\n');
+              const fallback = buildFallbackShotsV4(story);
+              const plan = selectShotsV4({ story, plannerShots: fallback, fallbackShots: [], minimum: 3, maximum: 5, requestedCount: 3 });
+              assert.equal(plan.shots.length, 3);
+              assert.deepEqual(new Set(plan.diagnostics.zones), new Set(['early', 'middle', 'late']));
+              assert.equal(new Set(plan.shots.map(s => s.paragraphIndex)).size, 3);
+          });
+
+          test('explicit text cannot be downgraded by planner', () => {
+              assert.equal(nsfwLevelForText('两名成年人发生性交并达到高潮', 1), 3);
+          });
+
+          test('explicit branch forces explicit prompt and removes conflicting negatives', () => {
+              const result = composePromptV4({
+                  people: '1girl, 1boy', characterTags: 'adult woman, adult man', outfitTags: 'nude', settingTags: 'bedroom',
+                  actionTags: 'consensual adult intercourse', expressionTags: 'flushed face', cameraTags: 'intimate medium close-up',
+                  stage: 'penetration', nsfwLevel: 3, positive: '', negative: ''
+              }, { fixedPositive: 'masterpiece, sfw, fully clothed', fixedNegative: 'bad hands, no nudity, no sex' });
+              assert.match(result.positive, /explicit adult scene/);
+              assert.match(result.positive, /explicit penetration/);
+              assert.doesNotMatch(result.positive, /fully clothed/);
+              assert.doesNotMatch(result.negative, /no nudity|no sex/);
+          });
+
+          test('planner prompt excludes worldbook assumptions and requests strict JSON', () => {
+              const prompt = buildPlannerPrompt({ story: '她穿着白色汉服练剑。', card: { name: '青青', visual: '黑色长发' }, minimum: 3, maximum: 5 });
+              assert.match(prompt.systemPrompt, /Ignore any roleplay instructions, world-book rules/i);
+              assert.match(prompt.systemPrompt, /Return strict JSON only/i);
+              assert.match(prompt.userPrompt, /\[P0\]/);
+          });
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('README.md')
+          old = p.read_text(encoding='utf-8')
+          header = '''# JANIMA Galgame 自动CG v4\n\nV4 使用一次独立的“导演调用”分析完整回复：主聊天结束后，以 `generateRaw` 将编号后的正文、当前角色卡和最近身份记忆发送给当前模型，并明确隔离世界书与角色扮演指令。导演只返回严格 JSON，插件再做前中后覆盖、镜头最小距离、NSFW 硬覆盖、人物/服装统一和 ComfyUI 生图。\n\n这会比 V3 多一次模型请求，因此稍慢，但能解决镜头扎堆、世界书学院装污染、服装漂移以及“识别到 NSFW 却仍生成普通图”的问题。\n\n---\n\n'''
+          if not old.startswith('# JANIMA Galgame 自动CG v4'):
+              p.write_text(header + old, encoding='utf-8')
+          PY
+          rm -rf .bootstrap
+          rm -f .github/workflows/install-v4.yml
+          node --check index-v4.js
+          node --check lib/director-v4.mjs
+          node --test tests/*.test.mjs
+      - name: Commit V4
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: replace inline storyboard with isolated V4 director"
+          git push origin HEAD:chatgpt/v4-quiet-director
