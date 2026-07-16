@@ -15,12 +15,11 @@ jobs:
           node-version: '22'
       - name: Check runtime syntax
         run: |
-          node --check index-v3.1.js
-          node --check index-v3.js
-          node --check lib/director-v3.mjs
-          node --check lib/scene-lock-v3.mjs
+          node --check index-v4.js
+          node --check lib/director-v4.mjs
           node --check lib/comfy-direct.mjs
           node --check lib/anima-direct-workflow.mjs
+          node --check lib/scene-anchor.mjs
       - name: Run tests
         id: tests
         shell: bash
