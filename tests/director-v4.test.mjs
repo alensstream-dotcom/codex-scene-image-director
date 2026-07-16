@@ -57,3 +57,12 @@ test('planner prompt excludes worldbook assumptions and requests strict JSON', (
     assert.match(prompt.systemPrompt, /Return strict JSON only/i);
     assert.match(prompt.userPrompt, /\[P0\]/);
 });
+
+test('fallback action uses the current paragraph instead of leaking an earlier scene', () => {
+    const story = '她在庭院里握着木剑练习剑招。\n\n她收剑后走进厨房。\n\n她在灶台前烹鱼。';
+    const shots = buildFallbackShotsV4(story);
+    const kitchen = shots.find(shot => shot.paragraphIndex === 2);
+    assert.equal(kitchen.stage, 'cooking');
+    assert.match(kitchen.actionTags, /cooking fish/);
+    assert.doesNotMatch(kitchen.actionTags, /sword|hand over hand/);
+});

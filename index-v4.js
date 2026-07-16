@@ -337,18 +337,33 @@ async function processAssistantMessage(messageId, { messageType = '', force = fa
         };
 
         const generationId = `v4-${id}-${storyHash}`;
+        const globalCharacters = planner.parsed.characters;
+        const globalIdentityKey = globalCharacters.map(item => `${item.name}:${item.identity}`).join('|');
         const identityKey = settings().manualCharacterLock
-            || planner.parsed.characters.map(item => `${item.name}:${item.identity}`).join('|')
+            || globalIdentityKey
             || currentCharacterContext().name
             || String(getCurrentChatId?.() || 'janima');
         const records = [];
         for (const shot of plan.shots) {
-            const compiled = composePromptV4(shot, {
+            const named = globalCharacters.filter(item => item.name && shot.paragraph.includes(item.name));
+            const relevant = named.length
+                ? named
+                : globalCharacters.length === 1 || /2girls|1girl\s*,\s*1boy|2people/i.test(shot.people)
+                    ? globalCharacters.slice(0, 2)
+                    : [];
+            const stableIdentity = relevant.map(item => [item.name, item.identity].filter(Boolean).join(', ')).filter(Boolean).join(', ');
+            const stableOutfit = relevant.map(item => item.outfit).filter(Boolean).join(', ');
+            const lockedShot = {
+                ...shot,
+                characterTags: [stableIdentity, shot.characterTags].filter(Boolean).join(', '),
+                outfitTags: shot.outfitTags || stableOutfit,
+            };
+            const compiled = composePromptV4(lockedShot, {
                 fixedPositive: settings().fixedPositive,
                 fixedNegative: settings().fixedNegative,
                 manualCharacterLock: settings().manualCharacterLock,
                 manualOutfitLock: settings().manualOutfitLock,
-                identityMemory: identityMemory(),
+                identityMemory: stableIdentity || identityMemory(),
             });
             const record = {
                 id: shot.id,
@@ -358,7 +373,7 @@ async function processAssistantMessage(messageId, { messageType = '', force = fa
                 paragraphIndex: shot.paragraphIndex,
                 anchor: shot.anchor,
                 quote: shot.paragraph,
-                shot,
+                shot: lockedShot,
                 prompt: compiled.positive,
                 negative: compiled.negative,
                 seed: seedForShotV4(shot, identityKey),
