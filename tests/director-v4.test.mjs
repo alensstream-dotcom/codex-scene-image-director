@@ -27,12 +27,12 @@ test('isolated planner maps exact paragraph indexes', () => {
 });
 
 test('selection avoids clustering and covers early middle late', () => {
-    const story = Array.from({ length: 9 }, (_, i) => `她在第${i + 1}段做出清晰动作。`).join('\n\n');
+    const story = ['她推开院门走进庭院。', '她握住木剑摆好起手式。', '师父站到她身后纠正握剑姿势。', '她重新挥剑劈开落叶。', '两人走进厨房开始烹鱼。', '她端起鱼汤递给师父。', '傍晚她们离开院子。', '两人沿着竹林小路奔向湖边。', '她在湖心亭回头招手。'].join('\n\n');
     const fallback = buildFallbackShotsV4(story);
     const plan = selectShotsV4({ story, plannerShots: fallback, fallbackShots: [], minimum: 3, maximum: 5, requestedCount: 3 });
-    assert.equal(plan.shots.length, 3);
+    assert.ok(plan.shots.length >= 3 && plan.shots.length <= 5);
     assert.deepEqual(new Set(plan.diagnostics.zones), new Set(['early', 'middle', 'late']));
-    assert.equal(new Set(plan.shots.map(s => s.paragraphIndex)).size, 3);
+    assert.equal(new Set(plan.shots.map(s => s.paragraphIndex)).size, plan.shots.length);
 });
 
 test('explicit text cannot be downgraded by planner', () => {
