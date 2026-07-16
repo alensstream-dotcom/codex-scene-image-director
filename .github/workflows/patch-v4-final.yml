@@ -1,0 +1,149 @@
+name: patch-v4-final
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v4-quiet-director
+      - name: Patch V4 grounding
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          director = Path('lib/director-v4.mjs')
+          text = director.read_text(encoding='utf-8')
+
+          marker = "function fallbackAction(text = '', stage = '') {"
+          people_helper = """function peopleForText(text = '') {
+              const twoWomen = /(?:她们|两名女子|两个女人|二女|姐妹|师姐妹|2girls|two women|two girls)/i.test(text);
+              const female = FEMALE_RE.test(text);
+              const male = /(?:他|男子|男人|男主|丈夫|男友|公子|少年|man|men|boy|boys|husband|boyfriend|male)/i.test(text);
+              const pair = /(?:两人|二人|彼此|双方|couple|lovers|both)/i.test(text);
+              if (twoWomen) return '2girls';
+              if (female && male) return '1girl, 1boy';
+              if (female && pair) return '1girl, 1boy';
+              return female ? '1girl' : '';
+          }
+
+          """
+          if 'function peopleForText' not in text:
+              text = text.replace(marker, people_helper + marker)
+
+          start = text.index('function makeFallbackShot(paragraph, index, all) {')
+          end = text.index('\nexport function buildFallbackShotsV4', start)
+          replacement = """function makeFallbackShot(paragraph, index, all) {
+              const current = paragraph.text;
+              const stateWindow = all.slice(Math.max(0, index - 2), index + 1).map(item => item.text).join(' ');
+              const nsfwLevel = nsfwLevelForText(current);
+              const stage = stageForText(current);
+              return {
+                  id: `fallback_${paragraph.index}`,
+                  paragraphIndex: paragraph.index,
+                  paragraph: current,
+                  anchor: current,
+                  block: `fallback_${stage}_${paragraph.index}`,
+                  importance: nsfwLevel === 3 ? 100 : nsfwLevel > 0 ? 92 : VISUAL_RE.test(current) ? 70 : 40,
+                  nsfwLevel,
+                  stage,
+                  mustDraw: nsfwLevel > 0,
+                  people: peopleForText(current || stateWindow),
+                  characterTags: 'adult characters exactly matching the story description',
+                  outfitTags: fallbackOutfit(stateWindow),
+                  settingTags: fallbackSetting(stateWindow),
+                  actionTags: fallbackAction(current, stage),
+                  expressionTags: nsfwLevel > 0 ? 'expression and arousal matching the exact adult scene' : 'expression matching the selected story moment',
+                  cameraTags: nsfwLevel >= 2 ? 'intimate medium close-up, clear body positions, main action unobstructed' : 'cinematic medium shot, main subjects large in frame, clear action and environment',
+                  positive: '',
+                  negative: '',
+                  source: 'fallback',
+              };
+          }
+          """
+          text = text[:start] + replacement + text[end:]
+          text = text.replace(
+              "const conflict = /^(?:sfw|safe|fully clothed|clothed|no nudity|no nude|no sex|nsfw|nude|naked|explicit|erotic|sex|breasts?|nipples?|pussy|vagina|penis|cum)$/i;",
+              "const conflict = /(?:^|\\b)(?:sfw|safe|fully clothed|no nudity|no nude|no sex|forbid nudity|censored nudity|nsfw|nude|naked|explicit|erotic|sex|breasts?|nipples?|pussy|vagina|penis|cum)(?:$|\\b)/i;",
+          )
+          director.write_text(text, encoding='utf-8')
+
+          runtime = Path('index-v4.js')
+          source = runtime.read_text(encoding='utf-8')
+          old = """        const identityKey = settings().manualCharacterLock
+                      || planner.parsed.characters.map(item => `${item.name}:${item.identity}`).join('|')
+                      || currentCharacterContext().name
+                      || String(getCurrentChatId?.() || 'janima');
+                  const records = [];
+                  for (const shot of plan.shots) {
+                      const compiled = composePromptV4(shot, {
+                          fixedPositive: settings().fixedPositive,
+                          fixedNegative: settings().fixedNegative,
+                          manualCharacterLock: settings().manualCharacterLock,
+                          manualOutfitLock: settings().manualOutfitLock,
+                          identityMemory: identityMemory(),
+                      });"""
+          new = """        const globalCharacters = planner.parsed.characters;
+                  const globalIdentityKey = globalCharacters.map(item => `${item.name}:${item.identity}`).join('|');
+                  const identityKey = settings().manualCharacterLock
+                      || globalIdentityKey
+                      || currentCharacterContext().name
+                      || String(getCurrentChatId?.() || 'janima');
+                  const records = [];
+                  for (const shot of plan.shots) {
+                      const named = globalCharacters.filter(item => item.name && shot.paragraph.includes(item.name));
+                      const relevant = named.length
+                          ? named
+                          : globalCharacters.length === 1 || /2girls|1girl\\s*,\\s*1boy|2people/i.test(shot.people)
+                              ? globalCharacters.slice(0, 2)
+                              : [];
+                      const stableIdentity = relevant.map(item => [item.name, item.identity].filter(Boolean).join(', ')).filter(Boolean).join(', ');
+                      const stableOutfit = relevant.map(item => item.outfit).filter(Boolean).join(', ');
+                      const lockedShot = {
+                          ...shot,
+                          characterTags: [stableIdentity, shot.characterTags].filter(Boolean).join(', '),
+                          outfitTags: shot.outfitTags || stableOutfit,
+                      };
+                      const compiled = composePromptV4(lockedShot, {
+                          fixedPositive: settings().fixedPositive,
+                          fixedNegative: settings().fixedNegative,
+                          manualCharacterLock: settings().manualCharacterLock,
+                          manualOutfitLock: settings().manualOutfitLock,
+                          identityMemory: stableIdentity || identityMemory(),
+                      });"""
+          if old not in source:
+              raise SystemExit('runtime identity block missing')
+          source = source.replace(old, new)
+          source = source.replace("                shot,\n                prompt: compiled.positive,", "                shot: lockedShot,\n                prompt: compiled.positive,")
+          runtime.write_text(source, encoding='utf-8')
+          PY
+          cat >> tests/director-v4.test.mjs <<'EOF'
+
+          test('fallback action uses the current paragraph instead of leaking an earlier scene', () => {
+              const story = '她在庭院里握着木剑练习剑招。\n\n她收剑后走进厨房。\n\n她在灶台前烹鱼。';
+              const shots = buildFallbackShotsV4(story);
+              const kitchen = shots.find(shot => shot.paragraphIndex === 2);
+              assert.equal(kitchen.stage, 'cooking');
+              assert.match(kitchen.actionTags, /cooking fish/);
+              assert.doesNotMatch(kitchen.actionTags, /sword|hand over hand/);
+          });
+          EOF
+          node --check index-v4.js
+          node --check lib/director-v4.mjs
+          node --test tests/director-v4.test.mjs
+      - name: Commit refinements
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index-v4.js lib/director-v4.mjs tests/director-v4.test.mjs
+          git commit -m "fix: lock identities and isolate each fallback scene"
+          git push origin HEAD:chatgpt/v4-quiet-director
