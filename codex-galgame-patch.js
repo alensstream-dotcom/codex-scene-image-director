@@ -5,6 +5,7 @@ import {
     eventSource,
     event_types,
     getRequestHeaders,
+    is_send_press,
     reloadCurrentChat,
     saveChatConditional,
     saveSettingsDebounced,
@@ -25,11 +26,12 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.4';
+const PATCH_VERSION = '3.0.5';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
 let initialized = false;
+let latestMessagePoll = null;
 
 function log(...values) {
     console.info('[智绘姬 Galgame 导演]', ...values);
@@ -363,6 +365,14 @@ async function processMessage(messageId, messageType = '') {
 }
 
 function scheduleLatestMessageProcessing(reason = 'reload', attempt = 0) {
+    // Some front ends do not emit MESSAGE_RECEIVED reliably. The poll below is
+    // the safety net, but it must never inspect a half-streamed assistant reply.
+    if (is_send_press) {
+        if (reason !== 'poll' && attempt < 80) {
+            setTimeout(() => scheduleLatestMessageProcessing(reason, attempt + 1), 750);
+        }
+        return;
+    }
     const id = chat.length - 1;
     const message = chat[id];
     if (message && !message.is_user) {
@@ -427,6 +437,7 @@ function initialize() {
     if (event_types.MESSAGE_RENDERED) eventSource.on(event_types.MESSAGE_RENDERED, messageId => processMessage(messageId, 'rendered'));
     if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => scheduleLatestMessageProcessing('chat-changed'));
     setTimeout(() => scheduleLatestMessageProcessing('reload'), 1200);
+    latestMessagePoll ||= setInterval(() => scheduleLatestMessageProcessing('poll'), 2000);
     setStatus('Galgame 自动导演已启用。', 'ok');
     log(`v${PATCH_VERSION} 已加载；原生慢速二次 LLM 已关闭。`);
 }
