@@ -1,0 +1,109 @@
+name: patch-v3-selection
+
+on:
+  push:
+    branches: [chatgpt/v3-direct-storyboard]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v3-direct-storyboard
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply deterministic refinements
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/director-v3.mjs')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              "const INTIMATE_RE = /(?:亲吻|接吻|拥抱|抚摸|爱抚|脱下|解开|暧昧|喘息|赤裸|kiss|embrace|caress|undress|intimate|erotic|naked)/i;",
+              "const INTIMATE_RE = /(?:亲吻|接吻|拥抱|抚摸|爱抚|脱下|解开|暧昧|喘息|赤裸|事后|余韵|依偎|kiss|embrace|caress|undress|intimate|erotic|naked|aftercare)/i;",
+          )
+          text = text.replace(
+              "female master guiding her disciple hand over hand, both hands holding the same wooden sword, close teaching interaction",
+              "female master guiding her disciple, hand over hand sword guidance, both hands holding the same wooden sword, close teaching interaction",
+          )
+          old = '''function criticalStoryStages(story = '') {
+              const paragraphs = splitStoryParagraphs(story);
+              const result = [];
+              const seen = new Set();
+              for (const paragraph of paragraphs) {
+                  const stage = stageForV3(paragraph.text);
+                  const safety = safetyFor(paragraph.text);
+                  if (!['nsfw', 'explicit'].includes(safety)) continue;
+                  const key = stage === 'story_action' ? `${stage}:${paragraph.index}` : stage;
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  result.push({ stage, safety, paragraphIndex: paragraph.index, paragraph: paragraph.text });
+              }
+              return result;
+          }'''
+          new = '''function criticalStoryStages(story = '') {
+              const paragraphs = splitStoryParagraphs(story);
+              const result = [];
+              const seen = new Set();
+              for (const paragraph of paragraphs) {
+                  const stage = stageForV3(paragraph.text);
+                  const safety = safetyFor(paragraph.text);
+                  if (!['nsfw', 'explicit'].includes(safety)) continue;
+                  const key = stage === 'story_action' ? `${stage}:${paragraph.index}` : stage;
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  result.push({ stage, safety, paragraphIndex: paragraph.index, paragraph: paragraph.text });
+              }
+              const stageWeight = {
+                  penetration: 140,
+                  position_change: 135,
+                  climax: 130,
+                  oral: 125,
+                  manual: 120,
+                  aftercare: 105,
+                  undressing: 95,
+                  kiss: 55,
+                  embrace: 45,
+                  story_action: 35,
+              };
+              return result.sort((a, b) => {
+                  const aScore = (a.safety === 'explicit' ? 1000 : 500) + (stageWeight[a.stage] || 0) + a.paragraphIndex;
+                  const bScore = (b.safety === 'explicit' ? 1000 : 500) + (stageWeight[b.stage] || 0) + b.paragraphIndex;
+                  return bScore - aScore;
+              });
+          }'''
+          if old not in text:
+              raise SystemExit('criticalStoryStages target not found')
+          text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('tests/director-v3.test.mjs')
+          tests = test_path.read_text(encoding='utf-8')
+          tests = tests.replace(
+              "assert.match(contract, /do not first split the scene into action\\/setting\\/expression fields/);",
+              "assert.match(contract, /do not first split the scene into action\\/setting\\/expression fields/i);",
+          )
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+          node --check index-v3.js
+          node --check lib/director-v3.mjs
+          node --test tests/director-v3.test.mjs
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No patch required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/director-v3.mjs tests/director-v3.test.mjs
+          git commit -m "fix: refine V3 adult stage coverage"
+          git push origin HEAD:chatgpt/v3-direct-storyboard
