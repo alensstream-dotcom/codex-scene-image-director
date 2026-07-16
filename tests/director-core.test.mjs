@@ -116,6 +116,23 @@ test('prompt follows Anima tag order with identity before general action and one
     assert.doesNotMatch(result.positive, /nsfw|explicit/);
 });
 
+test('strips an untagged worldbook planning preamble before storyboarding', () => {
+    const raw = `# 7.5 生图处理：\n- 画面1：3个Prompt\n- 画面2：3个Prompt\n# 8.创作预备：\n- content(含两个版本)\n- 状态栏\n\n站台咖啡店还亮着灯。艾琳端着热咖啡走到他面前，把杯子递进他手里。`;
+    const story = extractNarrativeStory(raw);
+    assert.equal(story.startsWith('站台咖啡店还亮着灯'), true);
+    assert.doesNotMatch(story, /Prompt|创作预备|状态栏/);
+});
+
+test('male interaction prompts strongly distinguish the companion from the heroine', () => {
+    const bible = createBible();
+    mergePacketIntoBible(bible, first);
+    const result = compilePrompt(first, bible);
+    assert.match(result.positive, /one adult man:1\.45/);
+    assert.match(result.positive, /masculine male face:1\.3/);
+    assert.match(result.negative, /2girls/);
+    assert.match(result.negative, /duplicate heroine/);
+});
+
 test('Anima prompt adds weighted English identity and concise English scene tags', () => {
     const packet = {
         ...first,

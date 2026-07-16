@@ -26,7 +26,7 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.6';
+const PATCH_VERSION = '3.0.7';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -110,11 +110,15 @@ function configureBasePlugin() {
     root.comfyui_seed = 1548236793;
     root.sampler_name = 'euler';
     root.scheduler = 'normal';
-    root.negativePrompt_comfyui = [
+    const negativePrompt = [
         'worst quality', 'low quality', 'bad anatomy', 'bad hands', 'extra fingers', 'missing fingers',
-        'duplicated person', 'merged bodies', 'different face', 'wrong hair color', 'wrong eye color',
+        'duplicated person', 'duplicate heroine', 'clone', 'identical twins', 'same face', 'merged bodies',
+        'different face', 'wrong hair color', 'wrong eye color',
         'wrong clothes', 'male only', 'scenery only', 'empty scene', 'text', 'logo', 'signature', 'watermark',
     ].join(', ');
+    root.negativePrompt_comfyui = negativePrompt;
+    // ChatU8 uses UCP_comfyui as the final ComfyUI negative prompt.
+    root.UCP_comfyui = negativePrompt;
     root.workers ||= {};
     root.workers[TURBO_WORKFLOW_NAME] = janimaTurboWorkflow();
     root.workerid = TURBO_WORKFLOW_NAME;
