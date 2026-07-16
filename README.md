@@ -1,19 +1,27 @@
-# JANIMA Galgame 自动CG v2.3
+# JANIMA Galgame 自动CG v2.5
 
-面向手机 SillyTavern + 电脑局域网 ComfyUI 的单插件自动生图系统。不依赖世界书、智绘姬、生图正则，也不依赖酒馆不存在的 `/api/sd/comfy/...` 代理路由。
+面向手机 SillyTavern + 电脑局域网 ComfyUI 的单插件自动生图系统。不依赖世界书、智绘姬、生图正则，也不依赖酒馆后端代理路由。
 
-## 工作方式
+## v2.5 的工作方式
 
-1. 插件在主模型请求中注入不可见的分镜协议，不发起第二次 LLM 请求。
-2. 主模型照常写剧情，在有价值的女性剧情段落后附加不可见分镜数据；模型漏写时才使用本地规则选取 1–2 个镜头。
-3. 回复结束后，插件把分镜转换成 JANIMA/Anima 提示词。
-4. 手机浏览器直接向电脑 ComfyUI 提交原生 `POST /prompt` 请求。
-5. 插件轮询 `GET /history/{prompt_id}`，再用 `/view` 显示生成结果。
-6. 每张图按 `messageId + paragraphIndex` 插入对应消息段落下方；找不到段落时也只会追加到该消息气泡内部，不会跑到聊天底部。
+1. 插件向当前主模型注入不可见分镜协议，不增加第二次 LLM 请求。
+2. 主模型写完完整回复后，从整条回复中挑选 3–5 个最有价值的视觉镜头。
+3. 后半段 NSFW/explicit 阶段优先于前面的普通对话，不会再被前三个普通镜头占满名额。
+4. 每个隐藏分镜必须携带完整英文 Prompt：人物、当前衣着、动作/接触、地点、道具、表情、构图和光线。
+5. 插件同时用本地剧情规则补漏，再按同一剧情段落合并、评分和排序。
+6. 手机浏览器直接调用 ComfyUI 原生 `/prompt`、`/history/{prompt_id}` 和 `/view`。
+7. 图片按 `messageId + paragraphIndex` 插入对应剧情段落下方。
 
-普通回复目标是 1 张主 CG，只有动作、地点、服装或阶段真正变化时才增加到 2–3 张。纯男性、空景、建筑和纯道具不生图。
+## 关键修复
 
-## 安装
+- 不再把当前角色卡外貌强塞给其他剧情人物。
+- 只有选中段落或 cast 明确出现当前角色卡的准确名字时，才允许使用角色卡外貌。
+- 古风/武侠剧情会生成汉服、传统房间、庭院、湖心亭、古琴、木剑、真剑、剑招等对应标签。
+- 古风场景自动排除西式红色军装、披风、肩章、未来盔甲、现代校服和欧式宫殿。
+- 图片数量按剧情在 3–5 张之间变化：普通实质回复 3 张，较长或有场景/服装/亲密变化时 4 张，多阶段成人剧情或超长回复 5 张。
+- 每张图片下方可以展开“查看取材剧情与实际提示词”，直接检查插件选了哪段、提交了什么 Prompt。
+
+## 安装与更新
 
 在 SillyTavern 的“扩展 → 安装扩展”中填写：
 
@@ -21,11 +29,11 @@
 https://github.com/alensstream-dotcom/codex-scene-image-director.git
 ```
 
-刷新酒馆后打开“JANIMA Galgame 自动CG”。
+已安装时，在扩展管理中点击更新并彻底刷新酒馆。扩展设置标题应显示 `v2.5.0`。
 
 ## 手机直连 ComfyUI
 
-插件请求发生在手机浏览器中，因此 `ComfyUI 地址` 必须填写电脑的局域网地址，例如：
+`ComfyUI 地址` 必须填写电脑的局域网地址，例如：
 
 ```text
 http://192.168.1.12:8188
@@ -39,15 +47,13 @@ http://192.168.1.12:8188
 python main.py --listen 0.0.0.0 --port 8188 --enable-cors-header "*"
 ```
 
-然后在插件设置中点击“检测 ComfyUI”。插件依次尝试：
+插件连接测试会依次尝试：
 
 ```text
 /system_stats
 /system/stats
 /object_info
 ```
-
-连接测试成功后即可正常聊天。
 
 ## 默认 JANIMA 工作流
 
@@ -58,22 +64,16 @@ python main.py --listen 0.0.0.0 --port 8188 --enable-cors-header "*"
 - 分辨率：768×1024
 - 8 步、CFG 1、Euler、normal
 
-这些文件名都可以在扩展设置里修改。工作流使用 ComfyUI API JSON 的标准节点链：UNET/CLIP/VAE 加载、LoRA、CLIPTextEncode、EmptyLatentImage、KSampler、VAEDecode、SaveImage。
-
-## 本次修复
-
-- 删除 `/api/sd/comfy/ping` 和 `/api/sd/comfy/generate`。
-- 改用 ComfyUI 原生 `/prompt`、`/history/{prompt_id}`、`/view`。
-- 增加提交、轮询、超时、恢复和明确错误显示。
-- 删除 DOM 纯文本 quote 注入；图片位置改为段落索引。
-- 失败时显示具体错误，可在原位置点击“重绘”。
-- 关闭伪“角色参考图”img2img 链路，避免上一张构图污染当前剧情。
-- 保留同一次主回复中的隐藏分镜协议，不增加额外模型等待。
+模型文件名、固定正面提示词和固定负面提示词均可在扩展设置中修改。
 
 ## 测试
 
+仓库使用 GitHub Actions 自动检查：
+
 ```bash
+node --check index-v2.5.js
+node --check lib/scene-grounding.mjs
 node --test tests/*.test.mjs
 ```
 
-测试覆盖：原生 ComfyUI 提交、Ping 端点回退、历史轮询、图片 URL 构造、剧情段落拆分和段落定位。
+测试覆盖 ComfyUI 直连、历史轮询、段落定位、3–5 张自适应策略、NSFW 优先级，以及与实机录像同类的木剑、真剑、湖心亭和古琴场景。
