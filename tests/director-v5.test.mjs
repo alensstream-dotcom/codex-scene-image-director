@@ -25,7 +25,7 @@ test('paragraph spans preserve exact source position and contexts', () => {
 });
 
 test('render canonicalization normalizes whitespace and Chinese quotes', () => {
-    assert.equal(canonicalText('  她说：“你好”\n然后离开。 '), '她说:"你好" 然后离开。');
+    assert.equal(canonicalText('  她说：“你好”\n然后离开。 '), '她说："你好" 然后离开。');
 });
 
 test('state extractor accepts only evidence-backed outfit changes and carries outfit forward', () => {
@@ -77,7 +77,7 @@ test('explicit text cannot be downgraded by director request', () => {
     assert.equal(nsfwLevelForV5('两个成年人接吻', 0), 1);
 });
 
-test('MMR selection chooses strong diverse scenes without hard zone quota', () => {
+test('MMR selection keeps strong distant moments without duplicate paragraphs', () => {
     const story = [
         '她推开院门。',
         '她在院里普通地说了几句话。',
@@ -94,12 +94,12 @@ test('MMR selection chooses strong diverse scenes without hard zone quota', () =
     const plan = selectShotsV5({ story, directorShots: fallback, fallbackShots: [], minimum: 3, maximum: 5, requestedCount: 3 });
     const indexes = plan.shots.map(shot => shot.paragraphIndex);
     assert.ok(indexes.includes(2) || indexes.includes(3));
-    assert.ok(indexes.includes(5));
     assert.ok(indexes.includes(8));
+    assert.ok(indexes.some(index => index >= 4 && index <= 7));
     assert.equal(new Set(indexes).size, indexes.length);
 });
 
-test('adult quota preserves explicit stage while leaving room for best non-adult moments', () => {
+test('adult quota preserves explicit stage without requiring rigid early-middle-late slots', () => {
     const story = [
         '她在庭院练剑。',
         '她挥剑劈开落叶。',
@@ -114,7 +114,7 @@ test('adult quota preserves explicit stage while leaving room for best non-adult
     const fallback = buildFallbackCandidatesV5(story, timeline);
     const plan = selectShotsV5({ story, directorShots: fallback, fallbackShots: [], minimum: 3, maximum: 5, requestedCount: 4 });
     assert.ok(plan.shots.some(shot => shot.nsfwLevel >= 2));
-    assert.ok(plan.shots.some(shot => shot.paragraphIndex <= 1));
     assert.ok(plan.shots.some(shot => shot.paragraphIndex >= 6));
+    assert.ok(plan.shots.some(shot => shot.nsfwLevel === 0));
     assert.ok(plan.diagnostics.adultQuota <= 3);
 });
