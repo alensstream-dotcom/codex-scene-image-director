@@ -25,7 +25,7 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.2';
+const PATCH_VERSION = '3.0.3';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -289,6 +289,7 @@ async function processMessage(messageId, messageType = '') {
 
     const job = (async () => {
         const started = performance.now();
+        document.documentElement.dataset.codexGalgameDirector = `processing:${id}`;
         const bible = bibleForCurrentChat();
         const lastUser = [...chat.slice(0, id)].reverse().find(item => item?.is_user)?.mes || '';
         let parsed = { characters: [], scenes: [] };
@@ -332,12 +333,24 @@ async function processMessage(messageId, messageType = '') {
         const elapsed = ((performance.now() - started) / 1000).toFixed(1);
         setStatus(`已用 ${source} 在 ${elapsed}s 内原位插入 ${insertion.inserted} 个镜头；人物与服装已自动记忆。`, 'ok');
         log(`楼层 ${id}: ${insertion.inserted} 个原位镜头，${elapsed}s，来源=${source}`);
+        document.documentElement.dataset.codexGalgameDirector = `complete:${id}:${insertion.inserted}`;
     })().catch(error => {
+        document.documentElement.dataset.codexGalgameDirector = `error:${id}:${String(error?.message || error).slice(0, 120)}`;
         warn('处理失败：', error);
         setStatus(`处理失败：${error?.message || error}`, 'error');
     }).finally(() => active.delete(id));
     active.set(id, job);
     await job;
+}
+
+function scheduleLatestMessageProcessing(reason = 'reload', attempt = 0) {
+    const id = chat.length - 1;
+    const message = chat[id];
+    if (message && !message.is_user) {
+        processMessage(id, reason);
+        return;
+    }
+    if (attempt < 30) setTimeout(() => scheduleLatestMessageProcessing(reason, attempt + 1), 750);
 }
 
 function bindDirectorUi() {
@@ -392,7 +405,9 @@ function initialize() {
     observer.observe(document.documentElement, { childList: true, subtree: true });
     eventSource.on(event_types.MESSAGE_RECEIVED, (messageId, messageType) => processMessage(messageId, messageType));
     if (event_types.MESSAGE_SWIPED) eventSource.on(event_types.MESSAGE_SWIPED, messageId => processMessage(messageId, 'swipe'));
-    setTimeout(() => processMessage(chat.length - 1, 'reload'), 1800);
+    if (event_types.MESSAGE_RENDERED) eventSource.on(event_types.MESSAGE_RENDERED, messageId => processMessage(messageId, 'rendered'));
+    if (event_types.CHAT_CHANGED) eventSource.on(event_types.CHAT_CHANGED, () => scheduleLatestMessageProcessing('chat-changed'));
+    setTimeout(() => scheduleLatestMessageProcessing('reload'), 1200);
     setStatus('Galgame 自动导演已启用。', 'ok');
     log(`v${PATCH_VERSION} 已加载；原生慢速二次 LLM 已关闭。`);
 }
