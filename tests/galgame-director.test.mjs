@@ -138,8 +138,17 @@ test('normal cafe story keeps the three cinematic beats instead of static transi
         makeScene('艾琳环住他的腰，抬头主动吻住他的嘴唇', 'kissing', 'Eileen embraces and kisses him'),
         makeScene('她松开手后退一步，转身沿着站台慢慢离开', 'parting', 'Eileen walks away'),
     ];
-    const selected = completeScenes({ story: cafeStory, parsedScenes: scenes, bible: createBible(), settings: { minimumShots: 3, maximumShots: 6 } });
+    const cafeBible = createBible();
+    cafeBible['艾琳'] = { id: '艾琳', prompt_name: 'Eileen', sex: 'female', age: 'adult', dna: 'adult woman, long silver hair, purple eyes', outfit: 'dark navy uniform' };
+    const selected = completeScenes({ story: cafeStory, parsedScenes: scenes, bible: cafeBible, settings: { minimumShots: 3, maximumShots: 6 } });
     assert.deepEqual(selected.map(scene => scene.packet.stage), ['serving coffee', 'wiping milk foam', 'kissing']);
+
+    const incompleteModelPick = scenes.filter(scene => ['wiping milk foam', 'kissing', 'parting'].includes(scene.packet.stage));
+    const repaired = completeScenes({ story: cafeStory, parsedScenes: incompleteModelPick, bible: cafeBible, settings: { minimumShots: 3, maximumShots: 6 } });
+    assert.equal(repaired.some(scene => scene.packet.stage === 'parting'), false);
+    assert.equal(repaired.some(scene => /coffee/i.test(scene.packet.stage) || /咖啡/.test(scene.packet.quote)), true, JSON.stringify(repaired.map(scene => ({ stage: scene.packet.stage, quote: scene.packet.quote }))));
+    assert.equal(repaired.some(scene => /wiping|milk foam/i.test(scene.packet.stage)), true);
+    assert.equal(repaired.some(scene => /kiss/i.test(scene.packet.stage)), true);
 });
 
 test('local completion supplies valid scenes when the model times out', () => {
