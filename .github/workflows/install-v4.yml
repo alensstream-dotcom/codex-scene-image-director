@@ -28,12 +28,6 @@ jobs:
           data['css'] = 'style.css?v=4.0.0'
           data['version'] = '4.0.0'
           Path('manifest.json').write_text(json.dumps(data, ensure_ascii=False, indent=4) + '\n', encoding='utf-8')
-
-          workflow = Path('.github/workflows/test.yml').read_text(encoding='utf-8')
-          workflow = workflow.replace('node --check index-v3.1.js', 'node --check index-v4.js')
-          if 'node --check lib/director-v4.mjs' not in workflow:
-              workflow = workflow.replace('node --check lib/director-v3.mjs', 'node --check lib/director-v4.mjs\n          node --check lib/director-v3.mjs')
-          Path('.github/workflows/test.yml').write_text(workflow, encoding='utf-8')
           PY
           cat > tests/director-v4.test.mjs <<'EOF'
           import test from 'node:test';
@@ -104,13 +98,11 @@ jobs:
           if not old.startswith('# JANIMA Galgame 自动CG v4'):
               p.write_text(header + old, encoding='utf-8')
           PY
-          rm -rf .bootstrap
-          rm -f .github/workflows/install-v4.yml
       - name: Commit V4 files
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add lib/director-v4.mjs index-v4.js manifest.json tests/director-v4.test.mjs README.md
           git commit -m "feat: replace inline storyboard with isolated V4 director"
           git push origin HEAD:chatgpt/v4-quiet-director
