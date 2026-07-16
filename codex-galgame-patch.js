@@ -26,7 +26,7 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.5';
+const PATCH_VERSION = '3.0.6';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -79,7 +79,7 @@ function janimaTurboWorkflow() {
         8: { inputs: { text: '%prompt%', clip: ['7', 1] }, class_type: 'CLIPTextEncode', _meta: { title: 'Positive prompt' } },
         9: { inputs: { text: '%negative_prompt%', clip: ['7', 1] }, class_type: 'CLIPTextEncode', _meta: { title: 'Negative prompt' } },
         10: { inputs: { width: '%width%', height: '%height%', batch_size: 1 }, class_type: 'EmptyLatentImage', _meta: { title: '768 x 1024' } },
-        11: { inputs: { seed: '%seed%', steps: '%steps%', cfg: '%cfg%', sampler_name: '%sampler_name%', scheduler: '%scheduler%', denoise: 1, model: ['7', 0], positive: ['8', 0], negative: ['9', 0], latent_image: ['10', 0] }, class_type: 'KSampler', _meta: { title: 'Turbo 8 steps' } },
+        11: { inputs: { seed: '%seed%', steps: '%steps%', cfg: '%cfg_scale%', sampler_name: '%sampler_name%', scheduler: '%scheduler%', denoise: 1, model: ['7', 0], positive: ['8', 0], negative: ['9', 0], latent_image: ['10', 0] }, class_type: 'KSampler', _meta: { title: 'Turbo 8 steps' } },
         12: { inputs: { samples: ['11', 0], vae: ['6', 0] }, class_type: 'VAEDecode', _meta: { title: 'Decode' } },
         13: { inputs: { filename_prefix: 'ST_JANIMA_GALGAME', images: ['12', 0] }, class_type: 'SaveImage', _meta: { title: 'Save image' } },
     });
@@ -254,11 +254,41 @@ function messageAlreadyProcessed(message, key) {
     return message?.extra?.codexGalgameDirector?.key === key;
 }
 
-function autoClickRenderedButtons(messageId, attempt = 0) {
+function buttonPrompt(button) {
+    return String(
+        button?.dataset?.link
+        || button?.dataset?.imageTag
+        || button?.dataset?.prompt
+        || button?.getAttribute?.('data-link')
+        || button?.getAttribute?.('data-image-tag')
+        || '',
+    );
+}
+
+function isDirectorImagePrompt(value) {
+    const compact = String(value || '').toLowerCase().replace(/\s+/g, '');
+    return compact.includes('originalstoryaction:') && compact.includes('consistentcharacterdesign');
+}
+
+function sanitizeRenderedButtons(messageId) {
     const root = document.querySelector(`.mes[mesid="${messageId}"]`);
     const buttons = root?.querySelectorAll('.st-chatu8-image-button, .image-tag-button') || [];
+    buttons.forEach(button => {
+        const directorButton = isDirectorImagePrompt(buttonPrompt(button));
+        button.dataset.codexDirectorButton = String(directorButton);
+        if (!directorButton) {
+            button.hidden = true;
+            button.setAttribute('aria-hidden', 'true');
+            button.style.setProperty('display', 'none', 'important');
+        }
+    });
+    return [...buttons].filter(button => button.dataset.codexDirectorButton === 'true');
+}
+
+function autoClickRenderedButtons(messageId, attempt = 0) {
+    const buttons = sanitizeRenderedButtons(messageId);
     let pending = 0;
-    buttons.forEach((button, index) => {
+    buttons.forEach((button, directorIndex) => {
         const accepted = button.disabled
             || button.dataset.loading === 'true'
             || /loading|generating/i.test(button.className)
@@ -274,7 +304,7 @@ function autoClickRenderedButtons(messageId, attempt = 0) {
                     button.dataset.codexAutoAccepted = 'true';
                 }
             }, 300);
-        }, index * 100);
+        }, directorIndex * 100);
     });
     if (pending && attempt < 6) {
         setTimeout(() => autoClickRenderedButtons(messageId, attempt + 1), 1800 + attempt * 350);
@@ -376,6 +406,7 @@ function scheduleLatestMessageProcessing(reason = 'reload', attempt = 0) {
     const id = chat.length - 1;
     const message = chat[id];
     if (message && !message.is_user) {
+        sanitizeRenderedButtons(id);
         processMessage(id, reason);
         return;
     }
