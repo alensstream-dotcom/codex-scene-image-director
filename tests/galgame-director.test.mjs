@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     buildDirectorMessages,
     cleanStory,
+    composeDirectedMessage,
     completeScenes,
     desiredShotCount,
     insertInlinePrompts,
@@ -128,4 +129,41 @@ test('story cleaner removes mobile status/database payload but preserves narrati
     const cleaned = cleanStory(raw);
     assert.match(cleaned, /樱松开书包带/);
     assert.doesNotMatch(cleaned, /database|时间：18:00/);
+});
+
+test('hidden model drafts and legacy worldbook prompts are replaced by clean inline director prompts', () => {
+    const raw = [
+        '<!-- 输出开始 -->',
+        '# 1.基础要求确认：this hidden planning must never become story',
+        '<content>',
+        '<!-- version 1: discarded draft -->',
+        'Adult heroine Eileen steadies him with both hands on his shoulders.',
+        '',
+        'Eileen blocks the attacker and cuts the blade in half.',
+        '',
+        'Eileen rests on his shoulder and kisses him with tears.',
+        '</content>',
+        '<status>time: midnight\nplace: train</status>',
+        '[legacy woman prompt, silver hair, purple eyes, wet uniform, train, rain, standing, duplicate, scenery]',
+        '<!-- 输出结束 -->',
+    ].join('\n');
+    const storyOnly = cleanStory(raw);
+    assert.doesNotMatch(storyOnly, /hidden planning|discarded draft|legacy woman prompt|status|version\s*\d/i);
+    assert.match(storyOnly, /^Adult heroine Eileen/);
+    const scenes = [
+        { anchor: 'Adult heroine Eileen steadies him with both hands on his shoulders.', position: 0, prompt: 'director prompt one' },
+        { anchor: 'Eileen blocks the attacker and cuts the blade in half.', position: 70, prompt: 'director prompt two' },
+        { anchor: 'Eileen rests on his shoulder and kisses him with tears.', position: 130, prompt: 'director prompt three' },
+    ];
+    const composed = composeDirectedMessage(raw, storyOnly, scenes);
+    assert.equal(composed.inserted, 3);
+    assert.match(composed.message, /director prompt one/);
+    assert.match(composed.message, /director prompt three/);
+    assert.match(composed.message, /<status>time: midnight/);
+    assert.doesNotMatch(composed.message, /hidden planning|legacy woman prompt/);
+});
+
+test('a feminine pronoun is enough to keep female-led storyboarding active', () => {
+    const pronounStory = '她在雨夜列车里奔跑，随后抓住同伴并挡下袭击。'.repeat(8);
+    assert.ok(desiredShotCount(pronounStory, { minimumShots: 3, maximumShots: 6 }) > 0);
 });

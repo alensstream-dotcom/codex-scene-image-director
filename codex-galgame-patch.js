@@ -14,9 +14,9 @@ import {
     DIRECTOR_SCHEMA,
     buildDirectorMessages,
     cleanStory,
+    composeDirectedMessage,
     completeScenes,
     desiredShotCount,
-    insertInlinePrompts,
     mergeCharactersIntoBible,
     normalizeDirectorSettings,
     parseDirectorResponse,
@@ -25,7 +25,7 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.1';
+const PATCH_VERSION = '3.0.2';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -249,8 +249,7 @@ function uniqueList(values) {
 }
 
 function messageAlreadyProcessed(message, key) {
-    return message?.extra?.codexGalgameDirector?.key === key
-        || /\[[^\]\n]{80,}\]/.test(String(message?.mes || ''));
+    return message?.extra?.codexGalgameDirector?.key === key;
 }
 
 async function refreshMessage(messageId) {
@@ -316,7 +315,7 @@ async function processMessage(messageId, messageType = '') {
             return;
         }
 
-        const insertion = insertInlinePrompts(raw, scenes);
+        const insertion = composeDirectedMessage(raw, story, scenes);
         if (!insertion.inserted) throw new Error('选中的原文锚点无法原位插入');
         message.mes = insertion.message;
         message.extra ||= {};
@@ -393,6 +392,7 @@ function initialize() {
     observer.observe(document.documentElement, { childList: true, subtree: true });
     eventSource.on(event_types.MESSAGE_RECEIVED, (messageId, messageType) => processMessage(messageId, messageType));
     if (event_types.MESSAGE_SWIPED) eventSource.on(event_types.MESSAGE_SWIPED, messageId => processMessage(messageId, 'swipe'));
+    setTimeout(() => processMessage(chat.length - 1, 'reload'), 1800);
     setStatus('Galgame 自动导演已启用。', 'ok');
     log(`v${PATCH_VERSION} 已加载；原生慢速二次 LLM 已关闭。`);
 }
