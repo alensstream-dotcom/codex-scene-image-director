@@ -1,0 +1,62 @@
+name: patch-v4
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v4-quiet-director
+      - name: Patch V4 logic
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/director-v4.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = '''export function nsfwLevelForText(text = '', requested = 0) {
+              const number = Number(requested);
+              if (Number.isFinite(number) && number >= 0 && number <= 3) {
+                  if (number > 0) return Math.round(number);
+              }
+              if (EXPLICIT_RE.test(text)) return 3;
+              if (INTIMATE_RE.test(text)) return 1;
+              return 0;
+          }'''
+          new = '''export function nsfwLevelForText(text = '', requested = 0) {
+              const requestedLevel = Number.isFinite(Number(requested))
+                  ? Math.max(0, Math.min(3, Math.round(Number(requested))))
+                  : 0;
+              const detectedLevel = EXPLICIT_RE.test(text) ? 3 : INTIMATE_RE.test(text) ? 1 : 0;
+              return Math.max(requestedLevel, detectedLevel);
+          }'''
+          if old not in text:
+              raise SystemExit('nsfw function target missing')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+
+          test_path = Path('tests/director-v4.test.mjs')
+          tests = test_path.read_text(encoding='utf-8')
+          old_story = "const story = Array.from({ length: 9 }, (_, i) => `她在第${i + 1}段做出清晰动作。`).join('\\n\\n');"
+          new_story = "const story = ['她推开院门走进庭院。', '她握住木剑摆好起手式。', '师父站到她身后纠正握剑姿势。', '她重新挥剑劈开落叶。', '两人走进厨房开始烹鱼。', '她端起鱼汤递给师父。', '傍晚她们离开院子。', '两人沿着竹林小路奔向湖边。', '她在湖心亭回头招手。'].join('\\n\\n');"
+          if old_story not in tests:
+              raise SystemExit('coverage test target missing')
+          test_path.write_text(tests.replace(old_story, new_story), encoding='utf-8')
+          PY
+          node --check lib/director-v4.mjs
+          node --test tests/director-v4.test.mjs
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/director-v4.mjs tests/director-v4.test.mjs
+          git commit -m "fix: prevent explicit downgrade and verify distributed scenes"
+          git push origin HEAD:chatgpt/v4-quiet-director
