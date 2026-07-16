@@ -255,7 +255,8 @@ function uniqueList(values) {
 }
 
 function messageAlreadyProcessed(message, key) {
-    return message?.extra?.codexGalgameDirector?.key === key;
+    const director = message?.extra?.codexGalgameDirector;
+    return director?.key === key && director?.version === PATCH_VERSION;
 }
 
 function buttonPrompt(button) {
