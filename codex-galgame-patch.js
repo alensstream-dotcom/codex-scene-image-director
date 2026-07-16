@@ -25,7 +25,7 @@ import {
 import { createBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.0.3';
+const PATCH_VERSION = '3.0.4';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -252,6 +252,33 @@ function messageAlreadyProcessed(message, key) {
     return message?.extra?.codexGalgameDirector?.key === key;
 }
 
+function autoClickRenderedButtons(messageId, attempt = 0) {
+    const root = document.querySelector(`.mes[mesid="${messageId}"]`);
+    const buttons = root?.querySelectorAll('.st-chatu8-image-button, .image-tag-button') || [];
+    let pending = 0;
+    buttons.forEach((button, index) => {
+        const accepted = button.disabled
+            || button.dataset.loading === 'true'
+            || /loading|generating/i.test(button.className)
+            || button.dataset.codexAutoAccepted === 'true';
+        if (accepted) return;
+        pending++;
+        button.dataset.codexAutoClickAttempt = String(attempt + 1);
+        setTimeout(() => {
+            if (!button.isConnected || button.disabled || button.dataset.loading === 'true') return;
+            button.click();
+            setTimeout(() => {
+                if (button.disabled || button.dataset.loading === 'true' || /loading|generating/i.test(button.className)) {
+                    button.dataset.codexAutoAccepted = 'true';
+                }
+            }, 300);
+        }, index * 100);
+    });
+    if (pending && attempt < 6) {
+        setTimeout(() => autoClickRenderedButtons(messageId, attempt + 1), 1800 + attempt * 350);
+    }
+}
+
 async function refreshMessage(messageId) {
     const scroll = document.getElementById('chat');
     const top = scroll?.scrollTop;
@@ -261,15 +288,7 @@ async function refreshMessage(messageId) {
         window.dispatchEvent(new CustomEvent('st-chatu8-config-updated'));
     }, 50);
     if (directorState().autoGenerate !== false) {
-        setTimeout(() => {
-            const root = document.querySelector(`.mes[mesid="${messageId}"]`);
-            const buttons = root?.querySelectorAll('.st-chatu8-image-button:not([data-loading="true"]):not([disabled]), .image-tag-button:not([data-loading="true"]):not([disabled])') || [];
-            buttons.forEach((button, index) => {
-                if (button.dataset.codexAutoClicked === 'true') return;
-                button.dataset.codexAutoClicked = 'true';
-                setTimeout(() => button.click(), index * 80);
-            });
-        }, 1200);
+        setTimeout(() => autoClickRenderedButtons(messageId), 1200);
     }
 }
 
