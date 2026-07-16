@@ -15,6 +15,7 @@ jobs:
           node-version: '22'
       - name: Check runtime syntax
         run: |
+          node --check index-v4.1.js
           node --check index-v4.js
           node --check lib/director-v4.mjs
           node --check lib/comfy-direct.mjs
