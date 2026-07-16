@@ -116,6 +116,32 @@ test('normal female reply targets three shots, fast plot can scale, and requests
     assert.ok(messages[1].content.length < 12000);
 });
 
+test('normal cafe story keeps the three cinematic beats instead of static transitions', () => {
+    const cafeStory = [
+        '艾琳走进站台咖啡店，湿制服在地板上滴下一串水印。',
+        '艾琳端着热咖啡走来，把杯子递进他的手里，杯口冒着白色热气。',
+        '她坐到他身边，用拇指擦掉他唇边的奶泡，两个人的脸靠得很近。',
+        '晨光铺满站台，艾琳环住他的腰，抬头主动吻住他的嘴唇。',
+        '她松开手后退一步，转身沿着站台慢慢离开。',
+    ].join('\n\n');
+    const makeScene = (anchor, stage, action) => ({
+        anchor,
+        position: cafeStory.indexOf(anchor),
+        end: cafeStory.indexOf(anchor) + anchor.length,
+        prompt: action,
+        packet: { stage, action, quote: anchor, cast: [{ id: '艾琳' }] },
+    });
+    const scenes = [
+        makeScene('艾琳走进站台咖啡店', 'entering cafe', 'Eileen enters the cafe'),
+        makeScene('艾琳端着热咖啡走来，把杯子递进他的手里', 'serving coffee', 'Eileen hands him a steaming coffee cup'),
+        makeScene('她坐到他身边，用拇指擦掉他唇边的奶泡', 'wiping milk foam', 'Eileen wipes milk foam from his lip'),
+        makeScene('艾琳环住他的腰，抬头主动吻住他的嘴唇', 'kissing', 'Eileen embraces and kisses him'),
+        makeScene('她松开手后退一步，转身沿着站台慢慢离开', 'parting', 'Eileen walks away'),
+    ];
+    const selected = completeScenes({ story: cafeStory, parsedScenes: scenes, bible: createBible(), settings: { minimumShots: 3, maximumShots: 6 } });
+    assert.deepEqual(selected.map(scene => scene.packet.stage), ['serving coffee', 'wiping milk foam', 'kissing']);
+});
+
 test('local completion supplies valid scenes when the model times out', () => {
     const bible = createBible();
     bible['樱'] = { id: '樱', prompt_name: 'Sakura', dna: 'adult woman, sakura-pink twin tails, purple eyes', outfit: 'pink cardigan, school uniform' };
