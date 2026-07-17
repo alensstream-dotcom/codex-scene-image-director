@@ -108,6 +108,8 @@ test('prompt follows Anima natural-language order with identity before action an
     mergePacketIntoBible(bible, first);
     const result = compilePrompt(first, bible);
     assert.match(result.positive, /^highly detailed anime visual novel illustration/);
+    assert.match(result.positive, /codex galgame director grounded prompt/);
+    assert.ok(result.positive.length <= 1800);
     assert.ok(result.positive.indexOf('1girl') < result.positive.indexOf('character 1'));
     assert.ok(result.positive.indexOf('character 1') < result.positive.indexOf('original story action'));
     assert.match(result.positive, /long blue hair/);

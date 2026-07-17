@@ -26,7 +26,7 @@ import {
 import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.2.3';
+const PATCH_VERSION = '3.2.4';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -283,7 +283,8 @@ function buttonPrompt(button) {
 
 function isDirectorImagePrompt(value) {
     const compact = String(value || '').toLowerCase().replace(/\s+/g, '');
-    return compact.includes('originalstoryaction:') && compact.includes('consistentcharacterdesign');
+    return compact.includes('codexgalgamedirectorgroundedprompt')
+        && compact.includes('originalstoryaction:');
 }
 
 function sanitizeRenderedButtons(messageId) {
@@ -292,7 +293,11 @@ function sanitizeRenderedButtons(messageId) {
     buttons.forEach(button => {
         const directorButton = isDirectorImagePrompt(buttonPrompt(button));
         button.dataset.codexDirectorButton = String(directorButton);
-        if (!directorButton) {
+        if (directorButton) {
+            button.hidden = false;
+            button.removeAttribute('aria-hidden');
+            button.style.removeProperty('display');
+        } else {
             button.hidden = true;
             button.setAttribute('aria-hidden', 'true');
             button.style.setProperty('display', 'none', 'important');
