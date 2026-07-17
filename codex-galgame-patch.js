@@ -26,7 +26,7 @@ import {
 import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.2.2';
+const PATCH_VERSION = '3.2.3';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -88,6 +88,12 @@ function janimaTurboWorkflow() {
 function configureBasePlugin() {
     const root = baseSettings();
     const state = directorState();
+    // v3.2.0's larger JSON contract regularly hit the old 9 s wall. Migrate
+    // only the old defaults; user-customized limits remain untouched.
+    if (state.patchVersion !== PATCH_VERSION) {
+        if (!state.timeoutMs || state.timeoutMs === 9000) state.timeoutMs = 12000;
+        if (!state.maxTokens || state.maxTokens === 1800) state.maxTokens = 1200;
+    }
     root.scriptEnabled = true;
     root.mode = 'comfyui';
     root.client = 'browser';
