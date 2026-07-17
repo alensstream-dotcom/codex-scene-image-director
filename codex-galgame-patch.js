@@ -26,7 +26,7 @@ import {
 import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.2.4';
+const PATCH_VERSION = '3.3.0';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();

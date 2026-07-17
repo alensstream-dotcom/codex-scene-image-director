@@ -398,3 +398,83 @@ test('a feminine pronoun is enough to keep female-led storyboarding active', () 
     const pronounStory = '她在雨夜列车里奔跑，随后抓住同伴并挡下袭击。'.repeat(8);
     assert.ok(desiredShotCount(pronounStory, { minimumShots: 3, maximumShots: 6 }) > 0);
 });
+
+test('breakfast argument keeps decisive reactions and rejects the doorway transition', () => {
+    const breakfastStory = [
+        '清晨，18岁成年少女神原樱穿着整齐校服坐在家中客厅的餐桌旁，小口喝着牛奶。',
+        '晴人指着墙上的时钟说：“我今天要去公司开会，之后还要送你参加学校入学式。”',
+        '神原樱像被踩了尾巴，砰地一声把牛奶杯重重放在桌上，脸颊气得通红，大声抗议。',
+        '秋山蓝抬起头放下书，目光在暴怒的樱、焦急的晴人和沉默的同伴之间来回移动。',
+        '最终神原樱不情不愿地妥协，重重哼了一声，一把抓起书包，从椅子上跳下。',
+        '她磨蹭着走到玄关，低头换上小皮鞋。',
+        '两人一前一后打开家门，清晨的阳光涌入，有些刺眼。',
+    ].join('\n\n');
+    const bible = createBible();
+    bible['神原樱'] = {
+        id: '神原樱', prompt_name: 'Sakura', sex: 'female', age: 'adult',
+        dna: '18 years old adult woman, long black hair, blue eyes',
+        outfit: 'school uniform, navy plaid skirt, red ribbon tie',
+    };
+    const makeScene = (anchor, stage, action, people = '1girl, 1boy') => ({
+        anchor,
+        female_names: ['神原樱'],
+        stage,
+        action_key: action,
+        people,
+        prompt: action,
+        safety: 'safe',
+    });
+    const candidates = [
+        makeScene(
+            '神原樱像被踩了尾巴，砰地一声把牛奶杯重重放在桌上，脸颊气得通红，大声抗议。',
+            'milk_cup_slam',
+            'Sakura slams the milk glass onto the breakfast table while visibly furious.',
+        ),
+        makeScene(
+            '秋山蓝抬起头放下书，目光在暴怒的樱、焦急的晴人和沉默的同伴之间来回移动。',
+            'group_tension',
+            'A tense group tableau with visibly conflicting furious, anxious, and calm reactions.',
+            '2girls, 2boys',
+        ),
+        makeScene(
+            '最终神原樱不情不愿地妥协，重重哼了一声，一把抓起书包，从椅子上跳下。',
+            'reluctant_agreement',
+            'Sakura snatches her school bag and jumps down from the chair with an angry expression.',
+        ),
+        makeScene(
+            '两人一前一后打开家门，清晨的阳光涌入，有些刺眼。',
+            'doorway_departure',
+            'They open the front door and sunlight streams in.',
+        ),
+    ];
+
+    const parsed = parseDirectorResponse({
+        characters: [{
+            name: '神原樱', english_name: 'Sakura', sex: 'female', age: 'adult',
+            identity: bible['神原樱'].dna, outfit: bible['神原樱'].outfit,
+        }],
+        scenes: candidates,
+    }, { story: breakfastStory, bible });
+    const selected = completeScenes({
+        story: breakfastStory,
+        parsedScenes: parsed.scenes,
+        bible,
+        settings: { minimumShots: 3, maximumShots: 3 },
+    });
+
+    assert.equal(selected.length, 3, JSON.stringify(selected.map(scene => scene.packet.stage)));
+    assert.deepEqual(
+        selected.map(scene => scene.packet.stage),
+        ['milk_cup_slam', 'group_tension', 'jumping'],
+        JSON.stringify(selected.map(scene => ({ stage: scene.packet.stage, anchor: scene.anchor, action: scene.packet.action }))),
+    );
+    assert.equal(selected.some(scene => scene.packet.stage === 'doorway_departure'), false);
+    assert.equal(
+        selected.every(scene => /客厅|餐桌/.test(scene.packet.setting)),
+        true,
+        JSON.stringify(selected.map(scene => ({ stage: scene.packet.stage, setting: scene.packet.setting }))),
+    );
+    assert.equal(selected.some(scene => /公司|学校/.test(scene.packet.setting)), false);
+    assert.match(selected[0].prompt, /PRIMARY VISUAL SUBJECT/i);
+    assert.match(selected[0].prompt, /slams the milk glass/i);
+});
