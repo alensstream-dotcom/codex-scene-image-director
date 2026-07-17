@@ -26,7 +26,7 @@ import {
 import { createBible, mergePacketIntoBible } from './lib/director-core.mjs';
 
 const EXTENSION_NAME = 'st-chatu8';
-const PATCH_VERSION = '3.2.1';
+const PATCH_VERSION = '3.2.2';
 const AUTO_PRESET = 'Galgame 自动导演';
 const TURBO_WORKFLOW_NAME = 'JANIMA Turbo 8步';
 const active = new Map();
@@ -257,9 +257,11 @@ function uniqueList(values) {
     return [...new Set(values.filter(Boolean))];
 }
 
-function messageAlreadyProcessed(message, key) {
+function messageAlreadyProcessed(message, key, apiConfigured) {
     const director = message?.extra?.codexGalgameDirector;
-    return director?.key === key && director?.version === PATCH_VERSION;
+    return director?.key === key
+        && director?.version === PATCH_VERSION
+        && director?.apiConfigured === Boolean(apiConfigured);
 }
 
 function buttonPrompt(button) {
@@ -315,7 +317,7 @@ async function processMessage(messageId, messageType = '') {
     const wanted = desiredShotCount(story, config);
     if (!wanted) return;
     const key = processingKey(raw);
-    if (messageAlreadyProcessed(message, key) || active.has(id)) return;
+    if (messageAlreadyProcessed(message, key, config.apiKey) || active.has(id)) return;
 
     const job = (async () => {
         const started = performance.now();
@@ -342,7 +344,13 @@ async function processMessage(messageId, messageType = '') {
         const scenes = completeScenes({ story, parsedScenes: parsed.scenes, bible, settings: config });
         if (!scenes.length) {
             message.extra ||= {};
-            message.extra.codexGalgameDirector = { key, status: 'no-valid-female-scene', source };
+            message.extra.codexGalgameDirector = {
+                key,
+                status: 'no-valid-female-scene',
+                source,
+                apiConfigured: Boolean(config.apiKey),
+                version: PATCH_VERSION,
+            };
             saveSettingsDebounced();
             await saveChatConditional();
             setStatus('本轮没有可安全生成的女性剧情镜头。', 'idle');
@@ -363,6 +371,7 @@ async function processMessage(messageId, messageType = '') {
             key: processingKey(insertion.message),
             source,
             fallbackReason,
+            apiConfigured: Boolean(config.apiKey),
             scenes: scenes.map(scene => ({
                 anchor: scene.anchor,
                 stage: scene.packet.stage,
