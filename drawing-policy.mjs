@@ -8,9 +8,8 @@ export function ageGroup(age){
 }
 export function isYouthAppearance(traits,tags){return traits.age_group?.[0]==='child'||tags.includes('teenage');}
 
-// 补充：保护特征导出（避免调用方报 SyntaxError）
+// 补充：保护特征导出
 export function protectStoryTraits(traits = {}) {
-    // 若原逻辑有具体过滤要求，可在此处扩展；基础兜底直接返回原对象
     return traits;
 }
 
@@ -18,6 +17,21 @@ export function protectStoryTraits(traits = {}) {
 export const NATIVE_SFW_FIELDS=Object.freeze(['upperBodySFW','fullBodySFW','upperBodySFWBack','fullBodySFWBack']);
 export const NATIVE_NSFW_FIELDS=Object.freeze(['upperBodyNSFW','fullBodyNSFW','upperBodyNSFWBack','fullBodyNSFWBack']);
 export function emptyNativeBodyFields(){return Object.fromEntries([...NATIVE_SFW_FIELDS,...NATIVE_NSFW_FIELDS].map(key=>[key,'']));}
+
+// 补充：根据参数计算出 8 个字段名之一（兼容对象传参与多参数传参，兜底 upperBodySFW）
+export function nativeBodyField(arg1 = {}, nsfw = false, back = false) {
+    if (typeof arg1 === 'object' && arg1 !== null) {
+        const full = Boolean(arg1.full || arg1.isFull || arg1.fullBody || arg1.view === 'fullBody');
+        const isNsfw = Boolean(arg1.nsfw || arg1.isNsfw);
+        const isBack = Boolean(arg1.back || arg1.isBack);
+        return `${full ? 'fullBody' : 'upperBody'}${isNsfw ? 'NSFW' : 'SFW'}${isBack ? 'Back' : ''}`;
+    }
+    const full = Boolean(arg1 === true || String(arg1).toLowerCase().includes('full'));
+    return `${full ? 'fullBody' : 'upperBody'}${nsfw ? 'NSFW' : 'SFW'}${back ? 'Back' : ''}`;
+}
+
+// 补充：防止后续调用方导入 CATALOG_PREVIEW_POLICY 再次报错
+export const CATALOG_PREVIEW_POLICY = {};
 
 // B3. 离线 Python 构建器读取预览池定义的可选命令行入口。
 // 只有直接运行 node drawing-policy.mjs --export-catalog-policy 时才输出 JSON。
