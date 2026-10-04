@@ -125,7 +125,7 @@
         "names": [],
         "tags": []
       },
-      "comment": "【保护·自动】普通场景与环境回退",
+      "comment": "【内容边界·自动】插图范围与环境替代",
       "constant": true,
       "content": "只描绘非露骨场景；不适合人物插图的段落可用环境镜头。不要为插图改写剧情。",
       "cooldown": 0,
@@ -133,7 +133,7 @@
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 3,
+      "displayIndex": 0,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -148,7 +148,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1997,
+      "order": 4000,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -167,7 +167,8 @@
         "animadex_drawing": {
           "id": "auto.safety",
           "scope": "automatic",
-          "kind": "safety"
+          "kind": "safety",
+          "group": "content_boundaries"
         }
       }
     },
@@ -567,7 +568,7 @@
         "names": [],
         "tags": []
       },
-      "comment": "【必要·选段】特征字段、枚举与年龄保护",
+      "comment": "【内容边界·选段】年龄保护与特征提取格式",
       "constant": true,
       "content": "required/preferred facets: hair_color, hair_length, hair_style, eye_color, bust, height, age_group, skin, build, species, ears. height: short|average|tall, only when explicitly stated. age_group: child|young|mature; exact stated age stays in age. Child and teen illustrations must remain neutral, fully clothed and omit breast-size tags. Values must be arrays. Colors: black, white, blonde, red, brown, blue, green, purple, pink, grey, aqua. Hair length: short, medium, long, very long. Only explicitly stated appearance is required; inferred rendering preferences are preferred. Missing facts are omitted. Personality is not a canonical character database fact.",
       "cooldown": 0,
@@ -575,7 +576,7 @@
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 14,
+      "displayIndex": 1,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -590,7 +591,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1986,
+      "order": 3999,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -609,7 +610,8 @@
         "animadex_drawing": {
           "id": "manual.facets",
           "scope": "manual",
-          "kind": "safety"
+          "kind": "safety",
+          "group": "content_boundaries"
         }
       }
     },
@@ -734,7 +736,7 @@
       },
       "comment": "【必要·选段】互动格式、视角与动作归属",
       "constant": true,
-      "content": "For an adult non-explicit two-person gesture, return interactions:[{\"kind\":\"hug|holding_hands|arm_in_arm|dance|hand_on_shoulder|helping_up\",\"initiator\":\"exact person's name\",\"recipient\":\"the other exact person's name\",\"view\":\"auto|pov|third_person\",\"pov_from\":\"optional named supporting participant\",\"partner_visibility\":\"hands|arms|torso|full\"}]. Otherwise return interactions:[]. Keep BOTH named gesture participants in people even when the supporting participant is visible only as hands, arms or a clothed torso, or seen from a first-person camera. Do not transfer that person's gesture to the woman herself. Each person's action_prompt must describe THEIR OWN action toward the OTHER participant, with its target explicit. The first-person supporting participant's face can be outside the frame. Inference must stay within the exact selected non-explicit gesture; never invent contact or expand into sexual behavior. These interaction kinds are a closed list of non-explicit gestures; do not substitute them for a target outside the non-explicit scope.",
+      "content": "For a supported two-person gesture, return interactions:[{\"kind\":\"hug|holding_hands|arm_in_arm|dance|hand_on_shoulder|helping_up\",\"initiator\":\"exact person's name\",\"recipient\":\"the other exact person's name\",\"view\":\"auto|pov|third_person\",\"pov_from\":\"optional named supporting participant\",\"partner_visibility\":\"hands|arms|torso|full\"}]. Otherwise return interactions:[]. Keep BOTH named gesture participants in people even when the supporting participant is visible only as hands, arms or a clothed torso, or seen from a first-person camera. Do not transfer that person's gesture to the woman herself. Each person's action_prompt must describe THEIR OWN action toward the OTHER participant, with its target explicit. The first-person supporting participant's face can be outside the frame.",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
@@ -842,15 +844,15 @@
         "names": [],
         "tags": []
       },
-      "comment": "【保护·选段】普通场景与环境回退",
+      "comment": "【内容边界·选段】插图范围与双人互动边界",
       "constant": true,
-      "content": "Generate non-explicit story illustrations only. Do not output graphic sexual acts, sexual arousal, genital details or fetish framing. If the target cannot be illustrated within that scope, return environment_only:true, people:[] and a neutral environment composition; do not convert it to a sexual portrait. In normal character scenes return environment_only:false.",
+      "content": "Generate non-explicit story illustrations only. Do not output graphic sexual acts, sexual arousal, genital details or fetish framing. If the target cannot be illustrated within that scope, return environment_only:true, people:[] and a neutral environment composition; do not convert it to a sexual portrait. In normal character scenes return environment_only:false. Adult non-explicit gestures are the scope of the supported two-person interactions. Inference must stay within the exact selected non-explicit gesture; never invent contact or expand into sexual behavior. These interaction kinds are a closed list of non-explicit gestures; do not substitute them for a target outside the non-explicit scope.",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 23,
+      "displayIndex": 2,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -865,7 +867,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1977,
+      "order": 3998,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -884,7 +886,8 @@
         "animadex_drawing": {
           "id": "manual.safety",
           "scope": "manual",
-          "kind": "safety"
+          "kind": "safety",
+          "group": "content_boundaries"
         }
       }
     },

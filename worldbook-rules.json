@@ -180,7 +180,7 @@
         "names": [],
         "tags": []
       },
-      "comment": "【保护·自动】普通场景与环境回退",
+      "comment": "【内容边界·自动】插图范围与环境替代",
       "constant": true,
       "content": "只描绘非露骨场景；不适合人物插图的段落可用环境镜头。不要为插图改写剧情。",
       "cooldown": 0,
@@ -188,7 +188,7 @@
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 3,
+      "displayIndex": 0,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -203,7 +203,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1997,
+      "order": 4000,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -222,7 +222,8 @@
         "animadex_drawing": {
           "id": "auto.safety",
           "scope": "automatic",
-          "kind": "safety"
+          "kind": "safety",
+          "group": "content_boundaries"
         }
       }
     },
@@ -569,7 +570,7 @@
       },
       "comment": "【可替换·选段】任务定位",
       "constant": true,
-      "content": "You are a visual casting assistant for non-explicit fictional story illustrations.",
+      "content": "You are a visual casting assistant for fictional story illustrations.",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
@@ -787,7 +788,7 @@
         "names": [],
         "tags": []
       },
-      "comment": "【必要·选段】特征字段、枚举与年龄保护",
+      "comment": "【内容边界·选段】年龄保护与特征提取格式",
       "constant": true,
       "content": "required/preferred facets: hair_color, hair_length, hair_style, eye_color, bust, height, age_group, skin, build, species, ears. height: short|average|tall, only when explicitly stated. age_group: child|young|mature; exact stated age stays in age. Child and teen illustrations must remain neutral, fully clothed and omit breast-size tags. Values must be arrays. Colors: black, white, blonde, red, brown, blue, green, purple, pink, grey, aqua. Hair length: short, medium, long, very long. Only explicitly stated appearance is required; inferred rendering preferences are preferred. Missing facts are omitted. Personality is not a canonical character database fact.",
       "cooldown": 0,
@@ -795,7 +796,7 @@
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 14,
+      "displayIndex": 1,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -810,7 +811,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1986,
+      "order": 3999,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -829,7 +830,8 @@
         "animadex_drawing": {
           "id": "manual.facets",
           "scope": "manual",
-          "kind": "safety"
+          "kind": "safety",
+          "group": "content_boundaries"
         }
       }
     },
@@ -1009,7 +1011,7 @@
       },
       "comment": "【可替换·选段】性别字段与主体偏好",
       "constant": true,
-      "content": "Rendering preference: center women as the main visual subjects. Omit men from ordinary dialogue, work, or walking shots; include a supporting man only when required for a non-explicit interaction such as holding hands, hugging or dancing. Do not invent women for a male-only scene; use an environment shot. For new necessary male supporting actors return plain narrative appearance, not franchise identities.",
+      "content": "Rendering preference: center women as the main visual subjects. Omit men from ordinary dialogue, work, or walking shots; include a supporting man only when required for a supported interaction such as holding hands, hugging or dancing. Do not invent women for a male-only scene; use an environment shot. For new necessary male supporting actors return plain narrative appearance, not franchise identities.",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
@@ -1119,7 +1121,7 @@
       },
       "comment": "【必要·选段】互动格式、视角与动作归属",
       "constant": true,
-      "content": "For an adult non-explicit two-person gesture, return interactions:[{\"kind\":\"hug|holding_hands|arm_in_arm|dance|hand_on_shoulder|helping_up\",\"initiator\":\"exact person's name\",\"recipient\":\"the other exact person's name\",\"view\":\"auto|pov|third_person\",\"pov_from\":\"optional named supporting participant\",\"partner_visibility\":\"hands|arms|torso|full\"}]. Otherwise return interactions:[]. Keep BOTH named gesture participants in people even when the supporting participant is visible only as hands, arms or a clothed torso, or seen from a first-person camera. Do not transfer that person's gesture to the woman herself. Each person's action_prompt must describe THEIR OWN action toward the OTHER participant, with its target explicit. The first-person supporting participant's face can be outside the frame. Inference must stay within the exact selected non-explicit gesture; never invent contact or expand into sexual behavior. These interaction kinds are a closed list of non-explicit gestures; do not substitute them for a target outside the non-explicit scope.",
+      "content": "For a supported two-person gesture, return interactions:[{\"kind\":\"hug|holding_hands|arm_in_arm|dance|hand_on_shoulder|helping_up\",\"initiator\":\"exact person's name\",\"recipient\":\"the other exact person's name\",\"view\":\"auto|pov|third_person\",\"pov_from\":\"optional named supporting participant\",\"partner_visibility\":\"hands|arms|torso|full\"}]. Otherwise return interactions:[]. Keep BOTH named gesture participants in people even when the supporting participant is visible only as hands, arms or a clothed torso, or seen from a first-person camera. Do not transfer that person's gesture to the woman herself. Each person's action_prompt must describe THEIR OWN action toward the OTHER participant, with its target explicit. The first-person supporting participant's face can be outside the frame.",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
@@ -1282,15 +1284,15 @@
         "names": [],
         "tags": []
       },
-      "comment": "【保护·选段】普通场景与环境回退",
+      "comment": "【内容边界·选段】插图范围与双人互动边界",
       "constant": true,
-      "content": "Generate non-explicit story illustrations only. Do not output graphic sexual acts, sexual arousal, genital details or fetish framing. If the target cannot be illustrated within that scope, return environment_only:true, people:[] and a neutral environment composition; do not convert it to a sexual portrait. In normal character scenes return environment_only:false.",
+      "content": "Generate non-explicit story illustrations only. Do not output graphic sexual acts, sexual arousal, genital details or fetish framing. If the target cannot be illustrated within that scope, return environment_only:true, people:[] and a neutral environment composition; do not convert it to a sexual portrait. In normal character scenes return environment_only:false. Adult non-explicit gestures are the scope of the supported two-person interactions. Inference must stay within the exact selected non-explicit gesture; never invent contact or expand into sexual behavior. These interaction kinds are a closed list of non-explicit gestures; do not substitute them for a target outside the non-explicit scope.",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 23,
+      "displayIndex": 2,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -1305,7 +1307,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1977,
+      "order": 3998,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -1324,7 +1326,8 @@
         "animadex_drawing": {
           "id": "manual.safety",
           "scope": "manual",
-          "kind": "safety"
+          "kind": "safety",
+          "group": "content_boundaries"
         }
       }
     },
@@ -1502,15 +1505,15 @@
         "names": [],
         "tags": []
       },
-      "comment": "【说明·不发送】世界书与插件代码的边界",
+      "comment": "【内容边界说明·不发送】本地与后端执行保护",
       "constant": true,
-      "content": "本书条目是自动回复、选段整理及图片动作重绘的模型提示规则。已确认人物和衣装是运行时数据，自动条目里的 {{ad_confirmed_people}}、{{ad_current_outfits}} 在发送时替换，不写回文件。镜头字段、互动枚举、场景有效性、固定外貌绑定、年龄保护、工作流和图片缓存仍由插件代码执行；修改模型指导不等于更改这些执行约束。选段 API 的连接测试只检测接口，不使用绘图规则。旧智绘姬的原生模板不是本独立插件的请求入口。",
+      "content": "本书条目是自动回复、选段整理及图片动作重绘的模型提示规则。已确认人物和衣装是运行时数据，自动条目里的 {{ad_confirmed_people}}、{{ad_current_outfits}} 在发送时替换，不写回文件。镜头字段、互动枚举、场景有效性、固定外貌绑定、年龄保护、工作流和图片缓存仍由插件代码执行；修改模型指导不等于更改这些执行约束。选段 API 的连接测试只检测接口，不使用绘图规则。旧智绘姬的原生模板不是本独立插件的请求入口。\n执行保护清单（仅说明，不发送模型）：本地人物年龄判断会抑制未成年人的胸型标签；固定人物外貌与衣装绑定、动作精简及交互枚举仍由代码校验；编译图片提示词仍保留 SFW 标记，原生身份/衣装字段中的 SFW 是数据结构字段。HTML、路径与工作流校验不属于可替换绘图指导。ComfyUI 及模型自带的安全机制由后端负责，本插件不关闭这些机制。修改、导入或停用本书不会关闭上述执行保护。旧智绘姬兼容配置中的提示词不是本插件自动/选段请求入口。",
       "cooldown": 0,
       "delay": 0,
       "delayUntilRecursion": false,
       "depth": 0,
       "disable": false,
-      "displayIndex": 27,
+      "displayIndex": 3,
       "excludeRecursion": false,
       "group": "",
       "groupOverride": false,
@@ -1525,7 +1528,7 @@
       "matchPersonaDescription": false,
       "matchScenario": false,
       "matchWholeWords": null,
-      "order": 1973,
+      "order": 3997,
       "outletName": "",
       "position": 0,
       "preventRecursion": false,
@@ -1544,7 +1547,8 @@
         "animadex_drawing": {
           "id": "engine.reference",
           "scope": "reference",
-          "kind": "reference"
+          "kind": "reference",
+          "group": "content_boundaries"
         }
       }
     }

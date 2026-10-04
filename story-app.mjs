@@ -3,6 +3,7 @@ import {readControl,prepareCapture,prepareLegacyFrame,priorOutfitsFor,compileFra
 import {applyOutfit,outfitText,legacyOutfit} from './wardrobe-state.mjs';
 import {scenePrompt,sourceHash,locateExcerpt,proseOf,proseRange,validateConfirmedPrompt,compileScene,restoredSceneMessages} from './scene-planner.mjs';
 import {prepareManualScene,requestManualFlash} from './manual-scene.mjs';
+import {normalizeManualResult} from './manual-result.mjs';
 import {createManualView} from './manual-view.mjs';
 import {installSelectionMenu} from './selection-menu.mjs';
 import {createPictureView,chooseReference} from './picture-view.mjs';
@@ -170,7 +171,7 @@ export function createStoryApp({getContext,getTools,persist,setting,notify,diagn
                 for(const actor of original.actors){const current=Object.values(story.cast.people).find(p=>p.person===actor.person);if(sameAppearance(current,actor.person_snapshot)){actor.person_snapshot.reference_enabled=usesImageReference(current);if(usesImageReference(current)&&current.reference_ids?.length)actor.person_snapshot.reference_ids=clone(current.reference_ids);}}
                 picture?.close();const epoch=++turn;manual=createManualView({onPrepare:async(correction='')=>{
                 check(expected);abort=new AbortController();const current_people=original.actors.map(a=>({person:a.person,appearance:a.person_snapshot.chosen_appearance_tags,face_description:a.person_snapshot.face_description||'',current_outfit:outfitText(a.outfit),outfit:a.outfit}));
-                const value=await requestManualFlash({scene:(original.excerpt||original.summary).slice(0,6000),story:'',current_people,wardrobe_schema:2,correction},{fetcher,requester:manualRequester,signal:abort.signal});check(expected);if(epoch!==turn)throw new Error('窗口已关闭。');
+                const rawValue=await requestManualFlash({scene:(original.excerpt||original.summary).slice(0,6000),story:'',current_people,wardrobe_schema:2,correction},{fetcher,requester:manualRequester,signal:abort.signal});check(expected);if(epoch!==turn)throw new Error('窗口已关闭。');const value=normalizeManualResult(rawValue,{excerpt:original.excerpt||original.summary});
                 if(!value.scene_composition||!Array.isArray(value.people))throw new Error('本图人物抽取不完整，原 tags 已保留。');value.people=value.people.filter(p=>original.actors.some(a=>a.person===p.person));if(value.people.length!==original.actors.length)throw new Error('本图人物抽取不完整，原 tags 已保留。');const changed=clone(original);changed.composition=value.scene_composition;changed.summary=value.summary;if(value.interactions?.length)changed.interactions=value.interactions;
                 for(const a of changed.actors){const update=value.people.find(p=>p.person===a.person);if(!update)throw new Error('重新整理不能替换本图人物。');a.action_prompt=update.action_prompt;a.outfit=applyOutfit(a.outfit,update.outfit);a.wardrobe={description:outfitText(a.outfit),tags:[]};}
                 delete changed.confirmed_prompt;const focused=focusFrame(changed,{interactionView,partnerVisibility});focused.confirmed_prompt=compileScene(focused,frameState(focused));applyArtistPreference(focused);return {scene:focused};

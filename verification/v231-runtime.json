@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "checks": [
+    "installed runtime is v2.3.1",
+    "actual WebView adapts known fields and identifies genuinely missing fields",
+    "Chinese guide copy exists with 29 entries and the preference selected",
+    "original rules and automatic injection are byte-equivalent",
+    "live protection entries are grouped at the top and export without dropping stages",
+    "necessary protocols stay enabled while old manual guides stay preserved",
+    "edited Chinese guidance reaches the selected-stage prompt exactly once",
+    "real role-card passage 1 produces tags and follows the edited Chinese rule",
+    "real role-card passage 2 produces tags and follows the edited Chinese rule",
+    "real role-card passage 3 produces tags and follows the edited Chinese rule",
+    "temporary test guidance is removed from the final active copy",
+    "API configurations and chat data remain unchanged",
+    "no browser errors",
+    "final active Chinese copy is saved on disk with the tested guide and grouped protections"
+  ],
+  "real_tauri": true,
+  "real_passage_dialog_requests": 3,
+  "new_chat_messages": 0,
+  "new_images": 0,
+  "physical_phone_tested": false,
+  "pageErrors": [],
+  "presentation_recovered": true
+}

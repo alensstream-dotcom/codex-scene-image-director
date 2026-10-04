@@ -25,7 +25,7 @@ test('confirmed manual tags are authoritative across later cast changes',async()
     assert.throws(()=>validateConfirmedPrompt('Scene Composition: room; Character 1 Prompt: sitting'));
 });
 test('malformed or unrelated manual response stops before local identity resolution',async()=>{
-    for(const data of [{...response,people:[{person:'Unknown'}]},{...response,summary:''},{...response,people:[]},{...response,people:[response.people[0],response.people[0]]}]){
+    for(const data of [{...response,people:[{person:'Unknown'}]},{...response,scene_composition:''},{...response,people:[]},{...response,people:[response.people[0],response.people[0]]}]){
         await assert.rejects(prepareManualScene(snapshot(),{chat:[{mes:raw}],state:state(),resolver:{resolvePrompt(){assert.fail('should not resolve');}},fetcher:async()=>new Response(JSON.stringify(data))}));
     }
 });

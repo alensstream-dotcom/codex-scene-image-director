@@ -6,6 +6,7 @@ import {chooseStyle} from './automatic-scene.mjs';
 import {findPerson,narrativeGender} from './character-tools.mjs';
 import {focusFrame} from './render-policy.mjs';
 import {reconcileStoryAppearance,narrativeAppearance,storyContext} from './narrative-appearance.mjs';
+import {normalizeManualResult} from './manual-result.mjs';
 
 export async function requestManualFlash(payload,{fetcher=fetch,signal,requester}={}){
     if(requester)return requester(payload,{signal});
@@ -26,13 +27,13 @@ export async function prepareManualScene(snapshot,{chat,state,resolver,fetcher=f
     const before=contextAt(chat,messageId,selected.start).slice(-2200);
     const current_people=Object.values(state.people || {}).filter(p=>p.scope===state.scope&&(before+'\n'+excerpt).includes(p.person)).slice(0,8)
         .map(p=>({person:p.person,appearance:p.chosen_appearance_tags,face_description:p.face_description || '',current_outfit:wardrobeText(p.wardrobe),...(wardrobeSchema===2&&priorOutfits[p.person]?{outfit:priorOutfits[p.person]}:{})}));
-    const data=await requestManualFlash({scene:excerpt,story:before,current_people,...(wardrobeSchema===2?{wardrobe_schema:2,correction}:{})},{fetcher,requester,signal});signal?.throwIfAborted();
-    if(typeof data.summary!=='string'||!data.summary.trim()||typeof data.scene_composition!=='string'||!data.scene_composition.trim()||!Array.isArray(data.people)||data.people.length>4)throw new Error('Flash 返回的场景或标签不完整，请重新生成。');
+    const value=await requestManualFlash({scene:excerpt,story:before,current_people,...(wardrobeSchema===2?{wardrobe_schema:2,correction}:{})},{fetcher,requester,signal});signal?.throwIfAborted();
+    const data=normalizeManualResult(value,{excerpt});
     const allowedText=before+'\n'+excerpt,depicted=[],seen=new Set();
     const appearanceContext=storyContext(chat,messageId,selected.end,proseOf);
     for(const actor of data.people){
         if(!actor||typeof actor.person!=='string'||!actor.person.trim()||actor.person.length>120||!allowedText.includes(actor.person)||['__proto__','constructor','prototype'].includes(actor.person)||/[;{}@$<>]/.test(actor.person))throw new Error('无法确认画面人物，请把姓名或此前一句一起选中。');
-        if(seen.has(actor.person))throw new Error('Flash 重复返回了同一人物，请重新生成。');
+        if(seen.has(actor.person))throw new Error('选段接口重复返回了同一人物，请重新生成。');
         seen.add(actor.person);depicted.push(actor);
         const gender=narrativeGender(actor.person,allowedText);if(gender)actor.required={...actor.required,gender:[gender]};
     }

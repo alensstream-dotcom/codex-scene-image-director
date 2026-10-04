@@ -1,6 +1,14 @@
 export const ruleMeta=entry=>entry?.extensions?.animadex_drawing||{};
 export const ruleScope=entry=>['automatic','manual','both','reference'].includes(ruleMeta(entry).scope)?ruleMeta(entry).scope:'both';
 export const ruleKind=entry=>ruleMeta(entry).kind||'guide';
+export const isProtectionEntry=entry=>ruleKind(entry)==='safety'||ruleMeta(entry).id==='engine.reference'||ruleMeta(entry).group==='content_boundaries';
+export function orderedWorldbookEntries(data){
+    const rank=e=>ruleKind(e)==='safety'?0:isProtectionEntry(e)?1:2;
+    return Object.entries(data?.entries||{}).sort(([ka,a],[kb,b])=>rank(a)-rank(b)||Number(b.order??100)-Number(a.order??100)||String(ka).localeCompare(String(kb)));
+}
+export function protectionWorldbook(data){
+    const copy=structuredClone(data);copy.entries=Object.fromEntries(orderedWorldbookEntries(copy).filter(([,e])=>isProtectionEntry(e)));return copy;
+}
 export function scopedEntries(data,scope,{contextOnly=false}={}){
     return Object.entries(data?.entries||{}).filter(([,e])=>!e.disable&&e.content?.trim()&&['both',scope].includes(ruleScope(e))&&(!contextOnly||ruleKind(e)==='context')).sort(([ka,a],[kb,b])=>Number(b.order??100)-Number(a.order??100)||String(ka).localeCompare(String(kb)));
 }
@@ -27,8 +35,14 @@ export function upgradedRuleBook(oldData,defaults){
 }
 /** Append an external book without overwriting current entries or editing its original file. */
 export function appendWorldbookEntries(target,incoming,{scope='both',name='外部世界书'}={}){
-    if(!['automatic','manual','both'].includes(scope))throw new Error('追加条目适用阶段无效。');
+    if(!['automatic','manual','both','preserve'].includes(scope))throw new Error('追加条目适用阶段无效。');
     const copy=structuredClone(target),source=structuredClone(incoming),map={},allocate=nextId(copy);
-    for(const[id,e]of Object.entries(source.entries)){const next=allocate();extensions(e).animadex_drawing={...ruleMeta(e),scope,source_book:name,source_id:id,source_uid:e.uid};e.uid=next;e.displayIndex=next;copy.entries[String(next)]=e;map[id]=String(next);}
+    for(const[id,e]of Object.entries(source.entries)){const next=allocate(),stage=scope==='preserve'?ruleScope(e):scope;extensions(e).animadex_drawing={...ruleMeta(e),scope:stage,source_book:name,source_id:id,source_uid:e.uid};e.uid=next;e.displayIndex=next;copy.entries[String(next)]=e;map[id]=String(next);}
     const {entries,...sourceMetadata}=incoming;extensions(copy).animadex_drawing??={};copy.extensions.animadex_drawing.imports??=[];copy.extensions.animadex_drawing.imports.push({name,metadata:structuredClone(sourceMetadata),entry_ids:map});return copy;
+}
+/** Keep executable protocols and automatic rules; preserve replaced guides as disabled entries. */
+export function manualGuideWorldbook(data,guide){
+    const copy=structuredClone(data);
+    for(const entry of Object.values(copy.entries))if(ruleScope(entry)==='manual'&&ruleKind(entry)==='guide')entry.disable=true;
+    return appendWorldbookEntries(copy,guide,{scope:'manual',name:'选段中文调整模板'});
 }
