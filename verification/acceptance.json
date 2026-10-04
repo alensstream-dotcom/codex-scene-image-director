@@ -128,5 +128,9 @@
   },
   "public_node_tests": 346,
   "runtime_source_public_installed_package_hashes_match": true,
-  "runtime_files_verified": 87
+  "runtime_files_verified": 87,
+  "policy_upper_section_independent": true,
+  "policy_upper_section_node_and_browser_passed": true,
+  "policy_execution_code_unchanged_except_order_and_comments": true,
+  "policy_targeted_tests_passed": 7
 }
