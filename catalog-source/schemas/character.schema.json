@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Organized Animadex character v1",
+  "type": "object",
+  "required": ["id", "name", "series", "trigger", "source_tags", "tags", "sections", "facets", "appearance_tags", "outfit_tags", "accessory_tags", "archetypes", "personality", "quality"],
+  "properties": {
+    "id": {"type": "string"}, "name": {"type": "string"},
+    "series": {"type": ["string", "null"]}, "trigger": {"type": "string"},
+    "source_tags": {"$ref": "#/$defs/tags"}, "tags": {"$ref": "#/$defs/tags"},
+    "appearance_tags": {"$ref": "#/$defs/tags"}, "outfit_tags": {"$ref": "#/$defs/tags"},
+    "accessory_tags": {"$ref": "#/$defs/tags"},
+    "sections": {"type": "object", "additionalProperties": {"$ref": "#/$defs/tags"}},
+    "facets": {"type": "object", "additionalProperties": {"$ref": "#/$defs/tags"}},
+    "archetypes": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "evidence_tags", "rule"]}},
+    "personality": {"type": "object", "required": ["status", "traits"], "properties": {"status": {"type": "string"}, "traits": {"type": "array"}}},
+    "quality": {"type": "object", "required": ["eligible_default", "flags", "alternatives", "tier"], "properties": {"eligible_default": {"type": "boolean"}, "flags": {"$ref": "#/$defs/tags"}, "alternatives": {"type": "array"}, "tier": {"enum": ["missing", "limited", "usable"]}}}
+  },
+  "$defs": {"tags": {"type": "array", "items": {"type": "string"}}}
+}

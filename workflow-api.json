@@ -1,0 +1,360 @@
+{
+  "4": {
+    "inputs": {
+      "text": "%negative_prompt%",
+      "clip": [
+        "30",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "5": {
+    "inputs": {
+      "seed": "%seed%",
+      "steps": [
+        "30",
+        2
+      ],
+      "cfg": [
+        "30",
+        3
+      ],
+      "sampler_name": [
+        "30",
+        4
+      ],
+      "scheduler": [
+        "30",
+        5
+      ],
+      "denoise": 1,
+      "model": [
+        "29",
+        0
+      ],
+      "positive": [
+        "22",
+        1
+      ],
+      "negative": [
+        "4",
+        0
+      ],
+      "latent_image": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "AnimadexDrawingSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "6": {
+    "inputs": {
+      "width": [
+        "26",
+        0
+      ],
+      "height": [
+        "26",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "空Latent图像"
+    }
+  },
+  "7": {
+    "inputs": {
+      "samples": [
+        "5",
+        0
+      ],
+      "vae": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "Zhihuiji_Animadex/Main",
+      "images": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "12": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": [
+        "26",
+        2
+      ],
+      "height": [
+        "26",
+        3
+      ],
+      "crop": "disabled",
+      "image": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "缩放图像"
+    }
+  },
+  "15": {
+    "inputs": {
+      "unet_name": "SilvermoonMix-Anima29B-Evolved-V2.3.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNET加载器"
+    }
+  },
+  "16": {
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP加载器"
+    }
+  },
+  "17": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE加载器"
+    }
+  },
+  "19": {
+    "inputs": {
+      "lora_name": "anima-turbo-lora-v0.2.safetensors",
+      "strength_model": 0,
+      "strength_clip": 0,
+      "model": [
+        "15",
+        0
+      ],
+      "clip": [
+        "16",
+        0
+      ],
+      "strict_model_check": true,
+      "strict_lora_check": true
+    },
+    "class_type": "Anima2BTo29BLoraLoader",
+    "_meta": {
+      "title": "Turbo LoRA"
+    }
+  },
+  "20": {
+    "class_type": "AnimadexAdaptiveLoraLoader",
+    "inputs": {
+      "model": [
+        "23",
+        0
+      ],
+      "lora_name": [
+        "25",
+        1
+      ],
+      "strength_model": [
+        "25",
+        2
+      ],
+      "strict_model_check": true,
+      "strict_lora_check": true
+    }
+  },
+  "21": {
+    "class_type": "AnimadexAdaptiveLoraLoader",
+    "inputs": {
+      "model": [
+        "20",
+        0
+      ],
+      "lora_name": [
+        "27",
+        1
+      ],
+      "strength_model": [
+        "27",
+        2
+      ],
+      "strict_model_check": true,
+      "strict_lora_check": true
+    }
+  },
+  "22": {
+    "inputs": {
+      "positive": [
+        "27",
+        0
+      ],
+      "auto_random": false,
+      "lora_str": "",
+      "temp_str": "",
+      "temp_lora_str": "",
+      "random_template": "",
+      "opt_clip": [
+        "30",
+        1
+      ],
+      "opt_model": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "WeiLinPromptUI",
+    "_meta": {
+      "title": "WeiLin 全能提示词编辑器"
+    }
+  },
+  "23": {
+    "class_type": "AnimadexAdaptiveLoraLoader",
+    "inputs": {
+      "model": [
+        "22",
+        3
+      ],
+      "lora_name": "CodexAnima\\anima-highres-aesthetic-boost.safetensors",
+      "strength_model": 0,
+      "strict_model_check": true,
+      "strict_lora_check": true,
+      "reference_files": [
+        "28",
+        1
+      ],
+      "skip_on_reference": true
+    }
+  },
+  "25": {
+    "class_type": "AnimadexStyleRouter",
+    "inputs": {
+      "prompt": [
+        "28",
+        0
+      ],
+      "default_style": "Painterly"
+    }
+  },
+  "26": {
+    "class_type": "AnimadexIdentityCanvas",
+    "inputs": {
+      "requested_width": "%width%",
+      "requested_height": "%height%",
+      "reference_files": [
+        "28",
+        1
+      ]
+    }
+  },
+  "27": {
+    "class_type": "AnimadexCharacterRouter",
+    "inputs": {
+      "prompt": [
+        "25",
+        0
+      ]
+    }
+  },
+  "28": {
+    "class_type": "AnimadexReferenceManifest",
+    "inputs": {
+      "prompt": "%prompt%"
+    }
+  },
+  "29": {
+    "class_type": "AnimadexIdentityReference",
+    "inputs": {
+      "model": [
+        "21",
+        0
+      ],
+      "vae": [
+        "17",
+        0
+      ],
+      "reference_files": [
+        "28",
+        1
+      ],
+      "width": [
+        "26",
+        0
+      ],
+      "height": [
+        "26",
+        1
+      ],
+      "strength": 1.3,
+      "end_percent": 1
+    }
+  },
+  "30": {
+    "class_type": "AnimadexDrawingModel",
+    "inputs": {
+      "reference_files": [
+        "28",
+        1
+      ],
+      "main_model": [
+        "19",
+        0
+      ],
+      "main_clip": [
+        "19",
+        1
+      ],
+      "reference_model": [
+        "31",
+        0
+      ],
+      "reference_clip": [
+        "16",
+        0
+      ],
+      "main_steps": 24,
+      "main_cfg": 3,
+      "main_sampler": "euler_ancestral",
+      "main_scheduler": "simple",
+      "reference_steps": 24,
+      "reference_cfg": 3,
+      "reference_sampler": "euler_ancestral",
+      "reference_scheduler": "simple"
+    }
+  },
+  "31": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "SilvermoonMix-Anima29B-Evolved-V2.3.safetensors",
+      "weight_dtype": "default"
+    }
+  }
+}

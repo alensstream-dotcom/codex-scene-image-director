@@ -1,0 +1,18 @@
+const el=(tag,text,attrs={})=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;};
+export const safePreview=value=>typeof value==='string'&&(/^(data:image\/|blob:)/.test(value)||/^https:\/\/blobs\.animadex\.net\//.test(value));
+export function showPrototypePreview(record){
+    const d=el('dialog',undefined,{class:'ad-manual ad-prototype-preview','aria-label':'完整角色预览'}),header=el('header'),body=el('div',undefined,{class:'ad-manual-body'}),close=el('button','关闭预览',{type:'button'});close.onclick=()=>d.close();header.append(el('h2',record.name||record.id),close);
+    const src=record.preview_full||record.preview||record.preview_url;if(safePreview(src)){const img=el('img',undefined,{src,alt:(record.name||record.id)+' 的完整形象',referrerpolicy:'no-referrer'});img.onerror=()=>{if(src!==record.preview&&safePreview(record.preview)){img.src=record.preview;img.onerror=null;}else img.replaceWith(el('p','原图暂时无法加载，请稍后重试。'));};body.append(img);}else body.append(el('p','这个角色没有源预览图。'));
+    body.append(el('p',record.series||''),el('p','预览展示源库形象。实际试画会保留当前剧情的衣装与动作。',{class:'ad-library-muted'}),el('pre',Array.isArray(record.tags)?record.tags.join(', '):String(record.tags||'')));d.append(header,body);document.body.append(d);d.onclose=()=>d.remove();d.showModal();return d;
+}
+export function prototypeCard(record,{onSelect,onDelete,onRestore,selected=false}={}){
+    const wrapper=el('article',undefined,{class:'ad-prototype-card'}),card=el('button',undefined,{type:'button',class:'ad-candidate-card','aria-pressed':String(selected)});card.onclick=()=>onSelect?.(record);
+    if(safePreview(record.preview)){const img=el('img',undefined,{src:record.preview,alt:(record.name||record.id)+' 的完整缩略图',loading:'lazy',referrerpolicy:'no-referrer'});img.onerror=()=>img.replaceWith(el('span','预览暂不可用',{class:'ad-candidate-thumb-unavailable'}));card.append(img);}else card.append(el('span','暂无预览',{class:'ad-candidate-thumb-unavailable'}));
+    card.append(el('strong',record.name||record.id),el('span',record.series||'',{class:'ad-candidate-series'}));if(record.popularity!==undefined)card.append(el('span','源库热度 '+Number(record.popularity).toLocaleString('zh-CN'),{class:'ad-candidate-series'}));card.append(el('small',Array.isArray(record.tags)?record.tags.join(', '):String(record.tags||''),{class:'ad-candidate-tags'}));if(record.relaxed)card.append(el('span','部分偏好不同',{class:'ad-candidate-difference'}));
+    if(record.current)card.append(el('span','当前固定形象',{class:'ad-candidate-current'}));
+    if(record.source_ambiguity)card.append(el('span','源库含其它发色、瞳色或发长版本，请结合预览确认。',{class:'ad-candidate-difference'}));
+    if(record.evidence){const matched=record.evidence.filter(e=>e.matched),different=record.evidence.filter(e=>!e.matched);card.append(el('span','匹配 '+matched.map(e=>e.label).join(' · '),{class:'ad-candidate-match'}));if(different.length)card.append(el('span','差异 '+different.map(e=>e.label+'：'+(e.actual.length?e.actual.join('/'):'源库未标注')).join('；'),{class:'ad-candidate-difference'}));}
+    const actions=el('div',undefined,{class:'ad-prototype-actions'}),zoom=el('button','放大看完整图',{type:'button'});zoom.onclick=()=>showPrototypePreview(record);actions.append(zoom);
+    if(onDelete||onRestore){const button=el('button',onRestore?'恢复角色':'删除角色',{type:'button',class:onRestore?'':'ad-danger','aria-label':(onRestore?'恢复 ':'删除 ')+(record.name||record.id)});button.onclick=async()=>{button.disabled=true;try{await(onRestore||onDelete)(record);}catch(error){const p=el('p',error.message,{role:'alert'});actions.append(p);}finally{button.disabled=false;}};actions.append(button);}
+    wrapper.append(card,actions);return wrapper;
+}

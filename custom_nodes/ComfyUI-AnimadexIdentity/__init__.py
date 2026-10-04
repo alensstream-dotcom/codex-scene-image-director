@@ -1,0 +1,3 @@
+from .identity_reference import AnimadexReferenceManifest,AnimadexIdentityReference,AnimadexIdentityCanvas,AnimadexDrawingModel,AnimadexAdaptiveLoraLoader,AnimadexDrawingSampler
+NODE_CLASS_MAPPINGS={'AnimadexReferenceManifest':AnimadexReferenceManifest,'AnimadexIdentityReference':AnimadexIdentityReference,'AnimadexIdentityCanvas':AnimadexIdentityCanvas,'AnimadexDrawingModel':AnimadexDrawingModel,'AnimadexAdaptiveLoraLoader':AnimadexAdaptiveLoraLoader,'AnimadexDrawingSampler':AnimadexDrawingSampler}
+NODE_DISPLAY_NAME_MAPPINGS={'AnimadexReferenceManifest':'剧情绘图：人物参考记录','AnimadexIdentityReference':'剧情绘图：固定人物参考'}

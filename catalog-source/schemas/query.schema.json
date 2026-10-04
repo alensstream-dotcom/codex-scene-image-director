@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Animadex structured retrieval query v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {"enum": ["character", "outfit"], "default": "character"},
+    "required": {"$ref": "#/$defs/facets"},
+    "preferred": {"$ref": "#/$defs/facets"},
+    "required_tags": {"$ref": "#/$defs/stringList"},
+    "preferred_tags": {"$ref": "#/$defs/stringList"},
+    "exclude_tags": {"$ref": "#/$defs/stringList"},
+    "exclude_ids": {"$ref": "#/$defs/stringList"},
+    "archetypes": {"$ref": "#/$defs/stringList"},
+    "preferred_archetypes": {"$ref": "#/$defs/stringList"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 8},
+    "seed": {"type": ["string", "integer"], "default": "animadex-default"},
+    "include_limited": {"type": "boolean", "default": false},
+    "include_partial": {"type": "boolean", "default": false},
+    "allow_underwear": {"type": "boolean", "default": false},
+    "allow_swimwear": {"type": "boolean", "default": false},
+    "include_accessories": {"type": "boolean", "description": "Character default false; outfit default true"},
+    "include_trigger": {"type": "boolean", "default": false},
+    "score_window": {"type": "number", "minimum": 0, "default": 6},
+    "temperature": {"type": "number", "exclusiveMinimum": 0, "default": 4}
+  },
+  "$defs": {
+    "stringList": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "value": {"oneOf": [{"type": "string"}, {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}]},
+    "facets": {
+      "type": "object",
+      "propertyNames": {"enum": ["gender", "age_evidence", "species", "hair_color", "hair_length", "hair_pattern", "hair_style", "bangs", "eye_color", "eye_features", "skin", "build", "bust", "ears", "horns", "tail", "wings", "face", "marks", "anatomy", "facial_hair", "style", "color", "slot", "性别", "发色", "发长", "发型", "瞳色", "肤色", "体型", "胸型", "种族", "耳朵", "服装风格", "颜色"]},
+      "additionalProperties": {"$ref": "#/$defs/value"},
+      "description": "Runtime additionally checks which facets are valid for character versus outfit. Same-field arrays mean OR; different fields mean AND."
+    }
+  }
+}

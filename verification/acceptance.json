@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "version": "2.1.9",
+  "local_node_tests": 258,
+  "public_node_tests": 257,
+  "touch_ui_checks": 15,
+  "real_runtime_checks": 15,
+  "real_successful_chat_rounds": 6,
+  "main_run_attempts": 7,
+  "final_pair_redraws": 3,
+  "real_manual_images": 1,
+  "single_prompt_words_min": 50,
+  "single_prompt_words_max": 72,
+  "pair_prompt_words": 116,
+  "visual_review_completed": true,
+  "external_failures_retained": [
+    "Initial background table request returned HTTP 502.",
+    "One main chat request returned an upstream error marker after about 181 seconds and empty narrative; retried successfully."
+  ],
+  "original_worldbook_entries": 144,
+  "installed_runtime_hashes_verified": true,
+  "actual_phone_verified": false
+}

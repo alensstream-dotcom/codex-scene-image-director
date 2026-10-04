@@ -1,0 +1,12 @@
+{
+  "status": "template_only_not_in_catalog",
+  "description_zh": "性格资料必须来自人工标注或可核对的人设来源。当前资料库没有这类数据。本文件只定义未来补充结构，不代表角色已经具有这些性格。",
+  "record_template": {
+    "character_id": "填写真实的原始 slug",
+    "traits": [],
+    "source_url": null,
+    "origin": "user_annotation_or_verified_reference",
+    "reviewed_at": null,
+    "notes": "不要从发色、服装或单张表情推断性格"
+  }
+}

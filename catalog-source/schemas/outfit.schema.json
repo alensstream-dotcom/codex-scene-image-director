@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observed Animadex wardrobe tag bundle v1",
+  "type": "object",
+  "required": ["id", "tags", "slots", "colors", "styles", "source_character_ids", "gender_evidence", "quality", "provenance"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^outfit-[a-f0-9]{20}$"},
+    "tags": {"$ref": "#/$defs/list"},
+    "slots": {"type": "object", "additionalProperties": {"$ref": "#/$defs/list"}},
+    "colors": {"$ref": "#/$defs/list"}, "styles": {"$ref": "#/$defs/list"},
+    "source_character_ids": {"$ref": "#/$defs/list"}, "gender_evidence": {"$ref": "#/$defs/list"},
+    "quality": {"type": "object", "required": ["has_core", "partial", "contains_underwear", "contains_swimwear", "color_alternatives", "eligible_default"]},
+    "provenance": {"const": "observed_tag_bundle_not_verified_complete_outfit"}
+  },
+  "$defs": {"list": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}}
+}

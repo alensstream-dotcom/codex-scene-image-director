@@ -1,2 +1,8 @@
-qa-output/
-*.local.json
+node_modules/
+__pycache__/
+*.pyc
+*.log
+.private/
+settings.json
+secrets.json
+verification/*.png

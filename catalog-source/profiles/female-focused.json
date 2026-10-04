@@ -1,0 +1,17 @@
+{
+  "id": "female-focused-v1",
+  "description_zh": "女性形象为主，男性最多十个。保留复古精致插画和正常角色本体；排除明确Q版、夸张卡通脸。没有按作品年份、旧画风或2005年分界删除。标签无法判定的脸部质量保持待复核。",
+  "male_keep_ids": ["gojou_satoru", "nanami_kento", "zhongli_(genshin_impact)", "diluc_(genshin_impact)", "kaeya_(genshin_impact)", "sesshoumaru", "roy_mustang", "howl_(howl_no_ugoku_shiro)", "tomioka_giyuu", "iskandar_(fate)"],
+  "excluded_ids": {
+    "kemomimi-chan_(naga_u)": "用户图一：夸张简化卡通脸",
+    "lucia_(scott_malin)": "用户图二：夸张卡通脸",
+    "churuya": "明确的Q版衍生角色",
+    "chibi_miku": "明确的Q版变体"
+  },
+  "excluded_author_tokens": ["scott_malin", "naga_u"],
+  "excluded_tags": ["chibi", "super deformed", "low poly", "low-poly", "lowpoly", "stick figure"],
+  "excluded_copyright_ids": ["south_park", "the_simpsons", "family_guy", "spongebob_squarepants_(series)", "looney_tunes", "adventure_time", "gravity_falls", "the_grim_adventures_of_billy_&_mandy", "steven_universe", "powerpuff_girls", "peanuts"],
+  "preserve_base_ids": ["miki_sayaka", "miki_sayaka_(magical_girl)"],
+  "preserve_style_principle": "retro and older illustration styles are allowed; no date/era blacklist",
+  "face_review_status": "not_visually_scored_by_source"
+}
