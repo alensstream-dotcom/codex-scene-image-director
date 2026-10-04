@@ -6,11 +6,8 @@ const colors={黑:'black',乌黑:'black',白:'white',棕:'brown',褐:'brown',金
 const norm=v=>String(v||'').normalize('NFKC').toLowerCase().replaceAll('_',' ').replace(/\s+/g,' ').trim();
 const unique=a=>[...new Set(a)],termCache=new WeakMap();
 const termsFor=catalog=>{if(!catalog)return [];if(!termCache.has(catalog))termCache.set(catalog,(catalog.appearanceTerms?.()||[]).filter(m=>physical.has(m.facet)));return termCache.get(catalog);};
-export function ageGroup(age){
-    const n=Number(String(age).match(/\d{1,3}/)?.[0]);
-    if(n>0&&n<=110)return n<13?'child':n<30?'young':'mature';
-    const s=norm(age);return /child|儿童|小女孩|幼女/.test(s)?'child':/mature|middle|少妇|成熟|中年/.test(s)?'mature':/teen|young|少女|青少年/.test(s)?'young':'';
-}
+import {ageGroup,protectStoryTraits} from './drawing-policy.mjs';
+export {ageGroup} from './drawing-policy.mjs';
 export function heightGroup(value){const n=Number(value);return n>=100&&n<=230?(n<=155?'short':n>=170?'tall':'average'):'';}
 function namedSegments(person,text,names=[]){
     const own=[person.person,...(person.aliases||[])].filter(Boolean),others=names.filter(n=>!own.includes(n));
@@ -62,8 +59,7 @@ export function reconcileStoryAppearance(person,{text='',catalog,names=[],spec={
     // Unknown source facts stay unknown. Fill only missing basic appearance from
     // a previous stable profile, never import franchise ornaments or anatomy.
     for(const tag of person.chosen_appearance_tags||[]){const m=catalog?.tagInfo?.(tag);if(m&&physical.has(m.facet)&&!traits[m.facet])traits[m.facet]=[m.value];}
-    const minor=traits.age_group?.[0]==='child'||/^\d+ years old$/.test(age)&&parseInt(age)<18||/teenage|child/i.test(age);
-    if(minor)delete traits.bust;
+    const minor=protectStoryTraits(traits,age);
     const tags=[traits.gender[0]==='male'?'1boy':'1girl'];
     for(const field of ['hair_color','hair_length','hair_style','eye_color','bust','height']){
         const value=traits[field]?.[0];if(!value)continue;

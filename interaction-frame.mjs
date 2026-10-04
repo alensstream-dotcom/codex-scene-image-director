@@ -1,12 +1,13 @@
 /** Directed, non-explicit gestures. Appearance and clothing stay in their own snapshots. */
-export const INTERACTION_KINDS=['hug','holding_hands','arm_in_arm','dance','hand_on_shoulder','helping_up'];
+import {SUPPORTED_INTERACTIONS,INTERACTION_EVIDENCE} from './drawing-policy.mjs';
+export const INTERACTION_KINDS=SUPPORTED_INTERACTIONS;
 export const INTERACTION_VIEWS=['auto','pov','third_person'];
 const parts=['hands','arms','torso','full'];
 export function actorGender(actor){const p=actor.person_snapshot||actor,values=p.initial_query?.required?.gender||actor.appearance?.required?.gender||actor.required?.gender||[];return [values].flat().includes('male')||(p.chosen_appearance_tags||[]).includes('1boy')?'male':'female';}
 const nameOf=a=>a.person||a.name;
 const aliases=a=>[nameOf(a),a.source_name,...(a.person_snapshot?.aliases||[])].filter(Boolean);
 const find=(actors,name)=>actors.find(a=>aliases(a).includes(name));
-const safeKinds={hug:/\b(?:hugging|hugs?|embracing|embraces?)\b|拥抱|相拥|抱住/i,holding_hands:/\b(?:holding hands|holds? (?:her|his|the woman's|the man's) hand|hand in hand)\b|牵手|牵住.+手/i,arm_in_arm:/\barm in arm\b|挽着.+手臂|挽住.+手臂/i,dance:/\b(?:couple dancing|dancing with|waltz)\b|共舞/i,hand_on_shoulder:/\b(?:hand (?:resting |placed )?on (?:her|his|the woman's|the man's) shoulder|(?:patting|touching) (?:her|his) shoulder)\b|轻拍.+肩|手.+肩膀/i,helping_up:/\b(?:helping .+ (?:stand|to stand)|helping .+ up)\b|扶.+起身|扶.+站起/i};
+const safeKinds=INTERACTION_EVIDENCE;
 export function normalizeInteractions(values,actors){
     if(values===undefined||values===null)return [];
     if(!Array.isArray(values)||values.length>3)throw new Error('互动关系最多 3 条。');

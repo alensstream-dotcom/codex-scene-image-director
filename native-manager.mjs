@@ -1,10 +1,11 @@
 import { garmentFields, wardrobeText } from './wardrobe.mjs';
+import {NATIVE_SFW_FIELDS,emptyNativeBodyFields} from './drawing-policy.mjs';
 export const aliasFor = (person, scope) => `Animadex·${person}·${scope.slice(0, 8)}`;
 export const outfitFor = (person, scope) => `Animadex·${person}·当前衣装·${scope.slice(0, 8)}`;
 export const characterIdFor = (person, scope) => person.native_character_id || aliasFor(person.person, scope);
 const signature = values => JSON.stringify(values);
 const appearanceFields = preset => [preset.characterTraits || '', preset.facialFeatures || ''];
-const bodyFields = preset => Object.fromEntries(['upperBodySFW','fullBodySFW','upperBodySFWBack','fullBodySFWBack'].map(key => [key, preset[key] || '']));
+const bodyFields = preset => Object.fromEntries(NATIVE_SFW_FIELDS.map(key => [key, preset[key] || '']));
 const characterSignature = preset => signature([appearanceFields(preset), bodyFields(preset)]);
 const outfitFields = preset => [preset.upperBody || '', preset.fullBody || '', preset.upperBodyBack || '', preset.fullBodyBack || ''];
 
@@ -57,8 +58,7 @@ export function syncNativeManagers(state, native, links = {}, taxonomy = {}) {
                 nameCN:person.person, nameEN:alias,
                 characterTraits:[person.exact_id ? person.prototype_trigger : '',...person.chosen_appearance_tags.filter(tag => !face(tag)),person.age_description].filter(Boolean).join(', '),
                 facialFeatures:[...person.chosen_appearance_tags.filter(face), person.face_description].filter(Boolean).join(', '),
-                facialFeaturesBack:'', upperBodySFW:'', fullBodySFW:'', upperBodySFWBack:'', fullBodySFWBack:'',
-                upperBodyNSFW:'', fullBodyNSFW:'', upperBodyNSFWBack:'', fullBodyNSFWBack:'',
+                facialFeaturesBack:'', ...emptyNativeBodyFields(),
                 generationContext:'', generationVariables:{}, generationWorldBook:'',
                 mediaSchemaVersion:2, photoMedia:[], audioMedia:[], photoImageIds:[],
                 selectedAudioId:null, selectedPhotoId:null, selectedPhotoIndex:0,

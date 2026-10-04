@@ -1,13 +1,14 @@
 """Expand the locally reviewable pool using source popularity and existing diversity."""
-import json,re,collections
+import json,re,collections,subprocess
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 path=ROOT/'data/characters.browser.json'
 records=json.loads(path.read_text(encoding='utf-8'))
 raw={r['slug']:r for r in json.loads((ROOT/'catalog-source/source/animadex_top_characters.json').read_text(encoding='utf-8'))}
 original=set(json.loads((ROOT/'catalog-source/profiles/prior-category-pool.json').read_text(encoding='utf-8'))['female_ids'])
-blocked={'loli','shota','child','toddler','baby','chibi','super deformed','furry','anthro','nude','naked'}
-known_child={'konomori_kanon','anya_(spy_x_family)','klee_(genshin_impact)','qiqi_(genshin_impact)','nahida_(genshin_impact)','diona_(genshin_impact)','yaoyao_(genshin_impact)','sigewinne_(genshin_impact)','alice_(blue_archive)','arisu_(blue_archive)'}
+preview_policy=json.loads(subprocess.check_output(['node',str(ROOT/'drawing-policy.mjs'),'--export-catalog-policy'],encoding='utf-8'))
+blocked=set(preview_policy['blockedTags'])
+known_child=set(preview_policy['knownChildIds'])
 eligible=[]
 for r in records:
     s=raw.get(r['id'],{})

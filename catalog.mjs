@@ -3,6 +3,7 @@
  * Browser: loadCatalog(baseUrl); Node: createCatalog({characters,outfits,taxonomy,index}).
  */
 import {catalogFacets} from './narrative-appearance.mjs';
+import {nativeBodyField} from './drawing-policy.mjs';
 const norm=s=>String(s).toLowerCase().replaceAll('_',' ').replace(/\s+/g,' ').trim();
 const arr=v=>Array.isArray(v)?v:[v];
 const uniq=vs=>[...new Set(vs)];
@@ -99,7 +100,7 @@ export function createCatalog({characters,outfits=[],taxonomy,index,excludedIds=
     const appearance=uniq([...tags,...mutable]);
     return {appearance_tags:appearance,appearance_prompt:[...(q.include_trigger?[r.trigger]:[]),...appearance].join(', '),prototype_trigger:r.trigger,trigger_included:!!q.include_trigger,resolved_facets:decisions,
       outfit_tags_separate:r.outfit_tags,accessory_tags_separate:r.accessory_tags,
-      chatu8_fields:{characterTraits:[...(q.include_trigger?[r.trigger]:[]),...general].join(', '),facialFeatures:[...face,...mutable].join(', '),upperBodySFW:'',fullBodySFW:''},
+      chatu8_fields:{characterTraits:[...(q.include_trigger?[r.trigger]:[]),...general].join(', '),facialFeatures:[...face,...mutable].join(', '),[nativeBodyField()]:'',[nativeBodyField({full:true})]:''},
       binding:{prototype_id:r.id,chosen_appearance_tags:appearance,trigger_included:!!q.include_trigger,seed:q.seed,persist_for_same_story_character:true}};
   }
   function prepareOutfit(r,q){
@@ -108,7 +109,7 @@ export function createCatalog({characters,outfits=[],taxonomy,index,excludedIds=
     for(const a of r.quality.color_alternatives){const selected=(q.required.color||[]).find(c=>a.values.includes(c))||a.values[0];const removed=a.values.filter(c=>c!==selected).map(c=>`${c} ${a.garment}`);tags=tags.filter(t=>!removed.includes(t));decisions.push({...a,kept:selected,removed_tags:removed});}
     const lower=new Set(['bottom','legwear','footwear']);const upper=tags.filter(t=>info[t].section==='outfit'&&!lower.has(info[t].facet));const bottom=tags.filter(t=>lower.has(info[t].facet));const accessories=tags.filter(t=>info[t].section==='accessory');
     return {outfit_tags:tags,outfit_prompt:tags.join(', '),slots:Object.fromEntries(Object.entries(r.slots).map(([s,ts])=>[s,ts.filter(t=>tags.includes(t))])),resolved_colors:decisions,source_character_ids:r.source_character_ids,
-      chatu8_fields:{upperBodySFW:[...upper,...accessories].join(', '),fullBodySFW:bottom.join(', ')},binding:{outfit_id:r.id,chosen_outfit_tags:tags,seed:q.seed}};
+      chatu8_fields:{[nativeBodyField()]:[...upper,...accessories].join(', '),[nativeBodyField({full:true})]:bottom.join(', ')},binding:{outfit_id:r.id,chosen_outfit_tags:tags,seed:q.seed}};
   }
   function rankCandidates(query){
     const q=normalizeQuery(query),kind=q.kind;let pool=kind==='character'?characters:outfits;

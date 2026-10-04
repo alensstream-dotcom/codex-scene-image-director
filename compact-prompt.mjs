@@ -1,3 +1,4 @@
+import {isYouthAppearance} from './drawing-policy.mjs';
 const norm=t=>t.toLowerCase().replace(/[_-]/g,' ').replace(/\s+/g,' ').trim();
 export function compactTags(text,{kind='action',limit=8}={}){
     let parts=String(text||'').split(',').map(t=>t.replace(/[;$@{}<>]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean),seen=new Set(),out=[];
@@ -24,7 +25,7 @@ export function compactActor(tags,clothing,action,interaction,visible){
  */
 export function bindActorAppearance(person,tags,clothing,action,interaction,{position}={}){
     const f=person.story_appearance?.traits||{},first=k=>f[k]?.[0]||'';
-    const young=first('age_group')==='child'||tags.includes('teenage');
+    const young=isYouthAppearance(f,tags);
     const gender=tags.includes('1boy')?(young?'boy':'man'):(young?'girl':'woman');
     const style=first('hair_style'),adjective=style.replace(/ hair$/,'');
     const simple=/^(?:straight|curly|wavy)$/.test(adjective),hair=[first('hair_length'),simple?adjective:'',first('hair_color'),'hair'].filter(Boolean).join(' ');

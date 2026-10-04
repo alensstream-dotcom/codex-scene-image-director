@@ -1,6 +1,7 @@
 // Supply missing native prompts. The native request builders, API selection,
 // confirmation dialogs, storage, and role expansion remain authoritative.
 export const NATIVE_AI_PROFILE_VERSION = 1;
+import {CONTENT_TAG,nativeBodyVisibility} from './drawing-policy.mjs';
 const entry = (id, role, content) => ({ id, role, content, enabled:true, triggerMode:'always', triggerWords:'', andTriggerWords:'' });
 const profile = (instruction, variables) => ({ entries:[entry(1,'system',instruction),entry(2,'user',variables)] });
 
@@ -39,9 +40,9 @@ export const NATIVE_AI_PROFILES = {
     },
     char_display: {
         name:'Animadex·原生角色服装展示',
-        data:profile(`你为智绘姬当前角色或服装生成一张展示图的提示词。使用提供的英文名称作为原生引用；角色和服装的完整身份标签由智绘姬展开，不重新描述发色、发型、眼色、脸型或衣服。优先选择与角色绑定的当前衣装；用户未要求换装时保留。镜头、背景、光照和画风放在 Scene Composition；人物引用、衣装引用、动作与表情放在 Character 1 Prompt。默认单人、SFW、704x1152；自然优雅的全身或用户指定的构图，漂亮精细、柔和光照，避免裁脚。只输出 image###...;###，不输出规划、思考或说明。
+        data:profile(`你为智绘姬当前角色或服装生成一张展示图的提示词。使用提供的英文名称作为原生引用；角色和服装的完整身份标签由智绘姬展开，不重新描述发色、发型、眼色、脸型或衣服。优先选择与角色绑定的当前衣装；用户未要求换装时保留。镜头、背景、光照和画风放在 Scene Composition；人物引用、衣装引用、动作与表情放在 Character 1 Prompt。默认单人、${CONTENT_TAG}、704x1152；自然优雅的全身或用户指定的构图，漂亮精细、柔和光照，避免裁脚。只输出 image###...;###，不输出规划、思考或说明。
 角色 JSON 包含 name、angle、upperBody、lowerBody；服装 JSON 不含 angle。可见部位用 sfw（角色）/visible（服装）；不出镜部位 hidden。角色须先于衣装。示例（将名称替换为提供的真实英文名称）：
-image###Scene Composition:SFW, 1girl, solo, full body, garden, soft daylight, @Painterly, 704x1152; Character 1 Prompt:$${JSON.stringify({name:'ROLE_EN',angle:'front',upperBody:'sfw',lowerBody:'sfw'})}$, $${JSON.stringify({name:'OUTFIT_EN',upperBody:'visible',lowerBody:'visible'})}$, sitting on a bench, reading a book, gentle smile;###
+image###Scene Composition:${CONTENT_TAG}, 1girl, solo, full body, garden, soft daylight, @Painterly, 704x1152; Character 1 Prompt:$${JSON.stringify({name:'ROLE_EN',angle:'front',upperBody:nativeBodyVisibility(),lowerBody:nativeBodyVisibility()})}$, $${JSON.stringify({name:'OUTFIT_EN',upperBody:'visible',lowerBody:'visible'})}$, sitting on a bench, reading a book, gentle smile;###
 若只提供服装而没有人物，使用该服装原生引用与普通成年女性模特，不捏造具名角色。没有衣装资料时不编造衣装引用。`,
             '用户需求：\n{{用户需求}}\n当前角色：\n{{当前角色}}\n角色绑定服装：\n{{服装列表}}\n当前服装：\n{{当前服装}}'),
     },

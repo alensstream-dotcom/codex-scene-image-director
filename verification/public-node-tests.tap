@@ -2,2001 +2,2085 @@ TAP version 13
 # Subtest: migration copies the selected drawing API once without changing native or primary settings
 ok 1 - migration copies the selected drawing API once without changing native or primary settings
   ---
-  duration_ms: 3.8292
+  duration_ms: 5.7658
   type: 'test'
   ...
 # Subtest: explicit helper preference survives migration, blank new installation is configurable
 ok 2 - explicit helper preference survives migration, blank new installation is configurable
   ---
-  duration_ms: 0.1431
+  duration_ms: 0.1564
   type: 'test'
   ...
 # Subtest: save and switch actually change the next request URL key and model
 ok 3 - save and switch actually change the next request URL key and model
   ---
-  duration_ms: 21.6013
+  duration_ms: 21.0228
   type: 'test'
   ...
 # Subtest: profile names export import and deletion preserve a valid active profile and never export keys by default
 ok 4 - profile names export import and deletion preserve a valid active profile and never export keys by default
   ---
-  duration_ms: 1.7136
+  duration_ms: 1.7306
   type: 'test'
   ...
 # Subtest: URL validation normalizes endpoint suffixes without guessing versions and blocks credential URLs
 ok 5 - URL validation normalizes endpoint suffixes without guessing versions and blocks credential URLs
   ---
-  duration_ms: 1.1042
+  duration_ms: 0.2739
   type: 'test'
   ...
 # Subtest: model list uses the same selected profile and proxy headers without changing the typed model
 ok 6 - model list uses the same selected profile and proxy headers without changing the typed model
   ---
-  duration_ms: 1.4171
+  duration_ms: 1.2752
   type: 'test'
   ...
 # Subtest: direct model list supports model names, clean error messages do not echo private upstream responses
 ok 7 - direct model list supports model names, clean error messages do not echo private upstream responses
   ---
-  duration_ms: 1.0492
+  duration_ms: 0.7474
   type: 'test'
   ...
 # Subtest: all hard matches remain reachable beyond sixty with stable non-overlapping pages
 ok 8 - all hard matches remain reachable beyond sixty with stable non-overlapping pages
   ---
-  duration_ms: 1333.1921
+  duration_ms: 1477.7294
   type: 'test'
   ...
 # Subtest: Chinese shorthand, overlapping colour/length and black-long-straight yield separate facts
 ok 9 - Chinese shorthand, overlapping colour/length and black-long-straight yield separate facts
   ---
-  duration_ms: 35.322
+  duration_ms: 32.7011
   type: 'test'
   ...
 # Subtest: named narrative overrides accidental prototype attributes and never borrows another person
 ok 10 - named narrative overrides accidental prototype attributes and never borrows another person
   ---
-  duration_ms: 3.7856
+  duration_ms: 2.9837
   type: 'test'
   ...
 # Subtest: longer hairstyle phrase and explicit negation do not add contradictory traits
 ok 11 - longer hairstyle phrase and explicit negation do not add contradictory traits
   ---
-  duration_ms: 1.8765
+  duration_ms: 1.4314
   type: 'test'
   ...
 # Subtest: explicit preferences and indexed facial details are strict until user broadens
 ok 12 - explicit preferences and indexed facial details are strict until user broadens
   ---
-  duration_ms: 127.7362
+  duration_ms: 127.587
   type: 'test'
   ...
 # Subtest: current matching identity is included and marked rather than silently hidden
 ok 13 - current matching identity is included and marked rather than silently hidden
   ---
-  duration_ms: 42.3079
+  duration_ms: 44.3396
   type: 'test'
   ...
 # Subtest: editable conditions exclude clothing and control strings; colours mean OR
 ok 14 - editable conditions exclude clothing and control strings; colours mean OR
   ---
-  duration_ms: 3.6064
+  duration_ms: 3.9991
   type: 'test'
   ...
 # Subtest: raw provenance and curated eligibility survive taxonomy enrichment
 ok 15 - raw provenance and curated eligibility survive taxonomy enrichment
   ---
-  duration_ms: 40.7322
+  duration_ms: 31.1247
   type: 'test'
   ...
 # Subtest: strict candidate selection cannot bypass current filters by passing an unrelated id
 ok 16 - strict candidate selection cannot bypass current filters by passing an unrelated id
   ---
-  duration_ms: 40.3629
+  duration_ms: 34.7747
   type: 'test'
   ...
 # Subtest: combined face marks remain conjunctive rather than being dropped as conflicts
 ok 17 - combined face marks remain conjunctive rather than being dropped as conflicts
   ---
-  duration_ms: 1.7126
+  duration_ms: 1.8508
   type: 'test'
   ...
 # Subtest: alternative colours remain a single OR condition with truthful evidence
 ok 18 - alternative colours remain a single OR condition with truthful evidence
   ---
-  duration_ms: 25.2371
+  duration_ms: 29.1704
   type: 'test'
   ...
 # Subtest: unambiguous hair and eye evidence precedes high-popularity mixed variants
 ok 19 - unambiguous hair and eye evidence precedes high-popularity mixed variants
   ---
-  duration_ms: 9.1296
+  duration_ms: 11.4209
   type: 'test'
   ...
 # Subtest: Chinese alias search intersects multiple canonical tags without changing appearance conditions
 ok 20 - Chinese alias search intersects multiple canonical tags without changing appearance conditions
   ---
-  duration_ms: 13.6708
+  duration_ms: 18.3966
   type: 'test'
   ...
 # Subtest: a named observer or relative never supplies the subject appearance
 ok 21 - a named observer or relative never supplies the subject appearance
   ---
-  duration_ms: 1.2696
+  duration_ms: 2.1225
   type: 'test'
   ...
 # Subtest: standalone transport never probes optional MGPU routes or interrupts another task
 ok 22 - standalone transport never probes optional MGPU routes or interrupts another task
   ---
-  duration_ms: 27.5794
+  duration_ms: 24.5355
   type: 'test'
   ...
 # Subtest: changing backend settings sends the next image to the new server
 ok 23 - changing backend settings sends the next image to the new server
   ---
-  duration_ms: 2.4372
+  duration_ms: 2.4105
   type: 'test'
   ...
 # Subtest: image filenames and subfolders are encoded through URLSearchParams
 ok 24 - image filenames and subfolders are encoded through URLSearchParams
   ---
-  duration_ms: 0.9779
+  duration_ms: 1.1125
   type: 'test'
   ...
 # Subtest: network failure does not expose URLs or exception contents in the user error
 ok 25 - network failure does not expose URLs or exception contents in the user error
   ---
-  duration_ms: 0.8531
+  duration_ms: 0.84
   type: 'test'
   ...
 # Subtest: graph filling is typed, preserves tags and quotes, records real parameters and never modifies native settings
 ok 26 - graph filling is typed, preserves tags and quotes, records real parameters and never modifies native settings
   ---
-  duration_ms: 3.2293
+  duration_ms: 3.1677
   type: 'test'
   ...
 # Subtest: backend receives exact final text including resolution text, weights, Unicode, punctuation and repeated tags
 ok 27 - backend receives exact final text including resolution text, weights, Unicode, punctuation and repeated tags
   ---
-  duration_ms: 0.6798
+  duration_ms: 0.7971
   type: 'test'
   ...
 # Subtest: dimensions in ordinary prose do not override canvas settings and negative prompts remain user owned
 ok 28 - dimensions in ordinary prose do not override canvas settings and negative prompts remain user owned
   ---
-  duration_ms: 1.1978
+  duration_ms: 1.2544
   type: 'test'
   ...
 # Subtest: custom workflow safety settings are preserved without adding or disabling flags
 ok 29 - custom workflow safety settings are preserved without adding or disabling flags
   ---
-  duration_ms: 0.5708
+  duration_ms: 0.7093
   type: 'test'
   ...
 # Subtest: bundled prompt presets have no default exclusions, including the legacy anatomy quality list
 ok 30 - bundled prompt presets have no default exclusions, including the legacy anatomy quality list
   ---
-  duration_ms: 0.4406
+  duration_ms: 0.7398
   type: 'test'
   ...
 # Subtest: references remain explicit and preserve existing reference model settings
 ok 31 - references remain explicit and preserve existing reference model settings
   ---
-  duration_ms: 1.0565
+  duration_ms: 1.559
   type: 'test'
   ...
 # Subtest: independent render submits once, polls standard history, retrieves and returns an image without native events
 ok 32 - independent render submits once, polls standard history, retrieves and returns an image without native events
   ---
-  duration_ms: 27.6662
+  duration_ms: 30.5278
   type: 'test'
   ...
 # Subtest: stale scenes and unresolved controls never submit GPU work
 ok 33 - stale scenes and unresolved controls never submit GPU work
   ---
-  duration_ms: 1.3435
+  duration_ms: 1.3804
   type: 'test'
   ...
 # Subtest: execution failures and completed outputs with no images fail clearly
 ok 34 - execution failures and completed outputs with no images fail clearly
   ---
-  duration_ms: 4.0437
+  duration_ms: 2.8899
   type: 'test'
   ...
 # Subtest: unknown placeholders do not silently send a malformed custom graph
 ok 35 - unknown placeholders do not silently send a malformed custom graph
   ---
-  duration_ms: 0.41
+  duration_ms: 0.3769
   type: 'test'
   ...
 # Subtest: SP query reads only pictured identity fields, never wardrobe or private history
 ok 36 - SP query reads only pictured identity fields, never wardrobe or private history
   ---
-  duration_ms: 1.7321
+  duration_ms: 1.8872
   type: 'test'
   ...
 # Subtest: unavailable runtime and historical selections never query latest database
 ok 37 - unavailable runtime and historical selections never query latest database
   ---
-  duration_ms: 0.161
+  duration_ms: 0.1443
   type: 'test'
   ...
 # Subtest: ambiguous same-name database rows do not choose an identity
 ok 38 - ambiguous same-name database rows do not choose an identity
   ---
-  duration_ms: 0.1359
+  duration_ms: 0.1271
   type: 'test'
   ...
 # Subtest: custom Chinese database result columns are recognized
 ok 39 - custom Chinese database result columns are recognized
   ---
-  duration_ms: 0.1501
+  duration_ms: 0.1351
   type: 'test'
   ...
 # Subtest: bound people are excluded from database reference requests
 ok 40 - bound people are excluded from database reference requests
   ---
-  duration_ms: 25.8756
+  duration_ms: 25.4196
   type: 'test'
   ...
 # Subtest: new actor receives only permitted database facts and records provenance
 ok 41 - new actor receives only permitted database facts and records provenance
   ---
-  duration_ms: 0.8851
+  duration_ms: 0.7793
+  type: 'test'
+  ...
+# Subtest: central age classification preserves appearance groups without treating young as minor
+ok 42 - central age classification preserves appearance groups without treating young as minor
+  ---
+  duration_ms: 1.061
+  type: 'test'
+  ...
+# Subtest: age predicates preserve both existing caller semantics
+ok 43 - age predicates preserve both existing caller semantics
+  ---
+  duration_ms: 0.3115
+  type: 'test'
+  ...
+# Subtest: story age protection removes only the bust trait and retains appearance facts
+ok 44 - story age protection removes only the bust trait and retains appearance facts
+  ---
+  duration_ms: 0.9375
+  type: 'test'
+  ...
+# Subtest: identity age protection preserves order and does not mutate tag arrays
+ok 45 - identity age protection preserves order and does not mutate tag arrays
+  ---
+  duration_ms: 0.2721
+  type: 'test'
+  ...
+# Subtest: caption age wording does not infer an unstated numerical age
+ok 46 - caption age wording does not infer an unstated numerical age
+  ---
+  duration_ms: 0.151
+  type: 'test'
+  ...
+# Subtest: legacy SFW field names and visibility are exact schema values
+ok 47 - legacy SFW field names and visibility are exact schema values
+  ---
+  duration_ms: 0.219
+  type: 'test'
+  ...
+# Subtest: offline Python builder can read the same preview policy through Node
+ok 48 - offline Python builder can read the same preview policy through Node
+  ---
+  duration_ms: 102.3433
   type: 'test'
   ...
 # Subtest: Flash cannot overwrite a bound identity; keep vetoes proposed outfit reroll
-ok 42 - Flash cannot overwrite a bound identity; keep vetoes proposed outfit reroll
+ok 49 - Flash cannot overwrite a bound identity; keep vetoes proposed outfit reroll
   ---
-  duration_ms: 2.0111
+  duration_ms: 2.0234
   type: 'test'
   ...
 # Subtest: new adult face design and missing conditions are added; explicit conditions win
-ok 43 - new adult face design and missing conditions are added; explicit conditions win
+ok 50 - new adult face design and missing conditions are added; explicit conditions win
   ---
-  duration_ms: 0.2587
+  duration_ms: 0.2951
   type: 'test'
   ...
 # Subtest: scalar color facets normalize; face prose cannot contradict bound colors
-ok 44 - scalar color facets normalize; face prose cannot contradict bound colors
+ok 51 - scalar color facets normalize; face prose cannot contradict bound colors
   ---
-  duration_ms: 0.2157
+  duration_ms: 0.2115
   type: 'test'
   ...
 # Subtest: last-three bounded excerpt excludes image controls and planning
-ok 45 - last-three bounded excerpt excludes image controls and planning
+ok 52 - last-three bounded excerpt excludes image controls and planning
   ---
-  duration_ms: 1.2297
+  duration_ms: 0.795
   type: 'test'
   ...
 # Subtest: only pictured saved people are sent; native cache input stays untouched
-ok 46 - only pictured saved people are sent; native cache input stays untouched
+ok 53 - only pictured saved people are sent; native cache input stays untouched
   ---
-  duration_ms: 22.1653
+  duration_ms: 22.4664
   type: 'test'
   ...
 # Subtest: host alias removes only the requested listener and preserves event source context
-ok 47 - host alias removes only the requested listener and preserves event source context
+ok 54 - host alias removes only the requested listener and preserves event source context
   ---
-  duration_ms: 1.2274
+  duration_ms: 1.2028
   type: 'test'
   ...
 # Subtest: existing host off implementation and unsupported hosts remain untouched
-ok 48 - existing host off implementation and unsupported hosts remain untouched
+ok 55 - existing host off implementation and unsupported hosts remain untouched
   ---
-  duration_ms: 0.1715
+  duration_ms: 0.1616
   type: 'test'
   ...
 # Subtest: ordinary candidate metadata is retained but narrative frames omit the franchise trigger
-ok 49 - ordinary candidate metadata is retained but narrative frames omit the franchise trigger
+ok 56 - ordinary candidate metadata is retained but narrative frames omit the franchise trigger
   ---
-  duration_ms: 31.3615
+  duration_ms: 31.7406
   type: 'test'
   ...
 # Subtest: saved style survives a conflicting later automatic appearance block
-ok 50 - saved style survives a conflicting later automatic appearance block
+ok 57 - saved style survives a conflicting later automatic appearance block
   ---
-  duration_ms: 17.7385
+  duration_ms: 17.2222
   type: 'test'
   ...
 # Subtest: reroll retains age, new face hints, disabled automatic-trigger policy and locked style while leaving accepted person unchanged
-ok 51 - reroll retains age, new face hints, disabled automatic-trigger policy and locked style while leaving accepted person unchanged
+ok 58 - reroll retains age, new face hints, disabled automatic-trigger policy and locked style while leaving accepted person unchanged
   ---
-  duration_ms: 293.5694
+  duration_ms: 348.7088
   type: 'test'
   ...
 # Subtest: legacy migration preserves old trigger and reference choices and all visual data
-ok 52 - legacy migration preserves old trigger and reference choices and all visual data
+ok 59 - legacy migration preserves old trigger and reference choices and all visual data
   ---
-  duration_ms: 13.9425
+  duration_ms: 26.8859
   type: 'test'
   ...
 # Subtest: unchanged person save and style-only edits retain explicit trigger, separate face and age fields
-ok 53 - unchanged person save and style-only edits retain explicit trigger, separate face and age fields
+ok 60 - unchanged person save and style-only edits retain explicit trigger, separate face and age fields
   ---
-  duration_ms: 23.9289
+  duration_ms: 28.8638
   type: 'test'
   ...
 # Subtest: stored reference asset is retained but omitted from transport when enhancement is disabled
-ok 54 - stored reference asset is retained but omitted from transport when enhancement is disabled
+ok 61 - stored reference asset is retained but omitted from transport when enhancement is disabled
   ---
-  duration_ms: 18.8574
+  duration_ms: 19.4963
   type: 'test'
   ...
 # Subtest: explicit image-reference enhancement reaches native transport with the owned asset
-ok 55 - explicit image-reference enhancement reaches native transport with the owned asset
+ok 62 - explicit image-reference enhancement reaches native transport with the owned asset
   ---
-  duration_ms: 42.2125
+  duration_ms: 52.7845
   type: 'test'
   ...
 # Subtest: age remains descriptive; it cannot invalidate a valid catalog identity
-ok 56 - age remains descriptive; it cannot invalidate a valid catalog identity
+ok 63 - age remains descriptive; it cannot invalidate a valid catalog identity
   ---
-  duration_ms: 24.2386
+  duration_ms: 32.5913
   type: 'test'
   ...
 # Subtest: ordinary borrowed appearances exclude unrequested nonhuman anatomy and pets
-ok 57 - ordinary borrowed appearances exclude unrequested nonhuman anatomy and pets
+ok 64 - ordinary borrowed appearances exclude unrequested nonhuman anatomy and pets
   ---
-  duration_ms: 2.5286
+  duration_ms: 1.6013
   type: 'test'
   ...
 # Subtest: clothing color persists across pose/style changes; explicit change keeps identity
-ok 58 - clothing color persists across pose/style changes; explicit change keeps identity
+ok 65 - clothing color persists across pose/style changes; explicit change keeps identity
   ---
-  duration_ms: 36.7262
+  duration_ms: 40.2248
   type: 'test'
   ...
 # Subtest: malformed wardrobe change keeps previous clothing
-ok 59 - malformed wardrobe change keeps previous clothing
+ok 66 - malformed wardrobe change keeps previous clothing
   ---
-  duration_ms: 47.4775
+  duration_ms: 47.8907
   type: 'test'
   ...
 # Subtest: loads the actual 21541-character female-first catalog
-ok 60 - loads the actual 21541-character female-first catalog
+ok 67 - loads the actual 21541-character female-first catalog
   ---
-  duration_ms: 11.827
+  duration_ms: 8.3865
   type: 'test'
   ...
 # Subtest: generic female identity is stable, immutable, and carries no prototype trigger
-ok 61 - generic female identity is stable, immutable, and carries no prototype trigger
+ok 68 - generic female identity is stable, immutable, and carries no prototype trigger
   ---
-  duration_ms: 15.1853
+  duration_ms: 17.1292
   type: 'test'
   ...
 # Subtest: different people use different prototypes and restarting from empty state is deterministic
-ok 62 - different people use different prototypes and restarting from empty state is deterministic
+ok 69 - different people use different prototypes and restarting from empty state is deterministic
   ---
-  duration_ms: 164.8522
+  duration_ms: 189.6379
   type: 'test'
   ...
 # Subtest: hard no-match never relaxes, and explicit appearance remains stable
-ok 63 - hard no-match never relaxes, and explicit appearance remains stable
+ok 70 - hard no-match never relaxes, and explicit appearance remains stable
   ---
-  duration_ms: 8.7699
+  duration_ms: 10.1876
   type: 'test'
   ...
 # Subtest: exact Yor lookup includes her trigger; outfit changes persist without changing appearance
-ok 64 - exact Yor lookup includes her trigger; outfit changes persist without changing appearance
+ok 71 - exact Yor lookup includes her trigger; outfit changes persist without changing appearance
   ---
-  duration_ms: 12.8533
+  duration_ms: 12.1698
   type: 'test'
   ...
 # Subtest: an inexact ID never falls back to character-name substring
-ok 65 - an inexact ID never falls back to character-name substring
+ok 72 - an inexact ID never falls back to character-name substring
   ---
-  duration_ms: 0.5896
+  duration_ms: 0.6247
   type: 'test'
   ...
 # Subtest: JSON nesting and quoted braces parse without altering SceneComposition
-ok 66 - JSON nesting and quoted braces parse without altering SceneComposition
+ok 73 - JSON nesting and quoted braces parse without altering SceneComposition
   ---
-  duration_ms: 31.427
+  duration_ms: 31.5373
   type: 'test'
   ...
 # Subtest: multi-person output keeps names, one focus style, and disables global Nilou LoRA
-ok 67 - multi-person output keeps names, one focus style, and disables global Nilou LoRA
+ok 74 - multi-person output keeps names, one focus style, and disables global Nilou LoRA
   ---
-  duration_ms: 39.3394
+  duration_ms: 35.8697
   type: 'test'
   ...
 # Subtest: only a single exact Nilou binding emits the tested character selector
-ok 68 - only a single exact Nilou binding emits the tested character selector
+ok 75 - only a single exact Nilou binding emits the tested character selector
   ---
-  duration_ms: 4.737
+  duration_ms: 5.7627
   type: 'test'
   ...
 # Subtest: explicit style update is allowed without resampling; invalid style is retained with warning
-ok 69 - explicit style update is allowed without resampling; invalid style is retained with warning
+ok 76 - explicit style update is allowed without resampling; invalid style is retained with warning
   ---
-  duration_ms: 35.1953
+  duration_ms: 41.1457
   type: 'test'
   ...
 # Subtest: malformed markers are preserved, and protected property-like names remain ordinary people
-ok 70 - malformed markers are preserved, and protected property-like names remain ordinary people
+ok 77 - malformed markers are preserved, and protected property-like names remain ordinary people
   ---
-  duration_ms: 26.1723
+  duration_ms: 43.7107
   type: 'test'
   ...
 # Subtest: invalid required-query shapes are warned instead of silently converted to no conditions
-ok 71 - invalid required-query shapes are warned instead of silently converted to no conditions
+ok 78 - invalid required-query shapes are warned instead of silently converted to no conditions
   ---
-  duration_ms: 0.2427
+  duration_ms: 0.5728
   type: 'test'
   ...
 # Subtest: explicit interaction preserves the initiator and recipient without relying on action keywords
-ok 72 - explicit interaction preserves the initiator and recipient without relying on action keywords
+ok 79 - explicit interaction preserves the initiator and recipient without relying on action keywords
   ---
-  duration_ms: 4.7746
+  duration_ms: 3.775
   type: 'test'
   ...
 # Subtest: POV shows partner arms but does not remove the partner or transfer the action to the woman
-ok 73 - POV shows partner arms but does not remove the partner or transfer the action to the woman
+ok 80 - POV shows partner arms but does not remove the partner or transfer the action to the woman
   ---
-  duration_ms: 2.8188
+  duration_ms: 3.0988
   type: 'test'
   ...
 # Subtest: a woman initiating a hug retains the direction when switching to the male POV
-ok 74 - a woman initiating a hug retains the direction when switching to the male POV
+ok 81 - a woman initiating a hug retains the direction when switching to the male POV
   ---
-  duration_ms: 0.3117
+  duration_ms: 0.3345
   type: 'test'
   ...
 # Subtest: self-directed gestures are not left competing with an explicit two-person relation
-ok 75 - self-directed gestures are not left competing with an explicit two-person relation
+ok 82 - self-directed gestures are not left competing with an explicit two-person relation
   ---
-  duration_ms: 0.3819
+  duration_ms: 0.3139
   type: 'test'
   ...
 # Subtest: ordinary dialogue still omits men and unrelated bystanders do not join a directed interaction
-ok 76 - ordinary dialogue still omits men and unrelated bystanders do not join a directed interaction
+ok 83 - ordinary dialogue still omits men and unrelated bystanders do not join a directed interaction
   ---
-  duration_ms: 1.127
+  duration_ms: 2.3711
   type: 'test'
   ...
 # Subtest: old non-explicit action tags infer a relation, including a supported person being helped up
-ok 77 - old non-explicit action tags infer a relation, including a supported person being helped up
+ok 84 - old non-explicit action tags infer a relation, including a supported person being helped up
   ---
-  duration_ms: 0.5268
+  duration_ms: 0.755
   type: 'test'
   ...
 # Subtest: negative interaction text does not force men into an ordinary scene
-ok 78 - negative interaction text does not force men into an ordinary scene
+ok 85 - negative interaction text does not force men into an ordinary scene
   ---
-  duration_ms: 0.192
+  duration_ms: 0.2269
   type: 'test'
   ...
 # Subtest: names resolve from aliases; a missing endpoint, same endpoint and unknown gesture are rejected
-ok 79 - names resolve from aliases; a missing endpoint, same endpoint and unknown gesture are rejected
+ok 86 - names resolve from aliases; a missing endpoint, same endpoint and unknown gesture are rejected
   ---
-  duration_ms: 0.6352
+  duration_ms: 0.4034
   type: 'test'
   ...
 # Subtest: refocusing is idempotent and changing camera does not stack generated composition tags
-ok 80 - refocusing is idempotent and changing camera does not stack generated composition tags
+ok 87 - refocusing is idempotent and changing camera does not stack generated composition tags
   ---
-  duration_ms: 0.9137
+  duration_ms: 0.5666
   type: 'test'
   ...
 # Subtest: switching a real Flash POV composition to third person removes its original camera directions
-ok 81 - switching a real Flash POV composition to third person removes its original camera directions
+ok 88 - switching a real Flash POV composition to third person removes its original camera directions
   ---
-  duration_ms: 0.8358
+  duration_ms: 0.5721
   type: 'test'
   ...
 # Subtest: Chinese passive action does not become the initiating actor in legacy capture inference
-ok 82 - Chinese passive action does not become the initiating actor in legacy capture inference
+ok 89 - Chinese passive action does not become the initiating actor in legacy capture inference
   ---
-  duration_ms: 0.591
+  duration_ms: 0.4957
   type: 'test'
   ...
 # Subtest: the POV viewpoint cannot accidentally make the male partner the main framed subject
-ok 83 - the POV viewpoint cannot accidentally make the male partner the main framed subject
+ok 90 - the POV viewpoint cannot accidentally make the male partner the main framed subject
   ---
-  duration_ms: 0.7567
+  duration_ms: 0.4814
   type: 'test'
   ...
 # Subtest: a male-only scene remains an environment frame
-ok 84 - a male-only scene remains an environment frame
+ok 91 - a male-only scene remains an environment frame
   ---
-  duration_ms: 0.4211
+  duration_ms: 0.1943
   type: 'test'
   ...
 # Subtest: automatic capture stores the directed pair and compiles partial partner tags locally
-ok 85 - automatic capture stores the directed pair and compiles partial partner tags locally
+ok 92 - automatic capture stores the directed pair and compiles partial partner tags locally
   ---
-  duration_ms: 53.1855
+  duration_ms: 61.1009
   type: 'test'
   ...
 # Subtest: manual selection retains both people and relationship after its one Flash response
-ok 86 - manual selection retains both people and relationship after its one Flash response
+ok 93 - manual selection retains both people and relationship after its one Flash response
   ---
-  duration_ms: 17.8748
+  duration_ms: 18.2432
   type: 'test'
   ...
 # Subtest: legacy main output reuses an unambiguous bound actor with no model call
-ok 87 - legacy main output reuses an unambiguous bound actor with no model call
+ok 94 - legacy main output reuses an unambiguous bound actor with no model call
   ---
-  duration_ms: 7.6511
+  duration_ms: 6.2698
   type: 'test'
   ...
 # Subtest: legacy native frame with no known person preserves literal prompt without inventing cast
-ok 88 - legacy native frame with no known person preserves literal prompt without inventing cast
+ok 95 - legacy native frame with no known person preserves literal prompt without inventing cast
   ---
-  duration_ms: 0.657
+  duration_ms: 0.6931
   type: 'test'
   ...
 # Subtest: ambiguous legacy scene never silently assigns the wrong saved person
-ok 89 - ambiguous legacy scene never silently assigns the wrong saved person
+ok 96 - ambiguous legacy scene never silently assigns the wrong saved person
   ---
-  duration_ms: 0.4166
+  duration_ms: 0.3768
   type: 'test'
   ...
 # Subtest: active ICOT format repair preserves source preset, other prompts and sampling
-ok 90 - active ICOT format repair preserves source preset, other prompts and sampling
+ok 97 - active ICOT format repair preserves source preset, other prompts and sampling
   ---
-  duration_ms: 2.556
+  duration_ms: 3.3408
   type: 'test'
   ...
 # Subtest: existing chat backfills complete clothing without altering appearance
-ok 91 - existing chat backfills complete clothing without altering appearance
+ok 98 - existing chat backfills complete clothing without altering appearance
   ---
-  duration_ms: 3.2471
+  duration_ms: 1.8314
   type: 'test'
   ...
 # Subtest: native outfit links its owner; edits update clothing and preserve media
-ok 92 - native outfit links its owner; edits update clothing and preserve media
+ok 99 - native outfit links its owner; edits update clothing and preserve media
   ---
-  duration_ms: 2.7831
+  duration_ms: 1.497
   type: 'test'
   ...
 # Subtest: display hides planning while preserving every image block, prose and status
-ok 93 - display hides planning while preserving every image block, prose and status
+ok 100 - display hides planning while preserving every image block, prose and status
   ---
-  duration_ms: 1.7226
+  duration_ms: 0.7812
   type: 'test'
   ...
 # Subtest: literal ICOT template lines disappear without removing actual prose or image buttons
-ok 94 - literal ICOT template lines disappear without removing actual prose or image buttons
+ok 101 - literal ICOT template lines disappear without removing actual prose or image buttons
   ---
-  duration_ms: 0.2251
+  duration_ms: 0.1931
   type: 'test'
   ...
 # Subtest: normal manual fields, unknown metadata and prompt bytes stay exact without mutating input
-ok 95 - normal manual fields, unknown metadata and prompt bytes stay exact without mutating input
+ok 102 - normal manual fields, unknown metadata and prompt bytes stay exact without mutating input
   ---
-  duration_ms: 2.9356
+  duration_ms: 2.8698
   type: 'test'
   ...
 # Subtest: a missing display caption uses the selected passage without dropping valid visual tags
-ok 96 - a missing display caption uses the selected passage without dropping valid visual tags
+ok 103 - a missing display caption uses the selected passage without dropping valid visual tags
   ---
-  duration_ms: 0.4912
+  duration_ms: 0.2882
   type: 'test'
   ...
 # Subtest: ADCAP field names adapt to manual names while keeping appearance, clothing and interactions
-ok 97 - ADCAP field names adapt to manual names while keeping appearance, clothing and interactions
+ok 104 - ADCAP field names adapt to manual names while keeping appearance, clothing and interactions
   ---
-  duration_ms: 0.4763
+  duration_ms: 0.2727
   type: 'test'
   ...
 # Subtest: tag arrays retain every item and weight in their original order
-ok 98 - tag arrays retain every item and weight in their original order
+ok 105 - tag arrays retain every item and weight in their original order
   ---
-  duration_ms: 0.2942
+  duration_ms: 0.3275
   type: 'test'
   ...
 # Subtest: only a single explicit result or data wrapper is unwrapped
-ok 99 - only a single explicit result or data wrapper is unwrapped
+ok 106 - only a single explicit result or data wrapper is unwrapped
   ---
-  duration_ms: 0.8838
+  duration_ms: 0.8516
   type: 'test'
   ...
 # Subtest: explicit environment-only frames permit an omitted people list
-ok 100 - explicit environment-only frames permit an omitted people list
+ok 107 - explicit environment-only frames permit an omitted people list
   ---
-  duration_ms: 0.2273
+  duration_ms: 0.1843
   type: 'test'
   ...
 # Subtest: missing scene and cast fields are named instead of reporting a generic Flash failure
-ok 101 - missing scene and cast fields are named instead of reporting a generic Flash failure
+ok 108 - missing scene and cast fields are named instead of reporting a generic Flash failure
   ---
-  duration_ms: 0.2619
+  duration_ms: 0.2189
   type: 'test'
   ...
 # Subtest: no tags or identity are fabricated when arrays or field types are invalid
-ok 102 - no tags or identity are fabricated when arrays or field types are invalid
+ok 109 - no tags or identity are fabricated when arrays or field types are invalid
   ---
-  duration_ms: 0.2979
+  duration_ms: 0.2368
   type: 'test'
   ...
 # Subtest: too many actors stay a clear error and are never silently truncated
-ok 103 - too many actors stay a clear error and are never silently truncated
+ok 110 - too many actors stay a clear error and are never silently truncated
   ---
-  duration_ms: 0.2948
+  duration_ms: 0.2675
   type: 'test'
   ...
 # Subtest: model refusal and error objects stay failures even with otherwise valid fields
-ok 104 - model refusal and error objects stay failures even with otherwise valid fields
+ok 111 - model refusal and error objects stay failures even with otherwise valid fields
   ---
-  duration_ms: 0.3064
+  duration_ms: 0.4125
   type: 'test'
   ...
 # Subtest: unknown cast still fails local identity validation after field adaptation
-ok 105 - unknown cast still fails local identity validation after field adaptation
+ok 112 - unknown cast still fails local identity validation after field adaptation
   ---
-  duration_ms: 1.8689
+  duration_ms: 2.4967
   type: 'test'
   ...
 # Subtest: valid tags without summary complete the full local selection preparation
-ok 106 - valid tags without summary complete the full local selection preparation
+ok 113 - valid tags without summary complete the full local selection preparation
   ---
-  duration_ms: 9.6381
+  duration_ms: 12.0573
   type: 'test'
   ...
 # Subtest: manual selection needs one Flash call and excludes future story and offscreen cast
-ok 107 - manual selection needs one Flash call and excludes future story and offscreen cast
+ok 114 - manual selection needs one Flash call and excludes future story and offscreen cast
   ---
-  duration_ms: 33.1632
+  duration_ms: 40.0619
   type: 'test'
   ...
 # Subtest: confirmed manual tags are authoritative across later cast changes
-ok 108 - confirmed manual tags are authoritative across later cast changes
+ok 115 - confirmed manual tags are authoritative across later cast changes
   ---
-  duration_ms: 1.9043
+  duration_ms: 2.8712
   type: 'test'
   ...
 # Subtest: malformed or unrelated manual response stops before local identity resolution
-ok 109 - malformed or unrelated manual response stops before local identity resolution
+ok 116 - malformed or unrelated manual response stops before local identity resolution
   ---
-  duration_ms: 1.5464
+  duration_ms: 2.2007
   type: 'test'
   ...
 # Subtest: already cancelled manual request never calls Flash
-ok 110 - already cancelled manual request never calls Flash
+ok 117 - already cancelled manual request never calls Flash
   ---
-  duration_ms: 0.3221
+  duration_ms: 0.2605
   type: 'test'
   ...
 # Subtest: manual preparation is staged and only explicit confirmation saves tags
-ok 111 - manual preparation is staged and only explicit confirmation saves tags
+ok 118 - manual preparation is staged and only explicit confirmation saves tags
   ---
-  duration_ms: 2.4479
+  duration_ms: 1.9567
   type: 'test'
   ...
 # Subtest: chat and swipe changes reject manual confirmation without writes
-ok 112 - chat and swipe changes reject manual confirmation without writes
+ok 119 - chat and swipe changes reject manual confirmation without writes
   ---
-  duration_ms: 4.6387
+  duration_ms: 5.9446
   type: 'test'
   ...
 # Subtest: closing pending manual preparation cancels its late result
-ok 113 - closing pending manual preparation cancels its late result
+ok 120 - closing pending manual preparation cancels its late result
   ---
-  duration_ms: 6.5446
+  duration_ms: 8.1211
   type: 'test'
   ...
 # Subtest: failed regeneration still allows confirming the previous edited tags
-ok 114 - failed regeneration still allows confirming the previous edited tags
+ok 121 - failed regeneration still allows confirming the previous edited tags
   ---
-  duration_ms: 1.5126
+  duration_ms: 2.3915
   type: 'test'
   ...
 # Subtest: offline manual service gives a recoverable Chinese error after one request
-ok 115 - offline manual service gives a recoverable Chinese error after one request
+ok 122 - offline manual service gives a recoverable Chinese error after one request
   ---
-  duration_ms: 0.5136
+  duration_ms: 0.6641
   type: 'test'
   ...
 # Subtest: portable manual request uses drawing profile and never includes chat history or main settings
-ok 116 - portable manual request uses drawing profile and never includes chat history or main settings
+ok 123 - portable manual request uses drawing profile and never includes chat history or main settings
   ---
-  duration_ms: 32.1308
+  duration_ms: 38.5539
   type: 'test'
   ...
 # Subtest: explicit helper setting works without Windows loopback and cancellation reaches fetch
-ok 117 - explicit helper setting works without Windows loopback and cancellation reaches fetch
+ok 124 - explicit helper setting works without Windows loopback and cancellation reaches fetch
   ---
-  duration_ms: 0.9632
+  duration_ms: 0.9935
   type: 'test'
   ...
 # Subtest: API failures stay inside the manual request with one attempt
-ok 118 - API failures stay inside the manual request with one attempt
+ok 125 - API failures stay inside the manual request with one attempt
   ---
-  duration_ms: 1.0109
+  duration_ms: 1.1211
   type: 'test'
   ...
 # Subtest: automatic protocol survives absence of worldbook and disabling automation removes it
-ok 119 - automatic protocol survives absence of worldbook and disabling automation removes it
+ok 126 - automatic protocol survives absence of worldbook and disabling automation removes it
   ---
-  duration_ms: 0.5231
+  duration_ms: 0.4448
   type: 'test'
   ...
 # Subtest: Silvermoon clears inherited native quality negatives as well as preset negatives
-ok 120 - Silvermoon clears inherited native quality negatives as well as preset negatives
+ok 127 - Silvermoon clears inherited native quality negatives as well as preset negatives
   ---
-  duration_ms: 3.2614
+  duration_ms: 3.1882
   type: 'test'
   ...
 # Subtest: Silvermoon Turbo uses its native sampler and never stacks the old Turbo adapter
-ok 121 - Silvermoon Turbo uses its native sampler and never stacks the old Turbo adapter
+ok 128 - Silvermoon Turbo uses its native sampler and never stacks the old Turbo adapter
   ---
-  duration_ms: 1.778
+  duration_ms: 1.8852
   type: 'test'
   ...
 # Subtest: ordinary Silvermoon retains recommended sampling and the saved-reference adapter
-ok 122 - ordinary Silvermoon retains recommended sampling and the saved-reference adapter
+ok 129 - ordinary Silvermoon retains recommended sampling and the saved-reference adapter
   ---
-  duration_ms: 1.4449
+  duration_ms: 1.3792
   type: 'test'
   ...
 # Subtest: tablet profiles are distinct presets with native INT8 and real higher generation resolution
-ok 123 - tablet profiles are distinct presets with native INT8 and real higher generation resolution
+ok 130 - tablet profiles are distinct presets with native INT8 and real higher generation resolution
   ---
-  duration_ms: 0.9985
+  duration_ms: 0.8779
   type: 'test'
   ...
 # Subtest: one-time upgrade preserves custom workflows, artists, and later manual profile choices
-ok 124 - one-time upgrade preserves custom workflows, artists, and later manual profile choices
+ok 131 - one-time upgrade preserves custom workflows, artists, and later manual profile choices
   ---
-  duration_ms: 0.6366
+  duration_ms: 0.6821
   type: 'test'
   ...
 # Subtest: empty native role contexts are repaired without changing a working image profile or API credentials
-ok 125 - empty native role contexts are repaired without changing a working image profile or API credentials
+ok 132 - empty native role contexts are repaired without changing a working image profile or API credentials
   ---
-  duration_ms: 1.547
+  duration_ms: 3.1213
   type: 'test'
   ...
 # Subtest: existing native role prompts are preserved and generated schema matches the real native parser
-ok 126 - existing native role prompts are preserved and generated schema matches the real native parser
+ok 133 - existing native role prompts are preserved and generated schema matches the real native parser
   ---
-  duration_ms: 5.4646
+  duration_ms: 6.5449
   type: 'test'
   ...
 # Subtest: live synthetic native prompt responses can be parsed and expanded by the installed bundle
-ok 127 - live synthetic native prompt responses can be parsed and expanded by the installed bundle
+ok 134 - live synthetic native prompt responses can be parsed and expanded by the installed bundle
   ---
-  duration_ms: 1.8097
+  duration_ms: 1.0617
   type: 'test'
   ...
 # Subtest: saved roles and outfits are enabled per chat; manual entries and media survive
-ok 128 - saved roles and outfits are enabled per chat; manual entries and media survive
+ok 135 - saved roles and outfits are enabled per chat; manual entries and media survive
   ---
-  duration_ms: 3.6984
+  duration_ms: 2.532
   type: 'test'
   ...
 # Subtest: real native parser expands current appearance and clothes; conflicting scene prose cannot override
-ok 129 - real native parser expands current appearance and clothes; conflicting scene prose cannot override
+ok 136 - real native parser expands current appearance and clothes; conflicting scene prose cannot override
   ---
-  duration_ms: 13.6118
+  duration_ms: 12.2442
   type: 'test'
   ...
 # Subtest: back camera uses native back fields and hides lower garments in portrait
-ok 130 - back camera uses native back fields and hides lower garments in portrait
+ok 137 - back camera uses native back fields and hides lower garments in portrait
   ---
-  duration_ms: 2.3157
+  duration_ms: 1.833
   type: 'test'
   ...
 # Subtest: existing native references also remove conflicting prose and retain original visibility
-ok 131 - existing native references also remove conflicting prose and retain original visibility
+ok 138 - existing native references also remove conflicting prose and retain original visibility
   ---
-  duration_ms: 3.0832
+  duration_ms: 3.6854
   type: 'test'
   ...
 # Subtest: manual preset with exact name is adopted rather than duplicated
-ok 132 - manual preset with exact name is adopted rather than duplicated
+ok 139 - manual preset with exact name is adopted rather than duplicated
   ---
-  duration_ms: 0.5761
+  duration_ms: 0.5577
   type: 'test'
   ...
 # Subtest: missing ADEX discovery sends no saved cast; extraction sends only discovered pictured people
-ok 133 - missing ADEX discovery sends no saved cast; extraction sends only discovered pictured people
+ok 140 - missing ADEX discovery sends no saved cast; extraction sends only discovered pictured people
   ---
-  duration_ms: 38.3678
+  duration_ms: 44.2963
   type: 'test'
   ...
 # Subtest: selected duplicate text resolves inside selected range
-ok 134 - selected duplicate text resolves inside selected range
+ok 141 - selected duplicate text resolves inside selected range
   ---
-  duration_ms: 3.3526
+  duration_ms: 4.7158
   type: 'test'
   ...
 # Subtest: future wardrobe is excluded from target context
-ok 135 - future wardrobe is excluded from target context
+ok 142 - future wardrobe is excluded from target context
   ---
-  duration_ms: 0.511
+  duration_ms: 0.4948
   type: 'test'
   ...
 # Subtest: inserting buttons preserves prose fingerprint and scene validity
-ok 136 - inserting buttons preserves prose fingerprint and scene validity
+ok 143 - inserting buttons preserves prose fingerprint and scene validity
   ---
-  duration_ms: 0.7044
+  duration_ms: 0.7984
   type: 'test'
   ...
 # Subtest: thoughts and status cannot become scene anchors or a manual selection
-ok 137 - thoughts and status cannot become scene anchors or a manual selection
+ok 144 - thoughts and status cannot become scene anchors or a manual selection
   ---
-  duration_ms: 0.2066
+  duration_ms: 0.3434
   type: 'test'
   ...
 # Subtest: unknown, future and offscreen names do not create cast records
-ok 138 - unknown, future and offscreen names do not create cast records
+ok 145 - unknown, future and offscreen names do not create cast records
   ---
-  duration_ms: 0.8941
+  duration_ms: 1.2027
   type: 'test'
   ...
 # Subtest: immutable frame clothing and gestures survive later changes
-ok 139 - immutable frame clothing and gestures survive later changes
+ok 146 - immutable frame clothing and gestures survive later changes
   ---
-  duration_ms: 2.1774
+  duration_ms: 3.1966
   type: 'test'
   ...
 # Subtest: only pictured saved people are sent and snapshot preparation never mutates source state
-ok 140 - only pictured saved people are sent and snapshot preparation never mutates source state
+ok 147 - only pictured saved people are sent and snapshot preparation never mutates source state
   ---
-  duration_ms: 28.2537
+  duration_ms: 38.9941
   type: 'test'
   ...
 # Subtest: manual historical preparation preserves current outfit but can add a new person
-ok 141 - manual historical preparation preserves current outfit but can add a new person
+ok 148 - manual historical preparation preserves current outfit but can add a new person
   ---
-  duration_ms: 0.4781
+  duration_ms: 0.4683
   type: 'test'
   ...
 # Subtest: malformed API response and 429 stop before identities are resolved
-ok 142 - malformed API response and 429 stop before identities are resolved
+ok 149 - malformed API response and 429 stop before identities are resolved
   ---
-  duration_ms: 2.2813
+  duration_ms: 2.1652
   type: 'test'
   ...
 # Subtest: cancelled requests never begin extraction
-ok 143 - cancelled requests never begin extraction
+ok 150 - cancelled requests never begin extraction
   ---
-  duration_ms: 0.3883
+  duration_ms: 0.5805
   type: 'test'
   ...
 # Subtest: migration copies only drawing settings and remains independent after restart
-ok 144 - migration copies only drawing settings and remains independent after restart
+ok 151 - migration copies only drawing settings and remains independent after restart
   ---
-  duration_ms: 2.2314
+  duration_ms: 2.4119
   type: 'test'
   ...
 # Subtest: fresh standalone settings work with an imported standard API workflow
-ok 145 - fresh standalone settings work with an imported standard API workflow
+ok 152 - fresh standalone settings work with an imported standard API workflow
   ---
-  duration_ms: 1.5846
+  duration_ms: 2.5877
   type: 'test'
   ...
 # Subtest: scene display anchors are idempotent, safe and leave original prose intact
-ok 146 - scene display anchors are idempotent, safe and leave original prose intact
+ok 153 - scene display anchors are idempotent, safe and leave original prose intact
   ---
-  duration_ms: 0.51
+  duration_ms: 0.4917
   type: 'test'
   ...
 # Subtest: gallery sizes and paged filters use metadata instead of image data
-ok 147 - gallery sizes and paged filters use metadata instead of image data
+ok 154 - gallery sizes and paged filters use metadata instead of image data
   ---
-  duration_ms: 13.428
+  duration_ms: 12.1222
   type: 'test'
   ...
 # Subtest: download ZIP writes valid local and central records with per-file CRCs
-ok 148 - download ZIP writes valid local and central records with per-file CRCs
+ok 155 - download ZIP writes valid local and central records with per-file CRCs
   ---
-  duration_ms: 1.6269
+  duration_ms: 1.3324
   type: 'test'
   ...
 # Subtest: tablet canvas generation records its actual output dimensions
-ok 149 - tablet canvas generation records its actual output dimensions
+ok 156 - tablet canvas generation records its actual output dimensions
   ---
-  duration_ms: 0.7044
+  duration_ms: 0.4267
   type: 'test'
   ...
 # Subtest: identical native copies merge migration IDs without deleting original chat assets
-ok 150 - identical native copies merge migration IDs without deleting original chat assets
+ok 157 - identical native copies merge migration IDs without deleting original chat assets
   ---
-  duration_ms: 9.1183
+  duration_ms: 8.7088
   type: 'test'
   ...
 # Subtest: restoring an older backup repairs the live native button and preserves prose
-ok 151 - restoring an older backup repairs the live native button and preserves prose
+ok 158 - restoring an older backup repairs the live native button and preserves prose
   ---
-  duration_ms: 3.7272
+  duration_ms: 3.5496
   type: 'test'
   ...
 # Subtest: restored buttons never rewrite changed prose, branches, users or another message
-ok 152 - restored buttons never rewrite changed prose, branches, users or another message
+ok 159 - restored buttons never rewrite changed prose, branches, users or another message
   ---
-  duration_ms: 0.499
+  duration_ms: 0.6693
   type: 'test'
   ...
 # Subtest: unspecified clothing differs from an explicitly empty wardrobe
-ok 153 - unspecified clothing differs from an explicitly empty wardrobe
+ok 160 - unspecified clothing differs from an explicitly empty wardrobe
   ---
-  duration_ms: 0.72
+  duration_ms: 0.9036
   type: 'test'
   ...
 # Subtest: removal patch keeps other garments and eliminates worn tags
-ok 154 - removal patch keeps other garments and eliminates worn tags
+ok 161 - removal patch keeps other garments and eliminates worn tags
   ---
-  duration_ms: 0.3124
+  duration_ms: 0.4495
   type: 'test'
   ...
 # Subtest: wearing-state change replaces old button tags without changing design
-ok 155 - wearing-state change replaces old button tags without changing design
+ok 162 - wearing-state change replaces old button tags without changing design
   ---
-  duration_ms: 0.2644
+  duration_ms: 0.3762
   type: 'test'
   ...
 # Subtest: invalid or ambiguous clothing controls are rejected
-ok 156 - invalid or ambiguous clothing controls are rejected
+ok 163 - invalid or ambiguous clothing controls are rejected
   ---
-  duration_ms: 0.3663
+  duration_ms: 0.5509
   type: 'test'
   ...
 # Subtest: balanced control parser handles quoted braces and nested objects
-ok 157 - balanced control parser handles quoted braces and nested objects
+ok 164 - balanced control parser handles quoted braces and nested objects
   ---
-  duration_ms: 0.6675
+  duration_ms: 0.7157
   type: 'test'
   ...
 # Subtest: automatic frames locally resolve identity with zero network dependency
-ok 158 - automatic frames locally resolve identity with zero network dependency
+ok 165 - automatic frames locally resolve identity with zero network dependency
   ---
-  duration_ms: 8.5493
+  duration_ms: 8.1695
   type: 'test'
   ...
 # Subtest: three rapid clothing frames retain independent immutable snapshots
-ok 159 - three rapid clothing frames retain independent immutable snapshots
+ok 166 - three rapid clothing frames retain independent immutable snapshots
   ---
-  duration_ms: 1.491
+  duration_ms: 1.5071
   type: 'test'
   ...
 # Subtest: saved shape versions do not retroactively change prior image tags
-ok 160 - saved shape versions do not retroactively change prior image tags
+ok 167 - saved shape versions do not retroactively change prior image tags
   ---
-  duration_ms: 0.6187
+  duration_ms: 1.1438
   type: 'test'
   ...
 # Subtest: timeline excludes future offsets, edited sources and other reply branches
-ok 161 - timeline excludes future offsets, edited sources and other reply branches
+ok 168 - timeline excludes future offsets, edited sources and other reply branches
   ---
-  duration_ms: 0.466
+  duration_ms: 0.801
   type: 'test'
   ...
 # Subtest: multi-person garments stay attached to their own actor
-ok 162 - multi-person garments stay attached to their own actor
+ok 169 - multi-person garments stay attached to their own actor
   ---
-  duration_ms: 2.0407
+  duration_ms: 3.4551
   type: 'test'
   ...
 # Subtest: duplicate or invalid frame people stop before compilation
-ok 163 - duplicate or invalid frame people stop before compilation
+ok 170 - duplicate or invalid frame people stop before compilation
   ---
-  duration_ms: 0.2275
+  duration_ms: 0.3735
   type: 'test'
   ...
 # Subtest: hidden wardrobe records never become visible prose or a selectable scene
-ok 164 - hidden wardrobe records never become visible prose or a selectable scene
+ok 171 - hidden wardrobe records never become visible prose or a selectable scene
   ---
-  duration_ms: 0.2592
+  duration_ms: 0.3837
   type: 'test'
   ...
 # Subtest: reroll changes only selected shape and leaves saved binding intact
-ok 165 - reroll changes only selected shape and leaves saved binding intact
+ok 172 - reroll changes only selected shape and leaves saved binding intact
   ---
-  duration_ms: 9.2263
+  duration_ms: 10.2883
   type: 'test'
   ...
 # Subtest: manual wardrobe v2 removal uses one Flash call and no future context
-ok 166 - manual wardrobe v2 removal uses one Flash call and no future context
+ok 173 - manual wardrobe v2 removal uses one Flash call and no future context
   ---
-  duration_ms: 30.5382
+  duration_ms: 32.1189
   type: 'test'
   ...
 # Subtest: held and draped garments compile as contextual props rather than bare clothing
-ok 167 - held and draped garments compile as contextual props rather than bare clothing
+ok 174 - held and draped garments compile as contextual props rather than bare clothing
   ---
-  duration_ms: 0.2351
+  duration_ms: 0.2931
   type: 'test'
   ...
 # Subtest: wardrobe ordering survives long automatic controls becoming short native buttons
-ok 168 - wardrobe ordering survives long automatic controls becoming short native buttons
+ok 175 - wardrobe ordering survives long automatic controls becoming short native buttons
   ---
-  duration_ms: 0.5169
+  duration_ms: 0.5379
   type: 'test'
   ...
 # Subtest: automatic planning is idempotent and saves buttons without GPU submission
-ok 169 - automatic planning is idempotent and saves buttons without GPU submission
+ok 176 - automatic planning is idempotent and saves buttons without GPU submission
   ---
-  duration_ms: 44.1703
+  duration_ms: 43.185
   type: 'test'
   ...
 # Subtest: optional automatic rendering submits each saved frame once through native bridge
-ok 170 - optional automatic rendering submits each saved frame once through native bridge
+ok 177 - optional automatic rendering submits each saved frame once through native bridge
   ---
-  duration_ms: 2.7728
+  duration_ms: 2.2484
   type: 'test'
   ...
 # Subtest: editing a saved frame creates a new cache revision with immutable outfit history
-ok 171 - editing a saved frame creates a new cache revision with immutable outfit history
+ok 178 - editing a saved frame creates a new cache revision with immutable outfit history
   ---
-  duration_ms: 2.0306
+  duration_ms: 2.2921
   type: 'test'
   ...
 # Subtest: native generation compiles clothes and action from the saved frame, not latest wardrobe
-ok 172 - native generation compiles clothes and action from the saved frame, not latest wardrobe
+ok 179 - native generation compiles clothes and action from the saved frame, not latest wardrobe
   ---
-  duration_ms: 1.5871
+  duration_ms: 1.4481
   type: 'test'
   ...
 # Subtest: changing swipe or prose rejects previously prepared GPU work
-ok 173 - changing swipe or prose rejects previously prepared GPU work
+ok 180 - changing swipe or prose rejects previously prepared GPU work
   ---
-  duration_ms: 1.2725
+  duration_ms: 2.471
   type: 'test'
   ...
 # Subtest: partial extraction and HTTP failure leave messages, cast and disk untouched
-ok 174 - partial extraction and HTTP failure leave messages, cast and disk untouched
+ok 181 - partial extraction and HTTP failure leave messages, cast and disk untouched
   ---
-  duration_ms: 2.4422
+  duration_ms: 1.4974
   type: 'test'
   ...
 # Subtest: chat switch cancels a pending planner before extraction or save
-ok 175 - chat switch cancels a pending planner before extraction or save
+ok 182 - chat switch cancels a pending planner before extraction or save
   ---
-  duration_ms: 4.3667
+  duration_ms: 4.4771
   type: 'test'
   ...
 # Subtest: a failed persistence restores body, swipe, and cast as one operation
-ok 176 - a failed persistence restores body, swipe, and cast as one operation
+ok 183 - a failed persistence restores body, swipe, and cast as one operation
   ---
-  duration_ms: 1.5176
+  duration_ms: 1.7297
   type: 'test'
   ...
 # Subtest: clothing-only person edit retains named character identity and old snapshots
-ok 177 - clothing-only person edit retains named character identity and old snapshots
+ok 184 - clothing-only person edit retains named character identity and old snapshots
   ---
-  duration_ms: 2.2707
+  duration_ms: 2.4024
   type: 'test'
   ...
 # Subtest: excluded later frame cannot advance wardrobe or register unseen people
-ok 178 - excluded later frame cannot advance wardrobe or register unseen people
+ok 185 - excluded later frame cannot advance wardrobe or register unseen people
   ---
-  duration_ms: 2.9931
+  duration_ms: 3.2336
   type: 'test'
   ...
 # Subtest: editing a newly prepared person saves it without losing other staged people
-ok 179 - editing a newly prepared person saves it without losing other staged people
+ok 186 - editing a newly prepared person saves it without losing other staged people
   ---
-  duration_ms: 1.5072
+  duration_ms: 2.416
   type: 'test'
   ...
 # Subtest: one-time native migration preserves source assets, media and other-chat scope
-ok 180 - one-time native migration preserves source assets, media and other-chat scope
+ok 187 - one-time native migration preserves source assets, media and other-chat scope
   ---
-  duration_ms: 2.9745
+  duration_ms: 3.5162
   type: 'test'
   ...
 # Subtest: scene resolver cannot erase migrated authority metadata
-ok 181 - scene resolver cannot erase migrated authority metadata
+ok 188 - scene resolver cannot erase migrated authority metadata
   ---
-  duration_ms: 34.8939
+  duration_ms: 32.7647
   type: 'test'
   ...
 # Subtest: one queued save pins target, metadata, body and active swipe together
-ok 182 - one queued save pins target, metadata, body and active swipe together
+ok 189 - one queued save pins target, metadata, body and active swipe together
   ---
-  duration_ms: 0.613
+  duration_ms: 0.8855
   type: 'test'
   ...
 # Subtest: queued work rejects a switched chat before any disk write or mutation
-ok 183 - queued work rejects a switched chat before any disk write or mutation
+ok 190 - queued work rejects a switched chat before any disk write or mutation
   ---
-  duration_ms: 0.4797
+  duration_ms: 0.9326
   type: 'test'
   ...
 # Subtest: in-flight save stays pinned and failure restores only original objects
-ok 184 - in-flight save stays pinned and failure restores only original objects
+ok 191 - in-flight save stays pinned and failure restores only original objects
   ---
-  duration_ms: 0.3234
+  duration_ms: 0.6234
   type: 'test'
   ...
 # Subtest: group chat saves use the group chat file and do not call character transport
-ok 185 - group chat saves use the group chat file and do not call character transport
+ok 192 - group chat saves use the group chat file and do not call character transport
   ---
-  duration_ms: 0.1929
+  duration_ms: 0.4059
   type: 'test'
   ...
 # Subtest: control revisions are strict and environment fallback must be a boolean
-ok 186 - control revisions are strict and environment fallback must be a boolean
+ok 193 - control revisions are strict and environment fallback must be a boolean
   ---
-  duration_ms: 0.4414
+  duration_ms: 0.8791
   type: 'test'
   ...
 # Subtest: expanded default catalog is 8000 female identities with fixed hair and eyes, full tags and previews
-ok 187 - expanded default catalog is 8000 female identities with fixed hair and eyes, full tags and previews
+ok 194 - expanded default catalog is 8000 female identities with fixed hair and eyes, full tags and previews
   ---
-  duration_ms: 17.5787
+  duration_ms: 16.7961
   type: 'test'
   ...
 # Subtest: unique full name and abbreviation bind the same shape and contradictory hair cannot overwrite it
-ok 188 - unique full name and abbreviation bind the same shape and contradictory hair cannot overwrite it
+ok 195 - unique full name and abbreviation bind the same shape and contradictory hair cannot overwrite it
   ---
-  duration_ms: 13.537
+  duration_ms: 11.7585
   type: 'test'
   ...
 # Subtest: two full names sharing a given name are never silently combined
-ok 189 - two full names sharing a given name are never silently combined
+ok 196 - two full names sharing a given name are never silently combined
   ---
-  duration_ms: 0.146
+  duration_ms: 0.1411
   type: 'test'
   ...
 # Subtest: fallback appearance still fixes hair length for successive captures
-ok 190 - fallback appearance still fixes hair length for successive captures
+ok 197 - fallback appearance still fixes hair length for successive captures
   ---
-  duration_ms: 9.8328
+  duration_ms: 10.1125
   type: 'test'
   ...
 # Subtest: candidate exhaustion provides explicit broader choices instead of retrying an empty intersection
-ok 191 - candidate exhaustion provides explicit broader choices instead of retrying an empty intersection
+ok 198 - candidate exhaustion provides explicit broader choices instead of retrying an empty intersection
   ---
-  duration_ms: 177.2776
+  duration_ms: 184.2789
   type: 'test'
   ...
 # Subtest: catalog search finds an exact costume/version outside the default 2000
-ok 192 - catalog search finds an exact costume/version outside the default 2000
+ok 199 - catalog search finds an exact costume/version outside the default 2000
   ---
-  duration_ms: 109.0701
+  duration_ms: 112.4179
   type: 'test'
   ...
 # Subtest: raw tag import retains franchise/version trigger and separates clothing and native artist
-ok 193 - raw tag import retains franchise/version trigger and separates clothing and native artist
+ok 200 - raw tag import retains franchise/version trigger and separates clothing and native artist
   ---
-  duration_ms: 1.3539
+  duration_ms: 1.3876
   type: 'test'
   ...
 # Subtest: native artist entries cannot carry style controls, paths or prompt structure
-ok 194 - native artist entries cannot carry style controls, paths or prompt structure
+ok 201 - native artist entries cannot carry style controls, paths or prompt structure
   ---
-  duration_ms: 0.6409
+  duration_ms: 0.6396
   type: 'test'
   ...
 # Subtest: ordinary pair becomes female solo with no male count or male character trigger
-ok 195 - ordinary pair becomes female solo with no male count or male character trigger
+ok 202 - ordinary pair becomes female solo with no male count or male character trigger
   ---
-  duration_ms: 2.0618
+  duration_ms: 1.617
   type: 'test'
   ...
 # Subtest: necessary non-explicit interaction keeps man as supporting subject and woman first
-ok 196 - necessary non-explicit interaction keeps man as supporting subject and woman first
+ok 203 - necessary non-explicit interaction keeps man as supporting subject and woman first
   ---
-  duration_ms: 1.4644
+  duration_ms: 0.8734
   type: 'test'
   ...
 # Subtest: automatic captures do all identity work locally and filter male only after resolving saved gender
-ok 197 - automatic captures do all identity work locally and filter male only after resolving saved gender
+ok 204 - automatic captures do all identity work locally and filter male only after resolving saved gender
   ---
-  duration_ms: 34.8547
+  duration_ms: 35.2526
   type: 'test'
   ...
 # Subtest: native style passes the selected artist and does not infer style from short hair
-ok 198 - native style passes the selected artist and does not infer style from short hair
+ok 205 - native style passes the selected artist and does not infer style from short hair
   ---
-  duration_ms: 0.2704
+  duration_ms: 0.291
   type: 'test'
   ...
 # Subtest: conflicting appearance in scene/action cannot change the fixed hairstyle
-ok 199 - conflicting appearance in scene/action cannot change the fixed hairstyle
+ok 206 - conflicting appearance in scene/action cannot change the fixed hairstyle
   ---
-  duration_ms: 0.1694
+  duration_ms: 0.1478
   type: 'test'
   ...
 # Subtest: explicit narrative gender provides a local fallback when a model omits gender
-ok 200 - explicit narrative gender provides a local fallback when a model omits gender
+ok 207 - explicit narrative gender provides a local fallback when a model omits gender
   ---
-  duration_ms: 26.318
+  duration_ms: 27.5809
   type: 'test'
   ...
 # Subtest: candidate reroll changes only one frame, preserves its clothes and replaces face hints
-ok 201 - candidate reroll changes only one frame, preserves its clothes and replaces face hints
+ok 208 - candidate reroll changes only one frame, preserves its clothes and replaces face hints
   ---
-  duration_ms: 130.5626
+  duration_ms: 126.9277
   type: 'test'
   ...
 # Subtest: workflow CRUD persists to actual native preset fields and keeps unrelated presets
-ok 202 - workflow CRUD persists to actual native preset fields and keeps unrelated presets
+ok 209 - workflow CRUD persists to actual native preset fields and keeps unrelated presets
   ---
-  duration_ms: 0.6151
+  duration_ms: 0.6036
   type: 'test'
   ...
 # Subtest: workflow bundle roundtrip imports atomically, resolves duplicates and rejects broken links
-ok 203 - workflow bundle roundtrip imports atomically, resolves duplicates and rejects broken links
+ok 210 - workflow bundle roundtrip imports atomically, resolves duplicates and rejects broken links
   ---
-  duration_ms: 0.4654
+  duration_ms: 0.4419
   type: 'test'
   ...
 # Subtest: actual story-app prepares three automatic buttons locally with one identity and chronological clothes
-ok 204 - actual story-app prepares three automatic buttons locally with one identity and chronological clothes
+ok 211 - actual story-app prepares three automatic buttons locally with one identity and chronological clothes
   ---
-  duration_ms: 13.9794
+  duration_ms: 16.0508
   type: 'test'
   ...
 # Subtest: draft ADCAP and ADMEM examples cannot abort real automatic scenes or change outfits
-ok 205 - draft ADCAP and ADMEM examples cannot abort real automatic scenes or change outfits
+ok 212 - draft ADCAP and ADMEM examples cannot abort real automatic scenes or change outfits
   ---
-  duration_ms: 10.8588
+  duration_ms: 11.8092
   type: 'test'
   ...
 # Subtest: a genuinely invalid capture in the final reply still fails atomically
-ok 206 - a genuinely invalid capture in the final reply still fails atomically
+ok 213 - a genuinely invalid capture in the final reply still fails atomically
   ---
-  duration_ms: 10.1342
+  duration_ms: 10.692
   type: 'test'
   ...
 # Subtest: actual outfit API uses stable prose positions after controls shrink and keeps later snapshots
-ok 207 - actual outfit API uses stable prose positions after controls shrink and keeps later snapshots
+ok 214 - actual outfit API uses stable prose positions after controls shrink and keeps later snapshots
   ---
-  duration_ms: 11.7152
+  duration_ms: 11.4206
   type: 'test'
   ...
 # Subtest: outfit API rejects stale branches without saving into a new swipe
-ok 208 - outfit API rejects stale branches without saving into a new swipe
+ok 215 - outfit API rejects stale branches without saving into a new swipe
   ---
-  duration_ms: 9.8234
+  duration_ms: 11.0523
   type: 'test'
   ...
 # Subtest: story-app APIs save aliases and native artists, refresh pending prompts and preserve native workflows
-ok 209 - story-app APIs save aliases and native artists, refresh pending prompts and preserve native workflows
+ok 216 - story-app APIs save aliases and native artists, refresh pending prompts and preserve native workflows
   ---
-  duration_ms: 16.3973
+  duration_ms: 13.368
   type: 'test'
   ...
 # Subtest: browse is paginated, sorted by source popularity, supports intersecting facets and tags
-ok 210 - browse is paginated, sorted by source popularity, supports intersecting facets and tags
+ok 217 - browse is paginated, sorted by source popularity, supports intersecting facets and tags
   ---
-  duration_ms: 110.2201
+  duration_ms: 118.9126
   type: 'test'
   ...
 # Subtest: deleted prototypes are excluded from random and reroll lists but remain readable for saved images
-ok 211 - deleted prototypes are excluded from random and reroll lists but remain readable for saved images
+ok 218 - deleted prototypes are excluded from random and reroll lists but remain readable for saved images
   ---
-  duration_ms: 279.5868
+  duration_ms: 299.4114
   type: 'test'
   ...
 # Subtest: candidate preview supplies the original full image as well as the thumbnail
-ok 212 - candidate preview supplies the original full image as well as the thumbnail
+ok 219 - candidate preview supplies the original full image as well as the thumbnail
   ---
-  duration_ms: 146.4941
+  duration_ms: 146.5247
   type: 'test'
   ...
 # Subtest: artist import accepts plain names and portable JSON, validates the whole list before changes
-ok 213 - artist import accepts plain names and portable JSON, validates the whole list before changes
+ok 220 - artist import accepts plain names and portable JSON, validates the whole list before changes
   ---
-  duration_ms: 1.9771
+  duration_ms: 1.9076
   type: 'test'
   ...
 # Subtest: global artist replacement preserves structural style/character controls and scene/actor tags
-ok 214 - global artist replacement preserves structural style/character controls and scene/actor tags
+ok 221 - global artist replacement preserves structural style/character controls and scene/actor tags
   ---
-  duration_ms: 0.3241
+  duration_ms: 0.2966
   type: 'test'
   ...
 # Subtest: actual automatic drawing bridge applies selected global artist, switches without stacking, and preserves old snapshots
-ok 215 - actual automatic drawing bridge applies selected global artist, switches without stacking, and preserves old snapshots
+ok 222 - actual automatic drawing bridge applies selected global artist, switches without stacking, and preserves old snapshots
   ---
-  duration_ms: 77.1834
+  duration_ms: 85.4048
   type: 'test'
   ...
 # Subtest: manual edited tags use the same actual bridge with the chosen default artist
-ok 216 - manual edited tags use the same actual bridge with the chosen default artist
+ok 223 - manual edited tags use the same actual bridge with the chosen default artist
   ---
-  duration_ms: 44.2599
+  duration_ms: 53.5135
   type: 'test'
   ...
 # Subtest: artist presets and deletions survive app re-creation; selected preset edits and deletes update its defaults
-ok 217 - artist presets and deletions survive app re-creation; selected preset edits and deletes update its defaults
+ok 224 - artist presets and deletions survive app re-creation; selected preset edits and deletes update its defaults
   ---
-  duration_ms: 48.0677
+  duration_ms: 57.5766
   type: 'test'
   ...
 # Subtest: catalog exclusions export/import validates before saving and unions existing choices
-ok 218 - catalog exclusions export/import validates before saving and unions existing choices
+ok 225 - catalog exclusions export/import validates before saving and unions existing choices
   ---
-  duration_ms: 42.8088
+  duration_ms: 52.2531
   type: 'test'
   ...
 # Subtest: a deleted shape cannot be tried through an explicit candidate id
-ok 219 - a deleted shape cannot be tried through an explicit candidate id
+ok 226 - a deleted shape cannot be tried through an explicit candidate id
   ---
-  duration_ms: 151.34
+  duration_ms: 160.5239
   type: 'test'
   ...
 # Subtest: chat-pasted artist names discard invisible word joiners before adding @
-ok 220 - chat-pasted artist names discard invisible word joiners before adding @
+ok 227 - chat-pasted artist names discard invisible word joiners before adding @
   ---
-  duration_ms: 4.7717
+  duration_ms: 4.6002
   type: 'test'
   ...
 # Subtest: multiword artist names stay intact and JSON preset tags are cleaned
-ok 221 - multiword artist names stay intact and JSON preset tags are cleaned
+ok 228 - multiword artist names stay intact and JSON preset tags are cleaned
   ---
-  duration_ms: 0.6328
+  duration_ms: 0.5748
   type: 'test'
   ...
 # Subtest: paste normalization does not admit artist control markers or paths
-ok 222 - paste normalization does not admit artist control markers or paths
+ok 229 - paste normalization does not admit artist control markers or paths
   ---
-  duration_ms: 1.0247
+  duration_ms: 1.0255
   type: 'test'
   ...
 # Subtest: all three selected presets reach the positive prompt and replace the previous artist
-ok 223 - all three selected presets reach the positive prompt and replace the previous artist
+ok 230 - all three selected presets reach the positive prompt and replace the previous artist
   ---
-  duration_ms: 0.5612
+  duration_ms: 0.5645
   type: 'test'
   ...
 # Subtest: phone update adds requested presets once without changing an existing selection
-ok 224 - phone update adds requested presets once without changing an existing selection
+ok 231 - phone update adds requested presets once without changing an existing selection
   ---
-  duration_ms: 0.4409
+  duration_ms: 0.4529
   type: 'test'
   ...
 # Subtest: failed bundle import can retry after initialization recovers
-ok 225 - failed bundle import can retry after initialization recovers
+ok 232 - failed bundle import can retry after initialization recovers
   ---
-  duration_ms: 0.1838
+  duration_ms: 0.1997
   type: 'test'
   ...
 # Subtest: streaming mutation bursts refresh only the changed row once per frame
-ok 226 - streaming mutation bursts refresh only the changed row once per frame
+ok 233 - streaming mutation bursts refresh only the changed row once per frame
   ---
-  duration_ms: 4.1898
+  duration_ms: 3.7785
   type: 'test'
   ...
 # Subtest: a story change refreshes every row and supersedes pending streaming changes
-ok 227 - a story change refreshes every row and supersedes pending streaming changes
+ok 234 - a story change refreshes every row and supersedes pending streaming changes
   ---
-  duration_ms: 0.4854
+  duration_ms: 0.5497
   type: 'test'
   ...
 # Subtest: mutations caused by mounting can schedule a subsequent frame without losing rows
-ok 228 - mutations caused by mounting can schedule a subsequent frame without losing rows
+ok 235 - mutations caused by mounting can schedule a subsequent frame without losing rows
   ---
-  duration_ms: 0.3093
+  duration_ms: 0.3763
   type: 'test'
   ...
 # Subtest: adding a message never scans the whole chat and detached rows are excluded
-ok 229 - adding a message never scans the whole chat and detached rows are excluded
+ok 236 - adding a message never scans the whole chat and detached rows are excluded
   ---
-  duration_ms: 0.4716
+  duration_ms: 0.565
   type: 'test'
   ...
 # Subtest: native helper requests are quiet and preserve structured Tauri timeout details
-ok 230 - native helper requests are quiet and preserve structured Tauri timeout details
+ok 237 - native helper requests are quiet and preserve structured Tauri timeout details
   ---
-  duration_ms: 31.4704
+  duration_ms: 29.5529
   type: 'test'
   ...
 # Subtest: manual transport distinguishes timeout, interrupted reply, rate limit and authentication without leaking bodies
-ok 231 - manual transport distinguishes timeout, interrupted reply, rate limit and authentication without leaking bodies
+ok 238 - manual transport distinguishes timeout, interrupted reply, rate limit and authentication without leaking bodies
   ---
-  duration_ms: 1.7557
+  duration_ms: 3.9611
   type: 'test'
   ...
 # Subtest: old Tauri error completions and malformed HTTP 200 JSON produce actionable manual errors
-ok 232 - old Tauri error completions and malformed HTTP 200 JSON produce actionable manual errors
+ok 239 - old Tauri error completions and malformed HTTP 200 JSON produce actionable manual errors
   ---
-  duration_ms: 3.1487
+  duration_ms: 2.1115
   type: 'test'
   ...
 # Subtest: Tauri with no native profile fails immediately rather than silently waiting for a Windows helper
-ok 233 - Tauri with no native profile fails immediately rather than silently waiting for a Windows helper
+ok 240 - Tauri with no native profile fails immediately rather than silently waiting for a Windows helper
   ---
-  duration_ms: 0.5189
+  duration_ms: 0.3426
   type: 'test'
   ...
 # Subtest: native proxy passes DeepSeek reasoning and JSON options through the host additional-body channel
-ok 234 - native proxy passes DeepSeek reasoning and JSON options through the host additional-body channel
+ok 241 - native proxy passes DeepSeek reasoning and JSON options through the host additional-body channel
   ---
-  duration_ms: 2.1809
+  duration_ms: 3.7084
   type: 'test'
   ...
 # Subtest: outbound history removes internal drawing IDs and hidden reasoning while preserving visual prose
-ok 235 - outbound history removes internal drawing IDs and hidden reasoning while preserving visual prose
+ok 242 - outbound history removes internal drawing IDs and hidden reasoning while preserving visual prose
   ---
-  duration_ms: 1.4661
+  duration_ms: 1.5237
   type: 'test'
   ...
 # Subtest: history filter preserves user and system contracts, multimodal images and new capture instructions
-ok 236 - history filter preserves user and system contracts, multimodal images and new capture instructions
+ok 243 - history filter preserves user and system contracts, multimodal images and new capture instructions
   ---
-  duration_ms: 0.8499
+  duration_ms: 1.0467
   type: 'test'
   ...
 # Subtest: AVS parser ignores tag names and examples inside reasoning but commits a real final machine block
-ok 237 - AVS parser ignores tag names and examples inside reasoning but commits a real final machine block
+ok 244 - AVS parser ignores tag names and examples inside reasoning but commits a real final machine block
   ---
-  duration_ms: 0.822
+  duration_ms: 0.921
   type: 'test'
   ...
 # Subtest: AVS parser still rejects genuinely malformed, repeated and non-final machine transactions
-ok 238 - AVS parser still rejects genuinely malformed, repeated and non-final machine transactions
+ok 245 - AVS parser still rejects genuinely malformed, repeated and non-final machine transactions
   ---
-  duration_ms: 0.5338
+  duration_ms: 0.6307
   type: 'test'
   ...
 # Subtest: a display status footer may follow AVS transactions but real subsequent prose still fails
-ok 239 - a display status footer may follow AVS transactions but real subsequent prose still fails
+ok 246 - a display status footer may follow AVS transactions but real subsequent prose still fails
   ---
-  duration_ms: 0.3929
+  duration_ms: 0.3158
   type: 'test'
   ...
 # Subtest: automatic instructions carry bounded prior wardrobe states and distinguish sleeve lowering from unchanged design
-ok 240 - automatic instructions carry bounded prior wardrobe states and distinguish sleeve lowering from unchanged design
+ok 247 - automatic instructions carry bounded prior wardrobe states and distinguish sleeve lowering from unchanged design
   ---
-  duration_ms: 0.5429
+  duration_ms: 0.6152
   type: 'test'
   ...
 # Subtest: long outfit histories hash each message once without crossing edited or alternate branches
-ok 241 - long outfit histories hash each message once without crossing edited or alternate branches
+ok 248 - long outfit histories hash each message once without crossing edited or alternate branches
   ---
-  duration_ms: 0.9612
+  duration_ms: 1.186
   type: 'test'
   ...
 # Subtest: AVS compatibility update preserves unrelated scripts and backs up original source once
-ok 242 - AVS compatibility update preserves unrelated scripts and backs up original source once
+ok 249 - AVS compatibility update preserves unrelated scripts and backs up original source once
   ---
-  duration_ms: 0.4464
+  duration_ms: 0.4324
   type: 'test'
   ...
 # Subtest: an unfinished image example in reasoning cannot consume real prose or destabilize picture hashes
-ok 243 - an unfinished image example in reasoning cannot consume real prose or destabilize picture hashes
+ok 250 - an unfinished image example in reasoning cannot consume real prose or destabilize picture hashes
   ---
-  duration_ms: 0.6122
+  duration_ms: 0.5507
   type: 'test'
   ...
 # Subtest: ordinary legacy picture hashes stay compatible and changed real prose remains distinguishable
-ok 244 - ordinary legacy picture hashes stay compatible and changed real prose remains distinguishable
+ok 251 - ordinary legacy picture hashes stay compatible and changed real prose remains distinguishable
   ---
-  duration_ms: 0.3826
+  duration_ms: 0.3974
   type: 'test'
   ...
 # Subtest: real SP table request builder requires a text reply and uses quiet network error semantics
-ok 245 - real SP table request builder requires a text reply and uses quiet network error semantics
+ok 252 - real SP table request builder requires a text reply and uses quiet network error semantics
   ---
-  duration_ms: 4.1674
+  duration_ms: 4.2588
   type: 'test'
   ...
 # Subtest: SP agent and other API calls retain their existing tool behavior
-ok 246 - SP agent and other API calls retain their existing tool behavior
+ok 253 - SP agent and other API calls retain their existing tool behavior
   ---
-  duration_ms: 0.3819
+  duration_ms: 0.4341
   type: 'test'
   ...
 # Subtest: actual table fill call enables the policy and recovered JSON does not create a false failure
-ok 247 - actual table fill call enables the policy and recovered JSON does not create a false failure
+ok 254 - actual table fill call enables the policy and recovered JSON does not create a false failure
   ---
-  duration_ms: 11.4687
+  duration_ms: 11.3284
   type: 'test'
   ...
 # Subtest: native caller tool policy bypasses the actual Kemini anti-truncation interceptor
-ok 248 - native caller tool policy bypasses the actual Kemini anti-truncation interceptor
+ok 255 - native caller tool policy bypasses the actual Kemini anti-truncation interceptor
   ---
-  duration_ms: 0.858
+  duration_ms: 1.0632
   type: 'test'
   ...
 # Subtest: actual SP response normalization resolves exact unique table names to frozen table indices
-ok 249 - actual SP response normalization resolves exact unique table names to frozen table indices
+ok 256 - actual SP response normalization resolves exact unique table names to frozen table indices
   ---
-  duration_ms: 0.6652
+  duration_ms: 1.2164
   type: 'test'
   ...
 # Subtest: unknown and ambiguous table names remain invalid instead of writing to another sheet
-ok 250 - unknown and ambiguous table names remain invalid instead of writing to another sheet
+ok 257 - unknown and ambiguous table names remain invalid instead of writing to another sheet
   ---
-  duration_ms: 0.195
+  duration_ms: 0.2964
   type: 'test'
   ...
 # Subtest: table normalization leaves numeric calls, JSON values and text outside tableEdit intact
-ok 251 - table normalization leaves numeric calls, JSON values and text outside tableEdit intact
+ok 258 - table normalization leaves numeric calls, JSON values and text outside tableEdit intact
   ---
-  duration_ms: 0.1635
+  duration_ms: 0.2833
   type: 'test'
   ...
 # Subtest: SP bounded retry classification accepts transient transport failures and refuses abort/auth/config failures
-ok 252 - SP bounded retry classification accepts transient transport failures and refuses abort/auth/config failures
+ok 259 - SP bounded retry classification accepts transient transport failures and refuses abort/auth/config failures
   ---
-  duration_ms: 0.3046
+  duration_ms: 0.633
   type: 'test'
   ...
 # Subtest: actual SP fill path carries HTTP status and uses its existing bounded retry owner
-ok 253 - actual SP fill path carries HTTP status and uses its existing bounded retry owner
+ok 260 - actual SP fill path carries HTTP status and uses its existing bounded retry owner
   ---
-  duration_ms: 6.1548
+  duration_ms: 10.6952
   type: 'test'
   ...
 # Subtest: actual group collector retries a transient failure and returns the successful table response
-ok 254 - actual group collector retries a transient failure and returns the successful table response
+ok 261 - actual group collector retries a transient failure and returns the successful table response
   ---
-  duration_ms: 1.6663
+  duration_ms: 2.837
   type: 'test'
   ...
 # Subtest: actual group collector stops at its configured attempt limit and reports persistent failure
-ok 255 - actual group collector stops at its configured attempt limit and reports persistent failure
+ok 262 - actual group collector stops at its configured attempt limit and reports persistent failure
   ---
-  duration_ms: 1.4843
+  duration_ms: 3.0024
   type: 'test'
   ...
 # Subtest: actual group collector never retries auth failure or an already cancelled request
-ok 256 - actual group collector never retries auth failure or an already cancelled request
+ok 263 - actual group collector never retries auth failure or an already cancelled request
   ---
-  duration_ms: 0.7073
+  duration_ms: 0.6142
   type: 'test'
   ...
 # Subtest: render queue waits for output completion before starting another image
-ok 257 - render queue waits for output completion before starting another image
+ok 264 - render queue waits for output completion before starting another image
   ---
-  duration_ms: 8.1772
+  duration_ms: 8.5242
   type: 'test'
   ...
 # Subtest: one failed render pauses all pending work and retry is explicit
-ok 258 - one failed render pauses all pending work and retry is explicit
+ok 265 - one failed render pauses all pending work and retry is explicit
   ---
-  duration_ms: 2.3347
+  duration_ms: 1.4789
   type: 'test'
   ...
 # Subtest: cancel and stale source never launch their queued tasks
-ok 259 - cancel and stale source never launch their queued tasks
+ok 266 - cancel and stale source never launch their queued tasks
   ---
-  duration_ms: 1.5553
+  duration_ms: 1.4024
   type: 'test'
   ...
 # Subtest: queue deduplicates automatic tokens and bounds pending work
-ok 260 - queue deduplicates automatic tokens and bounds pending work
+ok 267 - queue deduplicates automatic tokens and bounds pending work
   ---
-  duration_ms: 1.9774
+  duration_ms: 2.1983
   type: 'test'
   ...
 # Subtest: new assistant reply automatically renders only its configured maximum and duplicate events do not repeat it
-ok 261 - new assistant reply automatically renders only its configured maximum and duplicate events do not repeat it
+ok 268 - new assistant reply automatically renders only its configured maximum and duplicate events do not repeat it
   ---
-  duration_ms: 21.8548
+  duration_ms: 25.8818
   type: 'test'
   ...
 # Subtest: empty upstream reply is explained and never starts a drawing request
-ok 262 - empty upstream reply is explained and never starts a drawing request
+ok 269 - empty upstream reply is explained and never starts a drawing request
   ---
-  duration_ms: 1.3638
+  duration_ms: 1.2398
   type: 'test'
   ...
 # Subtest: API error text remains untouched and is not treated as drawable narrative
-ok 263 - API error text remains untouched and is not treated as drawable narrative
+ok 270 - API error text remains untouched and is not treated as drawable narrative
   ---
-  duration_ms: 0.6957
+  duration_ms: 0.6763
   type: 'test'
   ...
 # Subtest: reload and edited historical messages prepare buttons without automatically rendering
-ok 264 - reload and edited historical messages prepare buttons without automatically rendering
+ok 271 - reload and edited historical messages prepare buttons without automatically rendering
   ---
-  duration_ms: 3.4019
+  duration_ms: 5.3324
   type: 'test'
   ...
 # Subtest: a delayed chat-load event after a new reply does not turn that generation into historical work
-ok 265 - a delayed chat-load event after a new reply does not turn that generation into historical work
+ok 272 - a delayed chat-load event after a new reply does not turn that generation into historical work
   ---
-  duration_ms: 3.3065
+  duration_ms: 3.9556
   type: 'test'
   ...
 # Subtest: prepare-only mode preserves the full number of manual buttons
-ok 266 - prepare-only mode preserves the full number of manual buttons
+ok 273 - prepare-only mode preserves the full number of manual buttons
   ---
-  duration_ms: 1.9455
+  duration_ms: 2.3861
   type: 'test'
   ...
 # Subtest: missing and invalid drawing controls report distinct automatic reasons without API calls
-ok 267 - missing and invalid drawing controls report distinct automatic reasons without API calls
+ok 274 - missing and invalid drawing controls report distinct automatic reasons without API calls
   ---
-  duration_ms: 1.1027
+  duration_ms: 1.5027
   type: 'test'
   ...
 # Subtest: actual queued output stores final artist, native recipe and reported model without private settings
-ok 268 - actual queued output stores final artist, native recipe and reported model without private settings
+ok 275 - actual queued output stores final artist, native recipe and reported model without private settings
   ---
-  duration_ms: 1.9906
+  duration_ms: 4.4139
   type: 'test'
   ...
 # Subtest: switching chats stops waiting work and keeps an already returned image with its original chat
-ok 269 - switching chats stops waiting work and keeps an already returned image with its original chat
+ok 276 - switching chats stops waiting work and keeps an already returned image with its original chat
   ---
-  duration_ms: 3.2095
+  duration_ms: 3.2803
   type: 'test'
   ...
 # Subtest: an unsupported reference workflow is rejected before any upload instead of silently dropping the reference
-ok 270 - an unsupported reference workflow is rejected before any upload instead of silently dropping the reference
+ok 277 - an unsupported reference workflow is rejected before any upload instead of silently dropping the reference
   ---
-  duration_ms: 0.8962
+  duration_ms: 0.4349
   type: 'test'
   ...
 # Subtest: paragraph fallback hides reasoning and markers and locates repeated visible paragraphs separately
-ok 271 - paragraph fallback hides reasoning and markers and locates repeated visible paragraphs separately
+ok 278 - paragraph fallback hides reasoning and markers and locates repeated visible paragraphs separately
   ---
-  duration_ms: 0.5501
+  duration_ms: 0.7085
   type: 'test'
   ...
 # Subtest: generation recipe supports multiword and Chinese artist names while excluding protocol tags
-ok 272 - generation recipe supports multiword and Chinese artist names while excluding protocol tags
+ok 279 - generation recipe supports multiword and Chinese artist names while excluding protocol tags
   ---
-  duration_ms: 0.1579
+  duration_ms: 0.2314
   type: 'test'
   ...
 # Subtest: native flattened prompt separates artist tags from following people and supports line delimiters
-ok 273 - native flattened prompt separates artist tags from following people and supports line delimiters
+ok 280 - native flattened prompt separates artist tags from following people and supports line delimiters
   ---
-  duration_ms: 0.0819
+  duration_ms: 0.1142
   type: 'test'
   ...
 # Subtest: picture usage reports native prompt artists rather than claiming planned tags were applied
-ok 274 - picture usage reports native prompt artists rather than claiming planned tags were applied
+ok 281 - picture usage reports native prompt artists rather than claiming planned tags were applied
   ---
-  duration_ms: 0.1158
+  duration_ms: 0.1243
   type: 'test'
   ...
 # Subtest: connection preflight does not call a text model and distinguishes configured API from actual Comfy reachability
-ok 275 - connection preflight does not call a text model and distinguishes configured API from actual Comfy reachability
+ok 282 - connection preflight does not call a text model and distinguishes configured API from actual Comfy reachability
   ---
-  duration_ms: 25.3821
+  duration_ms: 25.1866
   type: 'test'
   ...
 # Subtest: an explicitly removed coat on a chair becomes a scene prop without changing its design
-ok 276 - an explicitly removed coat on a chair becomes a scene prop without changing its design
+ok 283 - an explicitly removed coat on a chair becomes a scene prop without changing its design
   ---
-  duration_ms: 1.8525
+  duration_ms: 3.1306
   type: 'test'
   ...
 # Subtest: another person removing a coat cannot remove this person clothing
-ok 277 - another person removing a coat cannot remove this person clothing
+ok 284 - another person removing a coat cannot remove this person clothing
   ---
-  duration_ms: 0.3779
+  duration_ms: 0.6039
   type: 'test'
   ...
 # Subtest: explicit furniture placement is separated even if prose uses a pronoun
-ok 278 - explicit furniture placement is separated even if prose uses a pronoun
+ok 285 - explicit furniture placement is separated even if prose uses a pronoun
   ---
-  duration_ms: 2.2163
+  duration_ms: 1.6588
   type: 'test'
   ...
 # Subtest: a real shoulder drape remains worn as described; missing placement never invents shoulders
-ok 279 - a real shoulder drape remains worn as described; missing placement never invents shoulders
+ok 286 - a real shoulder drape remains worn as described; missing placement never invents shoulders
   ---
-  duration_ms: 0.7404
+  duration_ms: 0.7781
   type: 'test'
   ...
 # Subtest: a later return to wearing overrides earlier removal and chair placement
-ok 280 - a later return to wearing overrides earlier removal and chair placement
+ok 287 - a later return to wearing overrides earlier removal and chair placement
   ---
-  duration_ms: 0.3537
+  duration_ms: 0.3737
   type: 'test'
   ...
 # Subtest: all seven requested dimensions are extracted from explicit Chinese narrative
-ok 281 - all seven requested dimensions are extracted from explicit Chinese narrative
+ok 288 - all seven requested dimensions are extracted from explicit Chinese narrative
   ---
-  duration_ms: 4.1118
+  duration_ms: 5.028
   type: 'test'
   ...
 # Subtest: wrong cached prototype cannot override narrative appearance or introduce animal anatomy
-ok 282 - wrong cached prototype cannot override narrative appearance or introduce animal anatomy
+ok 289 - wrong cached prototype cannot override narrative appearance or introduce animal anatomy
   ---
-  duration_ms: 1.8471
+  duration_ms: 2.5079
   type: 'test'
   ...
 # Subtest: repeated scenes retain the same appearance and only explicit dye changes color
-ok 283 - repeated scenes retain the same appearance and only explicit dye changes color
+ok 290 - repeated scenes retain the same appearance and only explicit dye changes color
   ---
-  duration_ms: 1.6543
+  duration_ms: 2.2795
   type: 'test'
   ...
 # Subtest: named observations and other people never donate their appearance to the subject
-ok 284 - named observations and other people never donate their appearance to the subject
+ok 291 - named observations and other people never donate their appearance to the subject
   ---
-  duration_ms: 0.439
+  duration_ms: 0.5263
   type: 'test'
   ...
 # Subtest: unspecified dimensions remain visibly unknown and do not invent stature or age
-ok 285 - unspecified dimensions remain visibly unknown and do not invent stature or age
+ok 292 - unspecified dimensions remain visibly unknown and do not invent stature or age
   ---
-  duration_ms: 0.3603
+  duration_ms: 0.3831
   type: 'test'
   ...
 # Subtest: child and teenager categories are neutral and omit breast-size rendering tags
-ok 286 - child and teenager categories are neutral and omit breast-size rendering tags
+ok 293 - child and teenager categories are neutral and omit breast-size rendering tags
   ---
-  duration_ms: 0.664
+  duration_ms: 0.9882
   type: 'test'
   ...
 # Subtest: mature classification does not fabricate marriage, and source age remains exact
-ok 287 - mature classification does not fabricate marriage, and source age remains exact
+ok 294 - mature classification does not fabricate marriage, and source age remains exact
   ---
-  duration_ms: 0.4488
+  duration_ms: 0.637
   type: 'test'
   ...
 # Subtest: source records without height or age evidence cannot satisfy those hard conditions
-ok 288 - source records without height or age evidence cannot satisfy those hard conditions
+ok 295 - source records without height or age evidence cannot satisfy those hard conditions
   ---
-  duration_ms: 3.3485
+  duration_ms: 4.685
   type: 'test'
   ...
 # Subtest: strict story candidates exclude source variants with conflicting extra colors
-ok 289 - strict story candidates exclude source variants with conflicting extra colors
+ok 296 - strict story candidates exclude source variants with conflicting extra colors
   ---
-  duration_ms: 12.0187
+  duration_ms: 14.414
   type: 'test'
   ...
 # Subtest: all selected dimensions are hard candidate conditions rather than low-weight preferences
-ok 290 - all selected dimensions are hard candidate conditions rather than low-weight preferences
+ok 297 - all selected dimensions are hard candidate conditions rather than low-weight preferences
   ---
-  duration_ms: 36.4613
+  duration_ms: 35.4173
   type: 'test'
   ...
 # Subtest: automatic extraction overrides a contradictory model proposal and compiles one concise identity
-ok 291 - automatic extraction overrides a contradictory model proposal and compiles one concise identity
+ok 298 - automatic extraction overrides a contradictory model proposal and compiles one concise identity
   ---
-  duration_ms: 8.9463
+  duration_ms: 8.5189
   type: 'test'
   ...
 # Subtest: real manual route repairs an existing bad profile using story context rather than model guess
-ok 292 - real manual route repairs an existing bad profile using story context rather than model guess
+ok 299 - real manual route repairs an existing bad profile using story context rather than model guess
   ---
-  duration_ms: 5.5461
+  duration_ms: 4.7459
   type: 'test'
   ...
 # Subtest: manual profile edits remain authoritative over later narrative reuse
-ok 293 - manual profile edits remain authoritative over later narrative reuse
+ok 300 - manual profile edits remain authoritative over later narrative reuse
   ---
-  duration_ms: 0.7526
+  duration_ms: 0.7665
   type: 'test'
   ...
 # Subtest: camera simplification removes redundant composition but keeps essential environment and light
-ok 294 - camera simplification removes redundant composition but keeps essential environment and light
+ok 301 - camera simplification removes redundant composition but keeps essential environment and light
   ---
-  duration_ms: 0.1034
+  duration_ms: 0.1013
   type: 'test'
   ...
 # Subtest: two-person binding keeps all seven appearance fields and outfit in the same owned position sentence
-ok 295 - two-person binding keeps all seven appearance fields and outfit in the same owned position sentence
+ok 302 - two-person binding keeps all seven appearance fields and outfit in the same owned position sentence
   ---
-  duration_ms: 1.1472
+  duration_ms: 0.6991
   type: 'test'
   ...
 # Subtest: a different full subject gets her own stature hair eyes body outfit and position
-ok 296 - a different full subject gets her own stature hair eyes body outfit and position
+ok 303 - a different full subject gets her own stature hair eyes body outfit and position
   ---
-  duration_ms: 0.3209
+  duration_ms: 0.2152
   type: 'test'
   ...
 # Subtest: first migration installs the actual protocol and keeps it out of native global injection
-ok 297 - first migration installs the actual protocol and keeps it out of native global injection
+ok 304 - first migration installs the actual protocol and keeps it out of native global injection
   ---
-  duration_ms: 3.7047
+  duration_ms: 5.4784
   type: 'test'
   ...
 # Subtest: editing saved entries replaces the hardcoded instruction in the next automatic prompt
-ok 298 - editing saved entries replaces the hardcoded instruction in the next automatic prompt
+ok 305 - editing saved entries replaces the hardcoded instruction in the next automatic prompt
   ---
-  duration_ms: 2.6995
+  duration_ms: 5.4155
   type: 'test'
   ...
 # Subtest: disabled and deleted entries disappear without a hidden fallback protocol
-ok 299 - disabled and deleted entries disappear without a hidden fallback protocol
+ok 306 - disabled and deleted entries disappear without a hidden fallback protocol
   ---
-  duration_ms: 3.5766
+  duration_ms: 8.3865
   type: 'test'
   ...
 # Subtest: native editor changes are refreshed before generation and never overwritten on restart
-ok 300 - native editor changes are refreshed before generation and never overwritten on restart
+ok 307 - native editor changes are refreshed before generation and never overwritten on restart
   ---
-  duration_ms: 2.586
+  duration_ms: 3.6591
   type: 'test'
   ...
 # Subtest: deletion in the native editor is respected, including after restart
-ok 301 - deletion in the native editor is respected, including after restart
+ok 308 - deletion in the native editor is respected, including after restart
   ---
-  duration_ms: 1.0518
+  duration_ms: 1.2565
   type: 'test'
   ...
 # Subtest: imports roundtrip every unknown field and never overwrite an existing original
-ok 302 - imports roundtrip every unknown field and never overwrite an existing original
+ok 309 - imports roundtrip every unknown field and never overwrite an existing original
   ---
-  duration_ms: 3.3756
+  duration_ms: 2.9211
   type: 'test'
   ...
 # Subtest: existing worldbook copy leaves the original file unchanged and inactive
-ok 303 - existing worldbook copy leaves the original file unchanged and inactive
+ok 310 - existing worldbook copy leaves the original file unchanged and inactive
   ---
-  duration_ms: 2.3218
+  duration_ms: 2.1423
   type: 'test'
   ...
 # Subtest: invalid imports, save failures and failed deletions retain previously saved state
-ok 304 - invalid imports, save failures and failed deletions retain previously saved state
+ok 311 - invalid imports, save failures and failed deletions retain previously saved state
   ---
-  duration_ms: 4.1569
+  duration_ms: 5.9285
   type: 'test'
   ...
 # Subtest: concurrent native edits produce a conflict instead of being silently overwritten
-ok 305 - concurrent native edits produce a conflict instead of being silently overwritten
+ok 312 - concurrent native edits produce a conflict instead of being silently overwritten
   ---
-  duration_ms: 3.5809
+  duration_ms: 4.0716
   type: 'test'
   ...
 # Subtest: native mode scans ordinary rules and renders dynamic facts only from visible context entries
-ok 306 - native mode scans ordinary rules and renders dynamic facts only from visible context entries
+ok 313 - native mode scans ordinary rules and renders dynamic facts only from visible context entries
   ---
-  duration_ms: 2.2168
+  duration_ms: 1.4888
   type: 'test'
   ...
 # Subtest: worldbook filter prevents duplicate always-injected rules in all four native lore lists
-ok 307 - worldbook filter prevents duplicate always-injected rules in all four native lore lists
+ok 314 - worldbook filter prevents duplicate always-injected rules in all four native lore lists
   ---
-  duration_ms: 0.4213
+  duration_ms: 0.4992
   type: 'test'
   ...
 # Subtest: restoring defaults creates a distinct copy, preserving user edits
-ok 308 - restoring defaults creates a distinct copy, preserving user edits
+ok 315 - restoring defaults creates a distinct copy, preserving user edits
   ---
-  duration_ms: 4.4414
+  duration_ms: 3.7954
   type: 'test'
   ...
 # Subtest: entry text is not truncated and validation does not mutate the supplied object
-ok 309 - entry text is not truncated and validation does not mutate the supplied object
+ok 316 - entry text is not truncated and validation does not mutate the supplied object
   ---
-  duration_ms: 0.7813
+  duration_ms: 0.3527
   type: 'test'
   ...
 # Subtest: unsafe filenames are rejected and operations serialize instead of losing entries
-ok 310 - unsafe filenames are rejected and operations serialize instead of losing entries
+ok 317 - unsafe filenames are rejected and operations serialize instead of losing entries
   ---
-  duration_ms: 1.9381
+  duration_ms: 1.1581
   type: 'test'
   ...
 # Subtest: a temporary read failure suppresses cached rules and native scanning without losing the chosen book
-ok 311 - a temporary read failure suppresses cached rules and native scanning without losing the chosen book
+ok 318 - a temporary read failure suppresses cached rules and native scanning without losing the chosen book
   ---
-  duration_ms: 1.8089
+  duration_ms: 2.2877
   type: 'test'
   ...
 # Subtest: complete book exposes 28 entries including every manual rule and dynamic fact template
-ok 312 - complete book exposes 28 entries including every manual rule and dynamic fact template
+ok 319 - complete book exposes 28 entries including every manual rule and dynamic fact template
   ---
-  duration_ms: 2.1513
+  duration_ms: 1.1847
   type: 'test'
   ...
 # Subtest: automatic and manual rules do not leak into the other model request
-ok 313 - automatic and manual rules do not leak into the other model request
+ok 320 - automatic and manual rules do not leak into the other model request
   ---
-  duration_ms: 1.1838
+  duration_ms: 1.1663
   type: 'test'
   ...
 # Subtest: shared entries reach both stages while reference entries reach neither
-ok 314 - shared entries reach both stages while reference entries reach neither
+ok 321 - shared entries reach both stages while reference entries reach neither
   ---
-  duration_ms: 12.6114
+  duration_ms: 16.1192
   type: 'test'
   ...
 # Subtest: editing manual rules replaces them immediately, without a parallel hidden prompt
-ok 315 - editing manual rules replaces them immediately, without a parallel hidden prompt
+ok 322 - editing manual rules replaces them immediately, without a parallel hidden prompt
   ---
-  duration_ms: 0.6523
+  duration_ms: 0.9953
   type: 'test'
   ...
 # Subtest: deleting all manual rules or disabling the book prevents an extraction request instead of using defaults
-ok 316 - deleting all manual rules or disabling the book prevents an extraction request instead of using defaults
+ok 323 - deleting all manual rules or disabling the book prevents an extraction request instead of using defaults
   ---
-  duration_ms: 0.9386
+  duration_ms: 1.7157
   type: 'test'
   ...
 # Subtest: native editor refresh occurs before manual request and the exact edited rule reaches system content
-ok 317 - native editor refresh occurs before manual request and the exact edited rule reaches system content
+ok 324 - native editor refresh occurs before manual request and the exact edited rule reaches system content
   ---
-  duration_ms: 26.3019
+  duration_ms: 29.3696
   type: 'test'
   ...
 # Subtest: read failures do not send stale cached manual rules
-ok 318 - read failures do not send stale cached manual rules
+ok 325 - read failures do not send stale cached manual rules
   ---
-  duration_ms: 0.6014
+  duration_ms: 0.6621
   type: 'test'
   ...
 # Subtest: minimal copy preserves protocols, guardrails and dynamic templates while removing rendering guides
-ok 319 - minimal copy preserves protocols, guardrails and dynamic templates while removing rendering guides
+ok 326 - minimal copy preserves protocols, guardrails and dynamic templates while removing rendering guides
   ---
-  duration_ms: 0.6897
+  duration_ms: 0.8557
   type: 'test'
   ...
 # Subtest: foreign entries append with unique IDs and preserve content, unknown fields, source metadata and inputs
-ok 320 - foreign entries append with unique IDs and preserve content, unknown fields, source metadata and inputs
+ok 327 - foreign entries append with unique IDs and preserve content, unknown fields, source metadata and inputs
   ---
-  duration_ms: 1.539
+  duration_ms: 1.1172
   type: 'test'
   ...
 # Subtest: automatic-only appended guides stay out of manual prompts
-ok 321 - automatic-only appended guides stay out of manual prompts
+ok 328 - automatic-only appended guides stay out of manual prompts
   ---
-  duration_ms: 0.8912
+  duration_ms: 0.8086
   type: 'test'
   ...
 # Subtest: huge or nonnumeric existing keys cannot stall UID allocation or overwrite entries
-ok 322 - huge or nonnumeric existing keys cannot stall UID allocation or overwrite entries
+ok 329 - huge or nonnumeric existing keys cannot stall UID allocation or overwrite entries
   ---
-  duration_ms: 0.2129
+  duration_ms: 0.2031
   type: 'test'
   ...
 # Subtest: unmodified v2.2.2 default migrates to a complete new file while the original stays exact
-ok 323 - unmodified v2.2.2 default migrates to a complete new file while the original stays exact
+ok 330 - unmodified v2.2.2 default migrates to a complete new file while the original stays exact
   ---
-  duration_ms: 10.9433
+  duration_ms: 12.1145
   type: 'test'
   ...
 # Subtest: edited old book migrates without rewriting original automatic guidance or extra fields
-ok 324 - edited old book migrates without rewriting original automatic guidance or extra fields
+ok 331 - edited old book migrates without rewriting original automatic guidance or extra fields
   ---
-  duration_ms: 1.8634
+  duration_ms: 1.7609
   type: 'test'
   ...
 # Subtest: migration write failure leaves old active book and original data intact
-ok 325 - migration write failure leaves old active book and original data intact
+ok 332 - migration write failure leaves old active book and original data intact
   ---
-  duration_ms: 0.8012
+  duration_ms: 1.6432
   type: 'test'
   ...
 # Subtest: deletion before migration is respected and no full book is silently resurrected
-ok 326 - deletion before migration is respected and no full book is silently resurrected
+ok 333 - deletion before migration is respected and no full book is silently resurrected
   ---
-  duration_ms: 0.1582
+  duration_ms: 0.3447
   type: 'test'
   ...
 # Subtest: native scanner excludes manual, reference and directly injected context entries
-ok 327 - native scanner excludes manual, reference and directly injected context entries
+ok 334 - native scanner excludes manual, reference and directly injected context entries
   ---
-  duration_ms: 0.6645
+  duration_ms: 0.9679
   type: 'test'
   ...
 # Subtest: dynamic templates expand at request time and are never written back to the book
-ok 328 - dynamic templates expand at request time and are never written back to the book
+ok 335 - dynamic templates expand at request time and are never written back to the book
   ---
-  duration_ms: 0.6243
+  duration_ms: 0.9902
   type: 'test'
   ...
 # Subtest: invalid stage metadata is rejected without altering arbitrary external fields
-ok 329 - invalid stage metadata is rejected without altering arbitrary external fields
+ok 336 - invalid stage metadata is rejected without altering arbitrary external fields
   ---
-  duration_ms: 0.1756
+  duration_ms: 0.3039
   type: 'test'
   ...
 # Subtest: Chinese manual guide copy preserves automatic rules and protocols while disabling only old manual guides
-ok 330 - Chinese manual guide copy preserves automatic rules and protocols while disabling only old manual guides
+ok 337 - Chinese manual guide copy preserves automatic rules and protocols while disabling only old manual guides
   ---
-  duration_ms: 2.3973
+  duration_ms: 2.6689
   type: 'test'
   ...
 # Subtest: all model content-boundary clauses are grouped in top protection entries
-ok 331 - all model content-boundary clauses are grouped in top protection entries
+ok 338 - all model content-boundary clauses are grouped in top protection entries
   ---
-  duration_ms: 0.8143
+  duration_ms: 1.0208
   type: 'test'
   ...
 # Subtest: portable protection entries retain per-stage and reference scopes on append
-ok 332 - portable protection entries retain per-stage and reference scopes on append
+ok 339 - portable protection entries retain per-stage and reference scopes on append
   ---
-  duration_ms: 0.5092
+  duration_ms: 0.7008
   type: 'test'
   ...
-1..332
-# tests 332
+# Subtest: all replaceable guides sort after every necessary and reference entry regardless of priority
+ok 340 - all replaceable guides sort after every necessary and reference entry regardless of priority
+  ---
+  duration_ms: 0.5012
+  type: 'test'
+  ...
+# Subtest: necessary copy retains the complete execution reference alongside all protocols
+ok 341 - necessary copy retains the complete execution reference alongside all protocols
+  ---
+  duration_ms: 0.4865
+  type: 'test'
+  ...
+# Subtest: shared copy removes unused built-in guides and uses one visual guide for both stages
+ok 342 - shared copy removes unused built-in guides and uses one visual guide for both stages
+  ---
+  duration_ms: 4.6233
+  type: 'test'
+  ...
+# Subtest: cleaning preserves edited built-in guidance and arbitrary imported guidance
+ok 343 - cleaning preserves edited built-in guidance and arbitrary imported guidance
+  ---
+  duration_ms: 2.8725
+  type: 'test'
+  ...
+# Subtest: shared replacement keeps formats and foreign fields while sending exact guidance to both stages
+ok 344 - shared replacement keeps formats and foreign fields while sending exact guidance to both stages
+  ---
+  duration_ms: 2.5345
+  type: 'test'
+  ...
+# Subtest: content-boundary sentences do not remain scattered in outfit or compact guidance
+ok 345 - content-boundary sentences do not remain scattered in outfit or compact guidance
+  ---
+  duration_ms: 0.3617
+  type: 'test'
+  ...
+# Subtest: creating a shared copy twice retains edited shared guidance without appending another copy
+ok 346 - creating a shared copy twice retains edited shared guidance without appending another copy
+  ---
+  duration_ms: 2.2486
+  type: 'test'
+  ...
+1..346
+# tests 346
 # suites 0
-# pass 332
+# pass 346
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2707.4234
+# duration_ms 2884.2168

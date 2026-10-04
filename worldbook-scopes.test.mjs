@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {DEFAULT_DRAWING_RULES as defaults} from './worldbook-defaults.mjs';
-import {renderWorldbookRules,minimalWorldbook,appendWorldbookEntries,upgradedRuleBook,ruleMeta,ruleScope,manualGuideWorldbook,protectionWorldbook,orderedWorldbookEntries,isProtectionEntry} from './worldbook-scopes.mjs';
+import {renderWorldbookRules,minimalWorldbook,appendWorldbookEntries,upgradedRuleBook,ruleMeta,ruleScope,manualGuideWorldbook,protectionWorldbook,orderedWorldbookEntries,isProtectionEntry,sharedGuideWorldbook,replaceSharedGuides,removeDefaultGuides} from './worldbook-scopes.mjs';
 import {worldbookInstruction,createWorldbookLibrary,filterManagedLore,validateWorldbook} from './worldbook-library.mjs';
 import {manualInstruction} from './manual-instruction.mjs';
 import {automaticPrompt} from './automatic-instruction.mjs';
@@ -17,7 +17,7 @@ test('editing manual rules replaces them immediately, without a parallel hidden 
 test('deleting all manual rules or disabling the book prevents an extraction request instead of using defaults',async()=>{const s=settings({entries:{0:tagged('automatic','required','auto only')}});let calls=0;const request=createManualTransport({getContext:()=>({}),setting:()=>s,fetcher:async()=>{calls++;throw new Error('must not call');}});await assert.rejects(request({scene:'adult person reading'}),/选段生图规则/);s.worldbook_library.active=null;await assert.rejects(request({scene:'adult person reading'}),/选段生图规则/);assert.equal(calls,0);});
 test('native editor refresh occurs before manual request and the exact edited rule reaches system content',async()=>{const s=settings(defaults);let calls=0;const request=createManualTransport({getContext:()=>({}),setting:()=>s,beforeRules:async()=>{s.worldbook_library.books[0].data.entries={0:tagged('manual','required','AD_NATIVE_EDIT_RULE')};},fetcher:async(_,opts)=>{calls++;const body=JSON.parse(opts.body);assert.equal(body.messages[0].content,'AD_NATIVE_EDIT_RULE');assert.deepEqual(JSON.parse(body.messages[1].content),{scene:'adult woman reading'});return Response.json({choices:[{finish_reason:'stop',message:{content:'{"ok":true}'}}]});}});assert.deepEqual(await request({scene:'adult woman reading'}),{ok:true});assert.equal(calls,1);});
 test('read failures do not send stale cached manual rules',async()=>{const s=settings(defaults);let calls=0;const request=createManualTransport({getContext:()=>({}),setting:()=>s,beforeRules:async()=>{throw new Error('host read failed');},fetcher:async()=>{calls++;}});await assert.rejects(request({}),/host read failed/);s.worldbook_read_error=true;assert.throws(()=>manualInstruction(s),/读取失败/);assert.equal(calls,0);});
-test('minimal copy preserves protocols, guardrails and dynamic templates while removing rendering guides',()=>{const minimal=minimalWorldbook(defaults);assert.equal(Object.keys(minimal.entries).length,17);assert(!Object.values(minimal.entries).some(e=>ruleMeta(e).kind==='guide'));const s=settings(minimal);assert(automaticPrompt(null,s).includes('ADCAP'));assert(manualInstruction(s).includes('scene_composition'));assert(manualInstruction(s).includes('Child and teen'));assert(!manualInstruction(s).includes('Rendering preference:'));assert.equal(Object.keys(defaults.entries).length,28);});
+test('minimal copy preserves protocols, guardrails and dynamic templates while removing rendering guides',()=>{const minimal=minimalWorldbook(defaults);assert.equal(Object.keys(minimal.entries).length,18);assert(!Object.values(minimal.entries).some(e=>ruleMeta(e).kind==='guide'));const s=settings(minimal);assert(automaticPrompt(null,s).includes('ADCAP'));assert(manualInstruction(s).includes('scene_composition'));assert(manualInstruction(s).includes('Child and teen'));assert(!manualInstruction(s).includes('Rendering preference:'));assert.equal(Object.keys(defaults.entries).length,28);});
 test('foreign entries append with unique IDs and preserve content, unknown fields, source metadata and inputs',()=>{const target=minimalWorldbook(defaults),incoming={custom:{keep:[1,2]},entries:{0:{uid:0,comment:'foreign',content:'AD_SHARED_GUIDE',key:['雨'],sticky:12,unknown:{a:7}}}},before=JSON.stringify(incoming),result=appendWorldbookEntries(target,incoming,{scope:'both',name:'sharing'}),entry=Object.values(result.entries).find(e=>e.content==='AD_SHARED_GUIDE');assert.equal(JSON.stringify(incoming),before);assert.deepEqual(entry.unknown,{a:7});assert.deepEqual(entry.key,['雨']);assert.equal(entry.sticky,12);assert.notEqual(entry.uid,0);assert.deepEqual(result.extensions.animadex_drawing.imports[0].metadata.custom,incoming.custom);const s=settings(result);assert(manualInstruction(s).includes('AD_SHARED_GUIDE'));assert(automaticPrompt(null,s).includes('AD_SHARED_GUIDE'));});
 test('automatic-only appended guides stay out of manual prompts',()=>{const result=appendWorldbookEntries(minimalWorldbook(defaults),{entries:{0:{content:'AUTO_ONLY_FOREIGN'}}},{scope:'automatic'}),s=settings(result);assert(automaticPrompt(null,s).includes('AUTO_ONLY_FOREIGN'));assert(!manualInstruction(s).includes('AUTO_ONLY_FOREIGN'));});
 test('huge or nonnumeric existing keys cannot stall UID allocation or overwrite entries',()=>{const target={entries:{'9007199254740991':{uid:9007199254740991,content:'huge'},a:{uid:0,content:'named'}}},result=appendWorldbookEntries(target,{entries:{0:{content:'new'}}});assert.equal(result.entries['1'].content,'new');assert.equal(result.entries.a.content,'named');assert.equal(result.entries['9007199254740991'].content,'huge');});
@@ -31,3 +31,44 @@ test('invalid stage metadata is rejected without altering arbitrary external fie
 test('Chinese manual guide copy preserves automatic rules and protocols while disabling only old manual guides',async()=>{const guide=JSON.parse(await fs.readFile(new URL('./worldbook-manual-guide.json',import.meta.url),'utf8')),before=JSON.stringify(defaults),copy=manualGuideWorldbook(defaults,guide);assert.equal(JSON.stringify(defaults),before);assert.equal(Object.keys(copy.entries).length,29);assert.equal(renderWorldbookRules(copy,'automatic'),renderWorldbookRules(defaults,'automatic'));const manual=renderWorldbookRules(copy,'manual');assert(manual.includes('我的选段绘图偏好'));assert(manual.includes('scene_composition'));assert(!manual.includes('Rendering preference:'));for(const e of Object.values(copy.entries))if(ruleMeta(e).id!=='manual.user_preferences'&&ruleScope(e)==='manual')assert.equal(!!e.disable,ruleMeta(e).kind==='guide');});
 test('all model content-boundary clauses are grouped in top protection entries',()=>{const rows=orderedWorldbookEntries(defaults);assert(rows.slice(0,4).every(([,e])=>isProtectionEntry(e)));for(const e of Object.values(defaults.entries))if(/non-explicit|sexual behavior|graphic sexual|fully clothed/i.test(e.content))assert(isProtectionEntry(e),ruleMeta(e).id);assert.equal(Object.keys(protectionWorldbook(defaults).entries).length,4);});
 test('portable protection entries retain per-stage and reference scopes on append',()=>{const exported=protectionWorldbook(defaults),merged=appendWorldbookEntries({entries:{}},exported,{scope:'preserve'});assert(Object.values(merged.entries).some(e=>ruleScope(e)==='automatic'));assert(Object.values(merged.entries).some(e=>ruleScope(e)==='manual'));assert(Object.values(merged.entries).some(e=>ruleScope(e)==='reference'));assert(!renderWorldbookRules(merged,'manual').includes('执行保护清单'));assert(!renderWorldbookRules(merged,'automatic').includes('fully clothed'));});
+
+const guideTemplates=async()=>({defaults,legacyGuide:JSON.parse(await fs.readFile(new URL('./worldbook-manual-guide.json',import.meta.url),'utf8')),sharedGuide:JSON.parse(await fs.readFile(new URL('./worldbook-shared-guide.json',import.meta.url),'utf8'))});
+test('all replaceable guides sort after every necessary and reference entry regardless of priority',()=>{
+    const d=appendWorldbookEntries(defaults,{entries:{0:{content:'FOREIGN',order:999999}}});
+    const rows=orderedWorldbookEntries(d),firstGuide=rows.findIndex(([,e])=>ruleMeta(e).kind==='guide');
+    assert(firstGuide>0);assert(rows.slice(firstGuide).every(([,e])=>ruleMeta(e).kind==='guide'));assert(rows.slice(0,4).every(([,e])=>isProtectionEntry(e)));
+});
+test('necessary copy retains the complete execution reference alongside all protocols',()=>{
+    const d=minimalWorldbook(defaults);assert.equal(Object.keys(d.entries).length,18);assert.equal(Object.keys(protectionWorldbook(d).entries).length,4);
+    assert(!renderWorldbookRules(d,'manual').includes('后端说明'));
+});
+test('shared copy removes unused built-in guides and uses one visual guide for both stages',async()=>{
+    const t=await guideTemplates(),old=manualGuideWorldbook(defaults,t.legacyGuide),before=JSON.stringify(old),d=sharedGuideWorldbook(old,t);
+    assert.equal(JSON.stringify(old),before);assert.equal(Object.keys(d.entries).length,20);
+    assert(!Object.values(d.entries).some(e=>e.disable));assert(!Object.values(d.entries).some(e=>ruleMeta(e).id==='manual.user_preferences'));
+    assert.equal(Object.values(d.entries).filter(e=>ruleMeta(e).kind==='guide').length,2);
+    const a=renderWorldbookRules(d,'automatic'),m=renderWorldbookRules(d,'manual');
+    assert(a.includes('自动生图和选段共用本条'));assert(m.includes('自动生图和选段共用本条'));assert(!m.includes('image###ADCAP'));assert(a.includes('image###ADCAP'));
+});
+test('cleaning preserves edited built-in guidance and arbitrary imported guidance',async()=>{
+    const t=await guideTemplates(),d=structuredClone(defaults),e=Object.values(d.entries).find(e=>ruleMeta(e).id==='manual.face');
+    e.content='MY_EDIT';d.entries.foreign={content:'FOREIGN_KEEP',unknown:{keep:7},disable:true};
+    const out=removeDefaultGuides(d,t);assert(Object.values(out.entries).some(e=>e.content==='MY_EDIT'));assert.deepEqual(out.entries.foreign,d.entries.foreign);
+    assert(Object.values(out.entries).every(e=>ruleMeta(e).kind!=='guide'||e.content==='MY_EDIT'));
+});
+test('shared replacement keeps formats and foreign fields while sending exact guidance to both stages',async()=>{
+    const t=await guideTemplates(),base=sharedGuideWorldbook(defaults,t),foreign={vendor:{v:7},entries:{9:{uid:9,content:'SHARED_FOREIGN_EXACT',unknown:42}}},before=JSON.stringify(foreign),d=replaceSharedGuides(base,foreign,{...t,name:'vendor'});
+    assert.equal(JSON.stringify(foreign),before);assert.equal(Object.keys(d.entries).length,19);
+    assert(renderWorldbookRules(d,'automatic').includes('SHARED_FOREIGN_EXACT'));assert(renderWorldbookRules(d,'manual').includes('SHARED_FOREIGN_EXACT'));
+    assert(!renderWorldbookRules(d,'manual').includes('自动生图和选段共用本条'));assert(renderWorldbookRules(d,'manual').includes('scene_composition'));
+    assert(Object.values(d.entries).some(e=>e.unknown===42));assert(d.extensions.animadex_drawing.imports.at(-1).metadata.vendor.v===7);
+});
+test('content-boundary sentences do not remain scattered in outfit or compact guidance',()=>{
+    for(const e of Object.values(defaults.entries))if(/No graphic content|Bust-size traits describe adults|普通成年人物/i.test(e.content))assert(isProtectionEntry(e),ruleMeta(e).id);
+});
+test('creating a shared copy twice retains edited shared guidance without appending another copy',async()=>{
+    const t=await guideTemplates(),once=sharedGuideWorldbook(defaults,t),e=Object.values(once.entries).find(e=>ruleMeta(e).id==='shared.visual_guidance');
+    e.content='USER_SHARED_EDIT';
+    const twice=sharedGuideWorldbook(once,t),guides=Object.values(twice.entries).filter(e=>ruleMeta(e).id==='shared.visual_guidance');
+    assert.equal(guides.length,1);assert.equal(guides[0].content,'USER_SHARED_EDIT');assert.equal(Object.keys(twice.entries).length,20);
+});

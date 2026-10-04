@@ -1,0 +1,45 @@
+{
+  "name": "自动与选段 · 共享绘图指导",
+  "entries": {
+    "0": {
+      "uid": 0,
+      "comment": "【可替换·自动】插图数量与段落位置",
+      "content": "普通可见场景按回复长度选 1～3 个不同视觉时刻，每块紧跟对应段落；短回复可一张。不要输出插图规划、审查或额外思考。",
+      "key": [],
+      "keysecondary": [],
+      "constant": true,
+      "disable": false,
+      "order": 100,
+      "position": 0,
+      "probability": 100,
+      "useProbability": false,
+      "extensions": {
+        "animadex_drawing": {
+          "id": "auto.frequency",
+          "scope": "automatic",
+          "kind": "guide"
+        }
+      }
+    },
+    "1": {
+      "uid": 1,
+      "comment": "【可替换·共享】动作、构图与标签指导",
+      "content": "自动生图和选段共用本条绘图指导。\n客观提取当前可见的动作、姿态、表情、道具、构图、环境和光线，不补写没有依据的事实。\n一个画面选择一个主要视觉时刻。动作和环境标签简洁、避免重复；固定外貌和衣装沿用人物及衣装事实。\n自动的图片块格式、选段的单帧 JSON 格式及人物/衣装字段，以各自必要规则为准。",
+      "key": [],
+      "keysecondary": [],
+      "constant": true,
+      "disable": false,
+      "order": 99,
+      "position": 0,
+      "probability": 100,
+      "useProbability": false,
+      "extensions": {
+        "animadex_drawing": {
+          "id": "shared.visual_guidance",
+          "scope": "both",
+          "kind": "guide"
+        }
+      }
+    }
+  }
+}

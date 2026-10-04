@@ -1,5 +1,5 @@
 import {actorGender as gender,frameInteractions} from './interaction-frame.mjs';
-export const RENDER_POLICY='女性是画面主体；普通剧情省略男性主体。必要的牵手、拥抱、舞蹈等非露骨双人互动必须保留动作发起者和接触对象，不能只留女性再把对方动作移给她。另一人可只显示手臂或着装躯干；第一人称镜头不必显示对方脸。女性居中且占主要画面。环境镜头不凭空添加人物。';
+export {RENDER_POLICY} from './drawing-policy.mjs';
 export function focusFrame(scene,options={}){
     const next=structuredClone(scene),actors=next.actors||next.people||[],isScene=!!next.actors;
     const directed=frameInteractions(next,actors,options);

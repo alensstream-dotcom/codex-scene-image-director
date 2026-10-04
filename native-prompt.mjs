@@ -40,6 +40,7 @@ export function sanitizeNativePrompt(source,state,native) {
     if (people.length) text=text.replace(/Scene Composition:([^;]*);/,(_all,composition)=>'Scene Composition: '+transientDescription(composition)+';');
     return {text,people,native:true};
 }
+import {CONTENT_TAG,nativeBodyVisibility} from './drawing-policy.mjs';
 export function nativePrompt(source,state,native,{visual={}}={}) {
     const markers=readIdentityControls(source);
     if (!markers.length) return sanitizeNativePrompt(source,state,native);
@@ -56,7 +57,7 @@ export function nativePrompt(source,state,native,{visual={}}={}) {
         const pose=transientDescription(ai.action_prompt || following,{stripOutfit:!!person.wardrobe});
         const back=/\b(?:from (?:side )?behind|back view|rear view)\b/i.test(ai.angle || source);
         const close=/\b(?:portrait|close[ -]up|upper body|bust shot|headshot)\b/i.test(ai.framing || source)&&! /\b(?:full body|medium-full|cowboy shot)\b/i.test(ai.framing || source);
-        const role='$'+JSON.stringify({name:preset.nameEN || preset.nameCN,angle:back?'from behind':'front',upperBody:'sfw',lowerBody:close?'hidden':'sfw'})+'$';
+        const role='$'+JSON.stringify({name:preset.nameEN || preset.nameCN,angle:back?'from behind':'front',upperBody:nativeBodyVisibility(),lowerBody:nativeBodyVisibility(!close)})+'$';
         const outfit=native.outfitPresets?.[outfitFor(person.person,state.scope)];
         const clothes=outfit?'$'+JSON.stringify({name:outfit.nameEN || outfit.nameCN,upperBody:'visible',lowerBody:close?'hidden':'visible'})+'$':'';
         actors.push({person:person.person,prompt:[role,clothes,pose].filter(Boolean).join(', '),style:person.style,exact:person.exact_id,id:person.prototype_id});
@@ -64,7 +65,7 @@ export function nativePrompt(source,state,native,{visual={}}={}) {
     if (!actors.length) return {text:source,people:[],native:false};
     if (actors.length>4) throw new Error('原生分角色格式最多支持 4 位人物，请减少本图人物数量。');
     const prefix=source.slice(0,markers[0].start).split(/;\s*Character \d Prompt:/)[0].replace(/^\s*(?:image###)?\s*Scene Composition\s*:/i,'');
-    const composition=transientDescription(visual.scene_composition || prefix).replace(/@(?:style:)?(?:painterly|mikko|bluearchive|rdbt|pc98)\b/gi,'') || 'SFW, story illustration';
+    const composition=transientDescription(visual.scene_composition || prefix).replace(/@(?:style:)?(?:painterly|mikko|bluearchive|rdbt|pc98)\b/gi,'') || CONTENT_TAG+', story illustration';
     const dimensions=source.match(/\b\d{2,4}x\d{2,4}\b/g)?.at(-1);
     const explicitStyle=source.match(/@(?:style:)?(painterly|mikko|bluearchive|rdbt|pc98)\b/gi)?.at(-1)?.replace(/^@(?:style:)?/i,'').toLowerCase();
     const focus=markers.map(x=>x.spec.style).filter(Boolean).at(-1) || explicitStyle || actors.at(-1).style || 'painterly';

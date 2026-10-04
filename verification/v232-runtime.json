@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "checks": [
+    "installed v2.3.2 policy module works in the actual WebView",
+    "working rules remove unused defaults and retain the original file until final backup cleanup",
+    "all replaceable guides follow core protocols and the four boundary entries",
+    "one shared visual guide enters both stages while protocols stay separate",
+    "real role-card passage 1 produces usable tags following the edited shared rule",
+    "real role-card passage 2 produces usable tags following the edited shared rule",
+    "real role-card passage 3 produces usable tags following the edited shared rule",
+    "test marker is removed from the final shared guide",
+    "API configurations and original chat are unchanged",
+    "no JavaScript errors",
+    "old Chinese-copy library clutter is removed after backup and shared book stays active"
+  ],
+  "real_tauri": true,
+  "real_passage_dialog_requests": 3,
+  "new_chat_messages": 0,
+  "new_images": 0,
+  "pageErrors": [],
+  "physical_phone_tested": false,
+  "previous_active_entries": 30,
+  "active_shared_entries": 20,
+  "removed_default_guide_entries": 12,
+  "obsolete_chinese_copies_backed_up_and_removed": 2
+}

@@ -1,6 +1,7 @@
 /** Pure stable story identities. The caller owns the state and the catalog. */
 import { resolveWardrobe, wardrobeText } from './wardrobe.mjs';
 import {findPerson} from './character-tools.mjs';
+import {protectIdentityTags,nativeBodyField} from './drawing-policy.mjs';
 // Missing flags retain the behavior of old saved profiles and image snapshots.
 export const usesPrototypeTrigger = person => person?.trigger_enabled ?? !!person?.exact_id;
 export const usesImageReference = person => person?.reference_enabled ?? !!person?.reference_ids?.length;
@@ -230,7 +231,7 @@ export function createIdentityResolver(catalog, { taxonomy } = {}) {
           const hair=query.required.hair_style || query.preferred.hair_style;
           if (hair?.length) appearance=appearance.filter(tag=>info[tag]?.facet!=='hair_style'||hair.includes(info[tag].value));
           const age=ageDescription(spec);
-          if (/teenage|child/.test(age)||(/^\d+ years old$/.test(age)&&parseInt(age)<18)) appearance=appearance.filter(tag=>!['bust','build'].includes(info[tag]?.facet));
+          appearance=protectIdentityTags(appearance,age,info);
         }
         if (!record && !result && !appearance.some(tag => ['1girl', '1boy', '1other'].includes(tag))) appearance.unshift('1girl');
         if(!appearance.some(tag=>info[tag]?.facet==='hair_length'))appearance.push((query.required.hair_length?.[0]||query.preferred.hair_length?.[0]||'long')+' hair');
@@ -285,7 +286,7 @@ export function createIdentityResolver(catalog, { taxonomy } = {}) {
       const frame = text.slice(frameStart, frameEnd < 0 ? undefined : frameEnd);
       const back = /\b(?:from (?:side )?behind|back view|rear view)\b/i.test(frame);
       const full = /\b(?:full body|medium-full|cowboy shot)\b/i.test(frame);
-      const extraBody = entry.native_prompt_fields?.[`${full ? 'fullBody' : 'upperBody'}SFW${back ? 'Back' : ''}`] || '';
+      const extraBody = entry.native_prompt_fields?.[nativeBodyField({full,back})] || '';
       const outfitText = wardrobeText(entry.wardrobe, { back });
       replacements.push({ start: marker.start, end: marker.end, value: `${namePrefix}${appearancePrompt}${extraBody ? `, ${extraBody}` : ''}${outfitText ? `. Current outfit: ${outfitText}.` : ''}`, explicit_style: STYLES.has(spec.style) ? spec.style : null });
     }

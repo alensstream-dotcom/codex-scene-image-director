@@ -3,7 +3,7 @@ export const ruleScope=entry=>['automatic','manual','both','reference'].includes
 export const ruleKind=entry=>ruleMeta(entry).kind||'guide';
 export const isProtectionEntry=entry=>ruleKind(entry)==='safety'||ruleMeta(entry).id==='engine.reference'||ruleMeta(entry).group==='content_boundaries';
 export function orderedWorldbookEntries(data){
-    const rank=e=>ruleKind(e)==='safety'?0:isProtectionEntry(e)?1:2;
+    const rank=e=>ruleKind(e)==='guide'?3:ruleKind(e)==='safety'?0:isProtectionEntry(e)?1:2;
     return Object.entries(data?.entries||{}).sort(([ka,a],[kb,b])=>rank(a)-rank(b)||Number(b.order??100)-Number(a.order??100)||String(ka).localeCompare(String(kb)));
 }
 export function protectionWorldbook(data){
@@ -16,7 +16,7 @@ export function renderWorldbookRules(data,scope,variables={},options={}){
     return scopedEntries(data,scope,options).filter(([,e])=>!ruleMeta(e).when||variables[ruleMeta(e).when]?.length).map(([,e])=>e.content.replace(/\{\{(ad_confirmed_people|ad_current_outfits)\}\}/g,(_,key)=>JSON.stringify(variables[key==='ad_confirmed_people'?'people':'outfits']||[]))).join('\n\n');
 }
 export function minimalWorldbook(data){
-    const copy=structuredClone(data);copy.entries=Object.fromEntries(Object.entries(copy.entries).filter(([,e])=>['required','safety','context'].includes(ruleKind(e))));return copy;
+    const copy=structuredClone(data);copy.entries=Object.fromEntries(Object.entries(copy.entries).filter(([,e])=>['required','safety','context'].includes(ruleKind(e))||isProtectionEntry(e)));return copy;
 }
 const canonical=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(canonical):Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])])):value;
 function fingerprint(value){let hash=2166136261;for(const c of JSON.stringify(canonical(value)))hash=Math.imul(hash^c.charCodeAt(0),16777619);return(hash>>>0).toString(16);}
@@ -45,4 +45,20 @@ export function manualGuideWorldbook(data,guide){
     const copy=structuredClone(data);
     for(const entry of Object.values(copy.entries))if(ruleScope(entry)==='manual'&&ruleKind(entry)==='guide')entry.disable=true;
     return appendWorldbookEntries(copy,guide,{scope:'manual',name:'选段中文调整模板'});
+}
+/** Delete only known unused/default guidance; edited and foreign guidance stays intact. */
+export function removeDefaultGuides(data,{defaults,legacyGuide,sharedGuide}={}){
+    const copy=structuredClone(data),known=new Map();
+    for(const source of [defaults,legacyGuide,sharedGuide])for(const e of Object.values(source?.entries||{}))if(ruleKind(e)==='guide')known.set(ruleMeta(e).id,e.content);
+    const removed=[];
+    for(const[id,e]of Object.entries(copy.entries))if(ruleKind(e)==='guide'&&known.has(ruleMeta(e).id)&&(e.disable||e.content===known.get(ruleMeta(e).id))){removed.push(ruleMeta(e).id);delete copy.entries[id];}
+    extensions(copy).animadex_drawing??={};copy.extensions.animadex_drawing.last_guidance_cleanup={removed_ids:removed,edited_guides_preserved:true};return copy;
+}
+export function sharedGuideWorldbook(data,templates){
+    const copy=removeDefaultGuides(data,templates),kept=new Set(Object.values(copy.entries).map(e=>ruleMeta(e).id)),guide=structuredClone(templates.sharedGuide);
+    guide.entries=Object.fromEntries(Object.entries(guide.entries).filter(([,e])=>!kept.has(ruleMeta(e).id)));
+    return appendWorldbookEntries(copy,guide,{scope:'preserve',name:'共享绘图指导模板'});
+}
+export function replaceSharedGuides(data,incoming,{name='分享绘图世界书',...templates}={}){
+    return appendWorldbookEntries(removeDefaultGuides(data,templates),incoming,{scope:'both',name});
 }

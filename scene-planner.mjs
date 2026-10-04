@@ -129,6 +129,7 @@ export function validateConfirmedPrompt(value){
     return text;
 }
 import {compactTags,compactActor,bindActorAppearance} from './compact-prompt.mjs';
+import {CONTENT_TAG} from './drawing-policy.mjs';
 export function compileScene(scene,state,{style}={}) {
     if(scene.manual&&scene.confirmed_prompt!==undefined)return validateConfirmedPrompt(scene.confirmed_prompt);
     const clean=value=>String(value || '').replace(/[;$@{}<>]/g,' ').replace(/\s+/g,' ').trim();
@@ -157,5 +158,5 @@ export function compileScene(scene,state,{style}={}) {
     const character=actors.length===1&&actors[0].person.exact_id&&actors[0].person.prototype_id==='nilou_(genshin_impact)'?'@character:Nilou':'';
     // Already expanded before transport. No native role/outfit manager is needed.
     const artists=artistTags([...new Set(actors.flatMap(a=>a.person.artist_tags||[]))]);
-    return 'Scene Composition: '+['SFW',composition,...artists,'@style:'+safeStyle,character,dimensions].filter(Boolean).join(', ')+'; '+actors.map((actor,i)=>`Character ${i+1} Prompt: ${actor.prompt};`).join(' ');
+    return 'Scene Composition: '+[CONTENT_TAG,composition,...artists,'@style:'+safeStyle,character,dimensions].filter(Boolean).join(', ')+'; '+actors.map((actor,i)=>`Character ${i+1} Prompt: ${actor.prompt};`).join(' ');
 }
