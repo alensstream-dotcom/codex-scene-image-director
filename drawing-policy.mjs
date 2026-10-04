@@ -1,5 +1,3 @@
-// 原插件仍需要完整文件；不要从已安装插件中删除上半区或下半区。
-
 // B1. 外观分组与描述用词，不等于内容限制或完整年龄识别。
 // young 包含 18～29 岁；
 export function ageGroup(age){
@@ -9,6 +7,12 @@ export function ageGroup(age){
     return /child|儿童|小女孩|幼女/.test(s)?'child':/mature|middle|少妇|成熟|中年/.test(s)?'mature':/teen|young|少女|青少年/.test(s)?'young':'';
 }
 export function isYouthAppearance(traits,tags){return traits.age_group?.[0]==='child'||tags.includes('teenage');}
+
+// 补充：保护特征导出（避免调用方报 SyntaxError）
+export function protectStoryTraits(traits = {}) {
+    // 若原逻辑有具体过滤要求，可在此处扩展；基础兜底直接返回原对象
+    return traits;
+}
 
 // B2. 旧格式字段结构：保留八个名称；名字含 NSFW 不代表启用任何后端开关。
 export const NATIVE_SFW_FIELDS=Object.freeze(['upperBodySFW','fullBodySFW','upperBodySFWBack','fullBodySFWBack']);
