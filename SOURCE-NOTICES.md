@@ -16,3 +16,5 @@
 2026-10-04 更新：v2.2.0 独立实现 ComfyUI 请求、工作流设置、按钮和图片缓存。`companions/st-chatu8` 传输适配版已从当前发布移除。本机智绘姬源码恢复为改动前原版并停用，原设置和缓存保留。`fixtures/chatu8-parser.original.js` 是原版 v3.1.2 的约 40 KB 解析函数样本，保留 AFPL，仅用于历史迁移回归，不在安装包内。`compat/shujuku` 保留 SP 数据库 9.2.5 历史适配，不是绘图依赖。所有已配置接口、密钥、私人预设、用户图片和用户世界书都不在此仓库内。
 
 参考图节点的 incontext.py 与 nodes.py 源自 https://huggingface.co/darask0/Anima-InContext-Character ，来源提交 e084c88c02dcaa55806c56b22a43461d4c32be85。来源 README 和非商业许可证声明保留在 custom_nodes/ComfyUI-AnimadexIdentity/UPSTREAM_SOURCE.md。没有模型权重。
+
+2026-10-04 v2.2.1：新增原创世界书文件管理与编辑界面，通过 TauriTavern 公开世界书 API 读写文件、同步原生编辑和扫描，不修改酒馆或智绘姬源码。公开模板只包含本插件协议；用户原版 144 条世界书、聊天和设置不发布。

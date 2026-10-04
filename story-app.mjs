@@ -90,7 +90,7 @@ export function createStoryApp({getContext,getTools,persist,setting,notify,diagn
     }
     function anchors(){const ctx=getContext();
         const id=ctx.chat.length-1,m=ctx.chat[id],outfits=story?priorOutfitsFor(story,{messageId:id,swipeId:m?.swipe_id??0,offset:String(m?.mes||'').length,chat:ctx.chat}):{};
-        ctx.setExtensionPrompt?.('animadex_story_cast',automaticPrompt(story,setting(),outfits),1,0,false);
+        const text=automaticPrompt(story,setting(),outfits);ctx.setExtensionPrompt?.('animadex_story_cast',text,1,0,false);return text;
     }
     async function processMessage(messageId,{fresh=false}={}){
         if(!enabled()||setting().automatic===false){autoStatus('disabled','自动插图已关闭',messageId);return;}const ctx=getContext();if(ctx.streamingProcessor?.isFinished===false){autoStatus('streaming','等待正文回复完成',messageId);return;}const expected=key(),message=ctx.chat[messageId];if(!message||message.is_user||message.is_system)return;

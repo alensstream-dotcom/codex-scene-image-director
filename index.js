@@ -1,13 +1,14 @@
 import {getContext} from '../../../st-context.js';
-import {enqueueChatSave} from '../../../../script.js';
+import {enqueueChatSave,getRequestHeaders} from '../../../../script.js';
 import {saveCharacterChatPayload,saveGroupChatPayload} from '../../../chat-payload-transport.js';
-import {saveWorldInfo,updateWorldInfoList,updateWorldInfoSettings,selected_world_info} from '../../../world-info.js';
+import {saveWorldInfo,loadWorldInfo,deleteWorldInfo,openWorldInfoEditor,flushWorldInfoSaves,world_names,updateWorldInfoList,updateWorldInfoSettings,selected_world_info} from '../../../world-info.js';
 import {loadCatalog} from './catalog.mjs';
 import {createIdentityResolver} from './identity.mjs';
 import {createStudioPersistence} from './studio-persistence.mjs';
 import {initV2} from './v2-entry.mjs';
 import {applyMainProfile} from './model-profiles.mjs';
 import {ensureRenderSettings} from './render-settings.mjs';
+import {createWorldbookLibrary} from './worldbook-library.mjs';
 const KEY='animadex_story_cast',BOOK='Animadex_剧情绘图_v2_使用指南',BASE=new URL('.',import.meta.url).href.replace(/\/$/,'');
 const setting=()=>getContext().extensionSettings[KEY]??={enabled:true,diagnostics:[]};
 const notify=(text,level='info')=>window.toastr?.[level]?.(text,'剧情绘图');
@@ -46,13 +47,14 @@ async function configureWorkflow(profile,{activate=true}={}) {
     diagnostics({ event: 'workflow_configured', worker: config.name, main_model: config.settings.MODEL_NAME, steps: config.settings.comfyui_steps });
     ctx.saveSettingsDebounced();
 }
-async function installBook() {
-    const book = await read('worldbook.json');
-    await saveWorldInfo(BOOK, book, true);
-    await updateWorldInfoList();
-    updateWorldInfoSettings({}, [...new Set([...selected_world_info.filter(name=>!['Animadex_剧情形象抽取_v1','Animadex_剧情绘图_v2','自动生图世界书'].includes(name)), BOOK])]);
-    setting().bookInstalled = true;
-    setting().bookVersion = (await read('workflow-config.json')).version;
-    diagnostics({ event: 'worldbook_installed', book: BOOK });
-}
-await initV2({getContext,getTools:async()=>{await ensureCatalog();return {catalog,resolver,taxonomy:taxonomyInfo};},persist,setting,notify,diagnostics,configure:configureWorkflow,installBook});
+const worldbooks=createWorldbookLibrary({setting,defaultBook:()=>read('worldbook-rules.json'),save:()=>getContext().saveSettingsDebounced(),changed:()=>{window.AnimadexStoryApp?.anchors();window.dispatchEvent(new CustomEvent('animadex-worldbooks-updated'));},host:{
+    names:async()=>[...world_names],
+    load:async name=>{const r=await fetch('/api/worldinfo/get',{method:'POST',headers:getRequestHeaders(),body:JSON.stringify({name}),cache:'no-store'});if(!r.ok)throw new Error('世界书 '+name+'：HTTP '+r.status);return r.json();},
+    save:async(name,data)=>{const previous=world_names.includes(name)?structuredClone(await loadWorldInfo(name)):null;try{await saveWorldInfo(name,data,true);}catch(error){if(previous)await saveWorldInfo(name,previous,false);throw error;}await updateWorldInfoList();},
+    delete:deleteWorldInfo,
+    open:openWorldInfoEditor,
+    flush:flushWorldInfoSaves,
+    select:async(active,books)=>{const managed=new Set(books.map(b=>b.name));const selected=selected_world_info.filter(n=>n!==BOOK&&!managed.has(n));const book=books.find(b=>b.name===active);if(book?.mode==='native')selected.push(active);if(JSON.stringify(selected)!==JSON.stringify(selected_world_info))updateWorldInfoSettings({},selected);}
+}});
+async function installBook(){await worldbooks.restoreDefault();notify('已创建并启用默认规则副本；已有修改保留。');}
+await initV2({getContext,getTools:async()=>{await ensureCatalog();return {catalog,resolver,taxonomy:taxonomyInfo};},persist,setting,notify,diagnostics,configure:configureWorkflow,installBook,worldbooks,flushBooks:flushWorldInfoSaves});

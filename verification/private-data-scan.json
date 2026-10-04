@@ -1,7 +1,7 @@
 {
   "passed": true,
-  "public_files_checked": 158,
-  "configured_secret_values_checked": 2,
+  "public_files_checked": 165,
+  "configured_secret_values_checked": 1,
   "configured_secrets_found": 0,
   "private_original_worldbook_included": false,
   "private_chats_included": false,
