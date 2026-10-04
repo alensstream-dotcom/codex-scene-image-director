@@ -21,7 +21,7 @@ test('old Tauri error completions and malformed HTTP 200 JSON produce actionable
 test('Tauri with no native profile fails immediately rather than silently waiting for a Windows helper',()=>{
  const before=globalThis.location;globalThis.location={hostname:'tauri.localhost'};
  try{
-  const ctx={extensionSettings:{'st-chatu8':{}}};assert.throws(()=>manualConnection(ctx),/LLM API/);
+  const ctx={extensionSettings:{'st-chatu8':{}}};assert.throws(()=>manualConnection(ctx),/API 配置/);
   assert.equal(manualConnection(ctx,{manual_transport:'helper'}).kind,'helper');
   assert.equal(manualConnection(ctx,{manual_helper_url:'https://owned-computer.test'}).kind,'helper');
   assert.throws(()=>manualConnection(ctx,{manual_transport:'typo'}),/连接方式无效/);

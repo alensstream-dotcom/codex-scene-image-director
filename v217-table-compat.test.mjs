@@ -21,6 +21,13 @@ test('actual table fill call enables the policy and recovered JSON does not crea
     assert(source.includes('logError_ACU(`JSON sanitization pipeline failed'));
     assert(source.includes('logError_ACU(`Failed to parse command line'));
 });
+test('native caller tool policy bypasses the actual Kemini anti-truncation interceptor',()=>{
+    const code=fs.readFileSync(new URL('./fixtures/tauri-tool-policy.original.js',import.meta.url),'utf8'),start=code.indexOf('function callerControlsTools('),end=code.length;
+    const classify=new Function(code.slice(start,end)+';return callerControlsTools;')();
+    const table=build([{role:'system',content:'Fill tables'}],config,{textOnly:true});
+    assert.equal(classify(table),'tools-disabled-by-caller');assert.equal(classify({type:'quiet',custom_include_body:'tool_choice: none'}),undefined);
+    assert.equal(classify({type:'normal'}),undefined);
+});
 const normalizeStart=source.indexOf('function normalizeTableReferences_ACU('),normalizeEnd=source.indexOf('// Animadex table-reference compatibility v2.1.7 end',normalizeStart);
 const normalize=new Function('getSortedSheetKeys_ACU',source.slice(normalizeStart,normalizeEnd)+';return normalizeTableReferences_ACU;')(tables=>Object.keys(tables).sort((a,b)=>tables[a].orderNo-tables[b].orderNo));
 const tables={b:{name:'角色表',orderNo:2},a:{name:'全局表',orderNo:1}};

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { NATIVE_AI_PROFILES, installMissingNativeAIProfiles } from './native-ai-profiles.mjs';
 
-const bundle=await fs.readFile(new URL('./companions/st-chatu8/index.js',import.meta.url),'utf8');
+const bundle=await fs.readFile(new URL('./fixtures/chatu8-parser.original.js',import.meta.url),'utf8');
 function nativeFunction(name) {
     const start=bundle.indexOf(`function ${name}(`);
     assert(start>=0,`native function exists: ${name}`);
@@ -47,7 +47,7 @@ test('existing native role prompts are preserved and generated schema matches th
 });
 
 test('live synthetic native prompt responses can be parsed and expanded by the installed bundle',async()=>{
-    const artifact=new URL('./fixtures/native-ai-live-results.json',import.meta.url);
+    const artifact=new URL('../native-ai-live-results.json',import.meta.url);
     let report;try{report=JSON.parse(await fs.readFile(artifact,'utf8'));}catch{return;}
     const context=vm.createContext({console:{log(){}}});
     vm.runInContext(['preprocessTagContent3','parseCharacterData2','parseOutfitData3','extractCharacterAndOutfitTags2'].map(nativeFunction).join('\n'),context);

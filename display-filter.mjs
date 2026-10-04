@@ -16,6 +16,8 @@ export function installPlanningFilter(settings) {
     const before = JSON.stringify(settings.regex);
     settings.regex = settings.regex.filter(value => ![script.id, tail.id, thought.id, placeholder.id].includes(value.id));
     // Remove gaps while the original planning header still exists; then the header.
-    settings.regex.push(thought, tail, script, placeholder);
+    const anchor={...script,id:PLANNING_FILTER_ID+'-scene-anchor',scriptName:'剧情绘图：独立图片位置',findRegex:'/image###ADSCENE\\{"id":"([a-zA-Z0-9_-]{1,80})","rev":([1-9][0-9]*)\\}END;###/g',replaceString:'<span class="ad-scene-anchor" data-ad-scene="$1" data-ad-revision="$2"></span>'};
+    settings.regex=settings.regex.filter(value=>value.id!==anchor.id);
+    settings.regex.push(thought, tail, script, placeholder,anchor);
     return before !== JSON.stringify(settings.regex);
 }

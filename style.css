@@ -249,3 +249,44 @@
 .ad-generation-health {overflow-wrap:anywhere;}
 .ad-paragraph-choice {display:block;width:100%;text-align:left;white-space:pre-wrap;line-height:1.6;padding:14px;margin:10px 0;overflow-wrap:anywhere;}
 .ad-picture-usage p {white-space:pre-line;font-size:.9em;overflow-wrap:anywhere;}
+.ad-api-panel{padding:16px;background:var(--ad-panel,#e1f3ff);border:1px solid var(--ad-border,#a9d7ee);border-radius:10px;}
+.ad-api-panel h3{margin:6px 0 14px;color:var(--ad-accent,#0876a3);}
+.ad-api-field{display:flex;flex-direction:column;gap:9px;margin:14px 0;min-width:0;}
+.ad-api-panel input:not([type=checkbox]),.ad-api-panel textarea,.ad-api-panel select{box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:12px;border:1px solid var(--ad-border,#a9d7ee);border-radius:8px;background:var(--SmartThemeBlurTintColor,#e8e8e8);color:inherit;font:inherit;}
+.ad-api-panel textarea{resize:vertical;}
+.ad-api-panel input[type=checkbox]{align-self:flex-start;}
+.ad-api-toolbar,.ad-api-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:end;}
+.ad-api-toolbar>.ad-api-field{flex:1 1 230px;margin:0;}
+.ad-api-panel button{min-height:42px;white-space:normal;}
+.ad-api-key{display:flex;gap:8px;align-items:center;}
+.ad-api-key>input{flex:1;}
+.ad-api-model{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1.5fr);gap:10px;}
+.ad-api-status{min-height:1.5em;overflow-wrap:anywhere;}
+.ad-api-status[role=alert]{color:#b34d4d;}
+.ad-api-card{padding:18px;background:var(--ad-card,#e0f2ff);border-radius:14px;}
+.ad-comfy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.ad-comfy-grid input,.ad-comfy-grid textarea{box-sizing:border-box;width:100%;min-width:0;}
+.ad-api-card>button{margin:8px 8px 0 0;}
+.ad-scene-block{display:block;margin:16px 0;}
+.ad-scene-block>.ad-render-button{min-height:42px;padding:8px 18px;border:1px solid #8bc9e1;border-radius:9px;background:#e2f6ff;color:#176382;cursor:pointer;}
+.ad-scene-block>span{display:block;}
+.ad-owned-image{display:block;max-width:100%;max-height:680px;object-fit:contain;margin:12px auto;border-radius:10px;cursor:pointer;}
+.ad-cache{padding:16px;border-radius:14px;background:var(--ad-card,#e0f2ff);}
+.ad-cache-filters,.ad-cache-toolbar,.ad-cache-pagination{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0;}
+.ad-cache-filters>*{flex:1 1 140px;min-width:0;}
+.ad-cache-toolbar button{min-height:42px;}
+.ad-cache-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:14px;}
+.ad-cache-card{position:relative;overflow:hidden;min-width:0;border:2px solid #b3e1f7;border-radius:11px;background:var(--ad-card,#e3f4ff);text-align:center;}
+.ad-cache-card.is-selected{border-color:#08a6df;box-shadow:0 0 0 2px #08a6df;}
+.ad-cache-card>input{position:absolute;top:8px;left:8px;z-index:1;width:22px;height:22px;}
+.ad-cache-card .ad-cache-preview{display:block;width:100%;padding:0!important;border:0!important;border-radius:0;overflow:hidden;background:#d4eaf4;}
+.ad-cache-preview>img{display:block;width:100%;height:185px;object-fit:cover;}
+.ad-cache-card time,.ad-cache-caption{display:block;padding:6px 8px;font-size:12px;overflow-wrap:anywhere;}
+.ad-cache-caption{padding-top:0;color:var(--ad-muted,#3b7895);}
+.ad-cache-pagination{justify-content:center;}
+.ad-cache-detail{max-width:900px!important;}
+.ad-cache-detail .ad-manual-body>img{display:block;max-width:100%;max-height:70vh;object-fit:contain;margin:auto;}
+.ad-cache-prompt{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;max-height:180px;overflow:auto;padding:12px;background:#ffffff70;border-radius:9px;}
+@media(max-width:600px){.ad-comfy-grid{grid-template-columns:1fr;}.ad-api-card,.ad-cache{padding:10px;}.ad-cache-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}.ad-cache-preview>img{height:160px;}.ad-cache-toolbar button{flex:1 1 30%;}.ad-cache-card time{font-size:11px;}}
+.ad-api-render{margin-top:22px;padding-top:18px;border-top:1px solid var(--ad-border,#a9d7ee);}
+@media(max-width:600px){.ad-api-panel{padding:12px;}.ad-api-model{grid-template-columns:1fr;}.ad-api-toolbar>.ad-api-field{flex-basis:100%;}.ad-api-toolbar button{flex:1 1 28%;}.ad-api-actions button{flex:1 1 140px;}.ad-api-key{align-items:stretch;}.ad-api-key button{font-size:12px;}}

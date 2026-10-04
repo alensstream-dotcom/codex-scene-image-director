@@ -1,11 +1,11 @@
 {
-  "display_name": "Animadex 剧情绘图工作台",
+  "display_name": "剧情绘图 · 独立生图与人物库",
   "loading_order": 120,
   "requires": [],
   "optional": [],
   "js": "index.js",
   "css": "style.css",
-  "author": "alensstream-dotcom / Animadex integration",
-  "version": "2.1.9",
+  "author": "Local integration",
+  "version": "2.2.0",
   "homePage": "https://github.com/alensstream-dotcom/codex-scene-image-director"
 }

@@ -52,7 +52,7 @@ test('display hides planning while preserving every image block, prose and statu
  const ordinary=`普通剧情\n${img(1)}\n普通后续剧情\n${img(2)}`;
  assert.equal(ordinary.replace(PLANNING_TAIL_REGEX,'').replace(PLANNING_REGEX,''),ordinary);
  const settings={regex:[{id:'user-regex'}]}; installPlanningFilter(settings); installPlanningFilter(settings);
- assert.equal(settings.regex.length,5); assert.equal(settings.regex[0].id,'user-regex');
+ assert.equal(settings.regex.length,6); assert.equal(settings.regex[0].id,'user-regex');
 });
 
 test('literal ICOT template lines disappear without removing actual prose or image buttons',()=>{

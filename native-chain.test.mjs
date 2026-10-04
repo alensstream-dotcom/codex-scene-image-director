@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { syncNativeManagers, applyNativeEdits } from './native-manager.mjs';
 import { nativePrompt, hasUnresolvedNativeRoles } from './native-prompt.mjs';
 import { discoverWithFlash, enhanceWithFlash } from './flash-assistant.mjs';
-const bundle=await fs.readFile(new URL('./companions/st-chatu8/index.js',import.meta.url),'utf8');
+const bundle=await fs.readFile(new URL('./fixtures/chatu8-parser.original.js',import.meta.url),'utf8');
 function nativeFunction(name) {
     const start=bundle.indexOf(`function ${name}(`);
     assert(start>=0,`native function exists: ${name}`);

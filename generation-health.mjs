@@ -1,7 +1,7 @@
 import {validateWorkflow} from './workflow-library.mjs';
 export function inspectRenderConfig(native={},scene){
-    if(native.mode&&native.mode!=='comfyui')throw new Error('剧情绘图自动渲染需要在智绘姬中选择 ComfyUI 模式。');
-    let url;try{url=new URL(native.comfyuiUrl);}catch{throw new Error('请先配置智绘姬的 ComfyUI 地址。');}
+    if(native.mode&&native.mode!=='comfyui')throw new Error('剧情绘图需要使用 ComfyUI 模式。');
+    let url;try{url=new URL(native.comfyuiUrl);}catch{throw new Error('请在 ComfyUI 页面配置绘图地址。');}
     if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('ComfyUI 地址格式无效。');
     const graph=validateWorkflow(native.worker);
     const hasReferences=scene?.actors?.some(a=>a.person_snapshot?.reference_enabled&&a.person_snapshot?.reference_ids?.length);
