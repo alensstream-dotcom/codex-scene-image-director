@@ -1,6 +1,6 @@
 {
   "name": "Animadex_剧情形象参考_v2",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "workflowFile": "workflow-api.json",
   "settings": {
     "mode": "comfyui",
@@ -52,6 +52,6 @@
     "name": "Animadex_精细美学",
     "fixedPrompt": "masterpiece, best quality, very aesthetic, @wlop, refined painterly anime illustration, soft blended layered skin shading, delicate translucent skin, fine eyelashes and intricately painted irises, silky hair with individually rendered strands, finely detailed fabric, soft diffused indoor lighting, <wlr:DogmaV6.1-000020:0.7:1>",
     "fixedPrompt_end": "",
-    "negativePrompt": "worst quality, low quality, normal quality, lowres, blurry, out of focus, bad anatomy, bad proportions, anatomical nonsense, deformed, disfigured, mutated, poorly drawn face, malformed hands, extra fingers, missing fingers, fused fingers, extra digits, extra arms, extra legs, extra limbs, missing limbs, disconnected limbs, bad feet, long neck, long body, watermark, text, logo, signature, username, cropped, jpeg artifacts, monochrome, grayscale, shiny_skin, face backlighting, backlighting, simple background, transparent, fog"
+    "negativePrompt": ""
   }
 }

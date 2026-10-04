@@ -1,7 +1,7 @@
 {
   "passed": true,
-  "version": "2.2.1",
-  "local_node_tests": 295,
+  "version": "2.2.2",
+  "local_node_tests": 299,
   "touch_ui_checks": 76,
   "independent_real_runtime_checks": 19,
   "real_automatic_checks": 7,
@@ -21,7 +21,15 @@
   "worldbook_unknown_fields_preserved": true,
   "deleted_worldbooks_not_reinstalled": true,
   "native_worldbook_edits_synced": true,
-  "public_node_tests": 295,
   "original_worldbook_entries_preserved": 144,
-  "original_worldbook_copy_export_identical": true
+  "original_worldbook_copy_export_identical": true,
+  "paragraph_layout_ui_checks": 32,
+  "paragraph_layout_real_runtime_checks": 22,
+  "current_chat_saved_images_verified": 2,
+  "original_touch_ui_checks": 76,
+  "all_client_filters_bypassed": false,
+  "raw_backend_final_prompt_preserved": true,
+  "backend_safety_disabled": false,
+  "public_node_tests": 299,
+  "runtime_source_public_installed_package_hashes_match": true
 }

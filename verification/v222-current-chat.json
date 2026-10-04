@@ -1,0 +1,31 @@
+{
+  "checks": [
+    {
+      "name": "two saved images belong to actual current role card reply",
+      "passed": true
+    },
+    {
+      "name": "both image blocks follow source-matched narrative paragraphs",
+      "passed": true
+    },
+    {
+      "name": "both image blocks precede later narrative instead of reply footer",
+      "passed": true
+    },
+    {
+      "name": "cached images load at paragraph positions",
+      "passed": true
+    },
+    {
+      "name": "refresh retains images and correct positions",
+      "passed": true
+    },
+    {
+      "name": "layout repair does not edit chat, scene revision or launch generation",
+      "passed": true
+    }
+  ],
+  "blocks": 2,
+  "passed": true,
+  "real_tauri": true
+}

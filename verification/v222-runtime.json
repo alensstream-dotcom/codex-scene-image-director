@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "checks": [
+    "installed version is 2.2.2",
+    "round 1: actual host formatter automatic paragraph",
+    "round 1: actual host formatter selected-passage position",
+    "round 1: existing saved image relocates and survives refresh",
+    "round 1: no duplicate controls or leaked raw marker",
+    "round 2: actual host formatter automatic paragraph",
+    "round 2: actual host formatter selected-passage position",
+    "round 2: existing saved image relocates and survives refresh",
+    "round 2: no duplicate controls or leaked raw marker",
+    "round 3: actual host formatter automatic paragraph",
+    "round 3: actual host formatter selected-passage position",
+    "round 3: existing saved image relocates and survives refresh",
+    "round 3: no duplicate controls or leaked raw marker",
+    "real user chat is unchanged",
+    "main chat API is unchanged",
+    "no browser errors"
+  ],
+  "pageErrors": [],
+  "real_tauri": true
+}

@@ -1,0 +1,52 @@
+{
+  "passed": true,
+  "checks": 32,
+  "reports": [
+    {
+      "passed": true,
+      "checks": [
+        "automatic button follows its paragraph before later prose and status",
+        "relocated button keeps scene handler",
+        "existing bottom image is repaired without replacing its DOM or source",
+        "repeated refresh does not move controls or duplicate images",
+        "manual mid-paragraph selection stays before the remaining text",
+        "Markdown emphasis and prose are retained",
+        "identical paragraphs retain separate occurrence positions",
+        "scenes at the same prose boundary retain source order",
+        "split text-node marker is removed without deleting following prose",
+        "entities, quote formatting and collapsed reasoning do not shift anchors",
+        "host anchors already rendered at the bottom are relocated",
+        "fully hidden prose is explicitly unlocated instead of pretending to match another paragraph",
+        "a hidden duplicate is never assigned to the remaining occurrence",
+        "stale controls are removed after prose changes",
+        "saved images hydrate in the paragraph block",
+        "controls fit mobile width"
+      ],
+      "mobile": false,
+      "pageErrors": []
+    },
+    {
+      "passed": true,
+      "checks": [
+        "automatic button follows its paragraph before later prose and status",
+        "relocated button keeps scene handler",
+        "existing bottom image is repaired without replacing its DOM or source",
+        "repeated refresh does not move controls or duplicate images",
+        "manual mid-paragraph selection stays before the remaining text",
+        "Markdown emphasis and prose are retained",
+        "identical paragraphs retain separate occurrence positions",
+        "scenes at the same prose boundary retain source order",
+        "split text-node marker is removed without deleting following prose",
+        "entities, quote formatting and collapsed reasoning do not shift anchors",
+        "host anchors already rendered at the bottom are relocated",
+        "fully hidden prose is explicitly unlocated instead of pretending to match another paragraph",
+        "a hidden duplicate is never assigned to the remaining occurrence",
+        "stale controls are removed after prose changes",
+        "saved images hydrate in the paragraph block",
+        "controls fit mobile width"
+      ],
+      "mobile": true,
+      "pageErrors": []
+    }
+  ]
+}

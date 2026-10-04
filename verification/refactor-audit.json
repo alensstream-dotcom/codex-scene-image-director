@@ -1,0 +1,158 @@
+{
+  "version": "2.2.2",
+  "source_files_scanned": 64,
+  "workflow_json_files_reviewed": [
+    "workflow-api.json",
+    "workflow-config.json"
+  ],
+  "matches": [
+    {
+      "file": "automatic-scene.mjs",
+      "line": 4,
+      "terms": [
+        "sanitizeAppearanceText"
+      ]
+    },
+    {
+      "file": "automatic-scene.mjs",
+      "line": 43,
+      "terms": [
+        "sanitizeAppearanceText"
+      ]
+    },
+    {
+      "file": "character-tools.mjs",
+      "line": 45,
+      "terms": [
+        "sanitizeAppearanceText"
+      ]
+    },
+    {
+      "file": "comfy-panel.mjs",
+      "line": 9,
+      "terms": [
+        "negative_prompt"
+      ]
+    },
+    {
+      "file": "comfy-transport.mjs",
+      "line": 16,
+      "terms": [
+        "NegativePrompt",
+        "negativePrompt",
+        "negative_prompt"
+      ]
+    },
+    {
+      "file": "comfy-transport.mjs",
+      "line": 24,
+      "terms": [
+        "negativePrompt",
+        "negative_prompt"
+      ]
+    },
+    {
+      "file": "identity.mjs",
+      "line": 288,
+      "terms": [
+        "SFW"
+      ]
+    },
+    {
+      "file": "image-cache.mjs",
+      "line": 39,
+      "terms": [
+        "negativePrompt"
+      ]
+    },
+    {
+      "file": "model-profiles.mjs",
+      "line": 30,
+      "terms": [
+        "negativePrompt"
+      ]
+    },
+    {
+      "file": "native-ai-profiles.mjs",
+      "line": 42,
+      "terms": [
+        "SFW"
+      ]
+    },
+    {
+      "file": "native-ai-profiles.mjs",
+      "line": 43,
+      "terms": [
+        "sfw"
+      ]
+    },
+    {
+      "file": "native-ai-profiles.mjs",
+      "line": 44,
+      "terms": [
+        "SFW",
+        "sfw"
+      ]
+    },
+    {
+      "file": "native-prompt.mjs",
+      "line": 25,
+      "terms": [
+        "sanitizeNativePrompt"
+      ]
+    },
+    {
+      "file": "native-prompt.mjs",
+      "line": 45,
+      "terms": [
+        "sanitizeNativePrompt"
+      ]
+    },
+    {
+      "file": "native-prompt.mjs",
+      "line": 59,
+      "terms": [
+        "sfw"
+      ]
+    },
+    {
+      "file": "native-prompt.mjs",
+      "line": 67,
+      "terms": [
+        "SFW"
+      ]
+    },
+    {
+      "file": "scene-planner.mjs",
+      "line": 160,
+      "terms": [
+        "SFW"
+      ]
+    }
+  ],
+  "protected_files_byte_identical": [
+    "story-app.mjs",
+    "scene-planner.mjs",
+    "automatic-scene.mjs",
+    "manual-instruction.mjs",
+    "automatic-instruction.mjs",
+    "narrative-appearance.mjs",
+    "native-prompt.mjs",
+    "compact-prompt.mjs",
+    "render-policy.mjs",
+    "character-tools.mjs",
+    "worldbook-library.mjs",
+    "worldbook-panel.mjs",
+    "render-settings.mjs",
+    "library-panel.mjs",
+    "display-filter.mjs"
+  ],
+  "raw_backend_prompt_preserved": true,
+  "all_client_filters_bypassed": false,
+  "minor_protections_removed": false,
+  "backend_safety_disabled": false,
+  "hardcoded_adult_negative_terms_found": false,
+  "bundled_negative_defaults_empty": true,
+  "legacy_anatomy_quality_negative_default_removed": true,
+  "existing_user_negatives_preserved": true
+}

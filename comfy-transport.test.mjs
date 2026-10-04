@@ -9,6 +9,23 @@ test('graph filling is typed, preserves tags and quotes, records real parameters
     const native=settings(),before=structuredClone(native),result=buildComfyRequest(native,request());assert.deepEqual(native,before);
     assert.equal(result.graph['5'].inputs.seed,1234);assert(result.genParams.resolvedPrompt.includes('@wlop'));assert(result.genParams.resolvedPrompt.includes('"coffee"'));assert(!JSON.stringify(result.graph).includes('%prompt%'));assert.equal(result.genParams.width,880);assert.equal(result.genParams.height,1440);assert.equal(result.genParams.scheduler,'simple');
 });
+test('backend receives exact final text including resolution text, weights, Unicode, punctuation and repeated tags',()=>{
+    const native=settings();native.yushe.default.fixedPrompt='';native.yushe.default.negativePrompt='';
+    const change='  Scene Composition: office, @wlop, 896x896; Character 1 Prompt: adult woman, (holding coffee:1.2), holding coffee, "704x1152", 猫 & 雨, <lora:example:0.8>;\n';
+    const result=buildComfyRequest(native,{...request(),change});assert.equal(result.genParams.resolvedPrompt,change);assert.equal(result.graph['28'].inputs.prompt,change);assert.equal(result.genParams.width,1120);assert.equal(result.genParams.height,1120);
+});
+test('dimensions in ordinary prose do not override canvas settings and negative prompts remain user owned',()=>{
+    const native=settings();native.yushe.default.fixedPrompt='';native.yushe.default.negativePrompt='  custom user negative  ';native.UCP_comfyui='another user tag';
+    const change='adult woman, holding a label reading "896x896"',negative='(user selected exclusion:0.5)';
+    const result=buildComfyRequest(native,{...request(),change,extraNegativePrompt:negative});assert.equal(result.genParams.resolvedPrompt,change);assert.equal(result.genParams.width,880);assert.equal(result.genParams.height,1440);assert.equal(result.genParams.negativePrompt,'  custom user negative  , '+negative+', another user tag');
+});
+test('custom workflow safety settings are preserved without adding or disabling flags',()=>{
+    const native=settings(),graph=JSON.parse(native.worker);graph['99']={class_type:'CustomSafetyNode',inputs:{enable_safety_checker:true,nsfw_filter:true,safety:'configured'}};native.worker=JSON.stringify(graph);
+    assert.deepEqual(buildComfyRequest(native,request()).graph['99'],graph['99']);
+});
+test('bundled prompt presets have no default exclusions, including the legacy anatomy quality list',()=>{
+    const config=JSON.parse(fs.readFileSync(new URL('./workflow-config.json',import.meta.url)));assert.equal(config.promptPreset.negativePrompt,'');assert.equal(config.legacyPromptPreset.negativePrompt,'');
+});
 test('references remain explicit and preserve existing reference model settings',()=>{
     const r={...request(),animadexReferenceFiles:['AnimadexIdentity/img_'+('a'.repeat(64))+'.png']},result=buildComfyRequest(settings(),r);assert(result.genParams.resolvedPrompt.includes('@adref:'));assert.equal(result.genParams.referenceFiles.length,1);
     assert.throws(()=>buildComfyRequest(settings(),{...r,animadexReferenceFiles:['../private.png']}),/参考文件/);

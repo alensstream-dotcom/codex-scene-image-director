@@ -5,12 +5,12 @@ const finite=(value,fallback)=>Number.isFinite(Number(value))?Number(value):fall
 export function buildComfyRequest(native,request){
     inspectRenderConfig(native);const graph=validateWorkflow(native.worker),refs=request.animadexReferenceFiles||[];
     if(!Array.isArray(refs)||refs.length>4||refs.some(p=>!/^AnimadexIdentity\/img_[0-9a-f]{64}\.png$/.test(p)))throw new Error('人物参考文件无效。');
-    const preset=native.yushe?.[native.yusheid_comfyui]||{},size=String(request.change||'').match(/\b(\d{2,4})x(\d{2,4})\b/);
+    const scenePrompt=String(request.change||request.prompt||'');
+    const preset=native.yushe?.[native.yusheid_comfyui]||{},header=scenePrompt.match(/^\s*Scene Composition:\s*([^;]*);/i)?.[1],size=header?.match(/(?:^|,)\s*(\d{2,4})x(\d{2,4})\s*(?:,|$)/);
     const width=finite(size?.[1]??request.width??native.comfyui_width,704),height=finite(size?.[2]??request.height??native.comfyui_height,1152);
     if(width<64||height<64||width>16384||height>16384)throw new Error('绘图尺寸无效。');
     const seed=Number.isSafeInteger(request.animadexSeed)&&request.animadexSeed>=0?request.animadexSeed:Math.floor(Math.random()*Number.MAX_SAFE_INTEGER);
-    const scenePrompt=String(request.change||request.prompt||'').replace(/\b\d{2,4}x\d{2,4}\b/g,'').trim();
-    if(!scenePrompt||/ADSCENE|ADCAP/.test(scenePrompt))throw new Error('图片提示词尚未准备好。');
+    if(!scenePrompt.trim()||/ADSCENE|ADCAP/.test(scenePrompt))throw new Error('图片提示词尚未准备好。');
     const prompt=[preset.fixedPrompt,scenePrompt,preset.fixedPrompt_end,native.AQT_comfyui].filter(v=>typeof v==='string'&&v.trim()).join(', ');
     const referenceTag=refs.length?', @adref:'+btoa(JSON.stringify(refs)).replaceAll('+','-').replaceAll('/','_'):'';
     const values={prompt:prompt+referenceTag,negative_prompt:[preset.negativePrompt,request.extraNegativePrompt,native.UCP_comfyui].filter(v=>typeof v==='string'&&v.trim()).join(', '),
