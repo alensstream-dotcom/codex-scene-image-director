@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "checks": [
+    "actual default protocol is visible in the editor",
+    "saved entry is actually used by automatic injection",
+    "effective prompt preview contains the saved rule",
+    "adding and editing a rule changes the effective protocol",
+    "disabled entry is excluded from actual prompt",
+    "export is a normal worldbook file",
+    "entry deletion writes the complete remaining file",
+    "import preserves all metadata and starts inactive",
+    "using imported book replaces the previous protocol",
+    "invalid import preserves existing book",
+    "invalid JSON cannot overwrite the file",
+    "import export roundtrip retains unknown fields",
+    "switching protects unsaved drafts",
+    "disable clears automatic rules while keeping books",
+    "delete removes host file and stops automatic rules",
+    "deletion is not undone on restart",
+    "original book is accessible in native editor",
+    "copy original preserves metadata and original file",
+    "mobile editor has no horizontal overflow",
+    "no browser errors"
+  ],
+  "pageErrors": [],
+  "real_phone": false
+}

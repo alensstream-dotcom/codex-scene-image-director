@@ -1,6 +1,6 @@
 {
   "name": "Animadex_剧情形象参考_v2",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "workflowFile": "workflow-api.json",
   "settings": {
     "mode": "comfyui",

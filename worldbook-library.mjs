@@ -1,4 +1,5 @@
 /** Editable ST worldbooks. The host file is authoritative; settings keep the managed list. */
+import {renderWorldbookRules,ruleScope,ruleKind,upgradedRuleBook} from './worldbook-scopes.mjs';
 export const RULE_BOOK='Animadex_剧情绘图_生图规则';
 const clone=structuredClone;
 const object=v=>v&&typeof v==='object'&&!Array.isArray(v);
@@ -6,28 +7,28 @@ export function validateWorldbook(value){
     if(!object(value)||!object(value.entries))throw new Error('需要 SillyTavern/TauriTavern 世界书 JSON，包含 entries 对象。');
     for(const [id,entry] of Object.entries(value.entries)){
         if(!object(entry)||typeof entry.content!=='string')throw new Error('条目 '+id+' 缺少文本 content。');
+        const meta=entry.extensions?.animadex_drawing;if(meta!==undefined&&(!object(meta)||meta.scope!==undefined&&!['automatic','manual','both','reference'].includes(meta.scope)))throw new Error('条目 '+id+' 的适用阶段无效。');
         for(const key of ['key','keysecondary'])if(entry[key]!==undefined&&(!Array.isArray(entry[key])||entry[key].some(x=>typeof x!=='string')))throw new Error('条目 '+id+' 的 '+key+' 应为文本数组。');
     }
     return clone(value);
 }
-export function worldbookInstruction(settings){
+export function worldbookInstruction(settings,scope='automatic',variables={}){
     const library=settings.worldbook_library;
     if(!library)return undefined; // Compatibility for callers predating editable worldbooks.
     const book=library.books.find(b=>b.name===library.active);
     if(!book)return null;
-    if(book.mode==='native')return ''; // The host handles all native activation semantics.
-    return Object.entries(book.data.entries).filter(([,e])=>!e.disable&&e.content.trim()).sort(([ka,a],[kb,b])=>Number(b.order??100)-Number(a.order??100)||String(ka).localeCompare(String(kb))).map(([,e])=>e.content).join('\n\n');
+    return renderWorldbookRules(book.data,scope,variables,{contextOnly:scope==='automatic'&&book.mode==='native'});
 }
 export function filterManagedLore(lore,settings){
     const library=settings.worldbook_library;if(!library)return;
     const active=library.books.find(b=>b.name===library.active);
     const allow=settings.enabled!==false&&settings.automatic!==false&&!settings.worldbook_read_error&&active?.mode==='native'?active.name:null;
     const names=new Set(library.books.map(b=>b.name));
-    for(const rows of Object.values(lore||{}))if(Array.isArray(rows))for(let i=rows.length-1;i>=0;i--)if(names.has(rows[i].world)&&rows[i].world!==allow)rows.splice(i,1);
+    for(const rows of Object.values(lore||{}))if(Array.isArray(rows))for(let i=rows.length-1;i>=0;i--){const row=rows[i];if(!names.has(row.world))continue;const entry=active?.data?.entries?.[row.uid]||Object.values(active?.data?.entries||{}).find(e=>String(e.uid)===String(row.uid));if(row.world!==allow||entry&&(!['automatic','both'].includes(ruleScope(entry))||ruleKind(entry)==='context'))rows.splice(i,1);}
 }
 export function createWorldbookLibrary({setting,host,defaultBook,save=()=>{},changed=()=>{}}){
     let chain=Promise.resolve(),writing=new Set();
-    const state=()=>setting().worldbook_library??={version:1,active:null,books:[]};
+    const state=()=>setting().worldbook_library??={version:2,active:null,books:[]};
     const find=name=>{const book=state().books.find(b=>b.name===name);if(!book)throw new Error('世界书不存在，请刷新列表。');return book;};
     const emit=()=>{delete setting().worldbook_read_error;save();changed();};
     const serial=fn=>{const result=chain.then(fn);chain=result.catch(()=>{});return result;};
@@ -53,7 +54,7 @@ export function createWorldbookLibrary({setting,host,defaultBook,save=()=>{},cha
         state().books.push({name:safe,mode,data:checked});if(activate)state().active=safe;await syncSelection();emit();return {name:safe};
     }
     return {
-        initialize:()=>serial(async()=>{if(!setting().worldbook_library){const data=await defaultBook();state();await add(data,{name:RULE_BOOK,mode:'always'});}else{for(const book of [...state().books])await fresh(book);await syncSelection();}emit();}),
+        initialize:()=>serial(async()=>{if(!setting().worldbook_library){const data=await defaultBook();state();await add(data,{name:RULE_BOOK,mode:'always'});}else{for(const book of [...state().books])await fresh(book);if((state().version||1)<2){const old=state().books.find(b=>b.name===state().active);if(old&&old.data.extensions?.animadex_drawing?.version!==2){const data=upgradedRuleBook(old.data,await defaultBook());await add(data,{name:old.name+' · 自动与选段',mode:old.mode});}state().version=2;}await syncSelection();}emit();}),
         list:()=>clone(state()),
         get:name=>clone(find(name)),
         refresh:()=>serial(async()=>{for(const book of [...state().books])await fresh(book);await syncSelection();return clone(state());}),

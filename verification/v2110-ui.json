@@ -1,0 +1,49 @@
+{
+  "passed": true,
+  "checks": [
+    "API page has address key model and profile controls",
+    "API key defaults hidden",
+    "visibility can be toggled",
+    "fetch models uses the edited address",
+    "fetch model list preserves manual model",
+    "save activates plugin owned settings",
+    "model test reaches selected model",
+    "second profile retains both configurations",
+    "rename keeps same profile identity",
+    "profile switch updates connection immediately",
+    "API edits leave native and main host settings untouched",
+    "invalid URL is shown without overwriting active settings",
+    "API panel fits 393px touch screen",
+    "real manual UI now uses selected plugin API",
+    "manual result is editable",
+    "next manual request follows changed API and model",
+    "UI export excludes keys by default",
+    "delete falls back to remaining profile",
+    "last profile cannot be removed",
+    "no browser errors"
+  ],
+  "pageErrors": [],
+  "real_phone": false,
+  "requests": [
+    {
+      "path": "status",
+      "model": null,
+      "base": "https://a.example.test/v1"
+    },
+    {
+      "path": "generate",
+      "model": "model-a",
+      "base": "https://a.example.test/v1"
+    },
+    {
+      "path": "generate",
+      "model": "model-a",
+      "base": "https://a.example.test/v1"
+    },
+    {
+      "path": "generate",
+      "model": "model-b",
+      "base": "https://b.example.test/v2"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "checks": 38,
+  "reports": [
+    {
+      "passed": true,
+      "mobile": false,
+      "checks": [
+        "all 28 rule entries are visible",
+        "manual rule scope and category are visible",
+        "saved manual rule is in manual preview",
+        "manual rule is not sent to automatic prompt",
+        "manual request uses exact edited worldbook rule",
+        "minimal copy has 17 necessary entries",
+        "original complete book is unchanged",
+        "rendering guide is absent after creating minimal copy",
+        "appended guidance stays a draft until saved",
+        "foreign rule applies to automatic stage after save",
+        "foreign rule applies to manual stage after save",
+        "unknown entry fields and source metadata survive merging",
+        "editing phase excludes only that guide from automatic prompt",
+        "manual preview retains the manual-only guide",
+        "export includes edited phases and preserved foreign fields",
+        "invalid merge does not change saved book",
+        "layout fits viewport",
+        "merged scoped book survives reload",
+        "no browser errors"
+      ],
+      "pageErrors": []
+    },
+    {
+      "passed": true,
+      "mobile": true,
+      "checks": [
+        "all 28 rule entries are visible",
+        "manual rule scope and category are visible",
+        "saved manual rule is in manual preview",
+        "manual rule is not sent to automatic prompt",
+        "manual request uses exact edited worldbook rule",
+        "minimal copy has 17 necessary entries",
+        "original complete book is unchanged",
+        "rendering guide is absent after creating minimal copy",
+        "appended guidance stays a draft until saved",
+        "foreign rule applies to automatic stage after save",
+        "foreign rule applies to manual stage after save",
+        "unknown entry fields and source metadata survive merging",
+        "editing phase excludes only that guide from automatic prompt",
+        "manual preview retains the manual-only guide",
+        "export includes edited phases and preserved foreign fields",
+        "invalid merge does not change saved book",
+        "layout fits viewport",
+        "merged scoped book survives reload",
+        "no browser errors"
+      ],
+      "pageErrors": []
+    }
+  ]
+}

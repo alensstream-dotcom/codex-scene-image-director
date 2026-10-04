@@ -13,15 +13,15 @@ export async function initV2({getContext,getTools,persist,setting,notify,diagnos
     const ctx=getContext(),events=ctx.eventSource,types=ctx.eventTypes;let app,readyPromise;
     ensureHostEventCompatibility(events);
     async function ready(){if(readyPromise)return readyPromise;readyPromise=(async()=>{
-        const s=setting();s.automatic??=true;s.automatic_render??=true;s.automatic_max_images??=1;s.standard_comfy_history??=true;s.studioVersion='2.2.2';
+        const s=setting();s.automatic??=true;s.automatic_render??=true;s.automatic_max_images??=1;s.standard_comfy_history??=true;s.studioVersion='2.3.0';
         const native=ctx.extensionSettings['st-chatu8']||{},renderSettings=ensureRenderSettings(s,native);
         ensureApiProfiles(s,native);
         installPlanningFilter(ctx.extensionSettings);await installWorkflowUpgrade(s,renderSettings,configure);if(!renderSettings.worker)await configure(s.mainProfile);
         try{const result=installAvsCompatibility(window.TavernHelper,s);if(result.changed)diagnostics({event:'avs_compatibility_installed',scripts:result.changed});}
         catch(error){notify('AVS 兼容修复未完成：'+error.message,'warning');}
         try{await worldbooks?.initialize();}catch(error){s.worldbook_library??={version:1,active:null,books:[]};s.worldbook_read_error=true;notify('生图世界书读取失败，规则注入已停用：'+error.message,'warning');}
-        app=createStoryApp({getContext,getTools,persist,setting,notify,diagnostics,renderImage:createComfyRenderer({getSettings:()=>setting().render_settings})});installArtistBundle(app,s);await app.load();app.bind();mountLibraryPanel({app,setting,notify,configure,installBook,worldbooks,saveSettings:()=>ctx.saveSettingsDebounced()});
-        app.worldbooks=worldbooks;window.AnimadexStoryApp=app;await app.processLatest();ctx.saveSettingsDebounced();diagnostics({event:'extension_ready',version:'2.2.2',independent_library:true,independent_transport:true,standalone:true,automatic_flash_calls:0});
+        app=createStoryApp({getContext,getTools,persist,setting,notify,diagnostics,refreshRules:async()=>{try{await flushBooks();await worldbooks?.refresh();delete setting().worldbook_read_error;}catch(error){setting().worldbook_read_error=true;throw new Error('选段规则读取失败：'+error.message);}},renderImage:createComfyRenderer({getSettings:()=>setting().render_settings})});installArtistBundle(app,s);await app.load();app.bind();mountLibraryPanel({app,setting,notify,configure,installBook,worldbooks,saveSettings:()=>ctx.saveSettingsDebounced()});
+        app.worldbooks=worldbooks;window.AnimadexStoryApp=app;await app.processLatest();ctx.saveSettingsDebounced();diagnostics({event:'extension_ready',version:'2.3.0',independent_library:true,independent_transport:true,standalone:true,automatic_flash_calls:0});
     })().catch(error=>{readyPromise=undefined;notify(error.message,'error');diagnostics({event:'init_failed',error:error.message});});return readyPromise;}
     events.makeFirst('generate-image-request',async request=>{if(app)await app.bridge(request);else if(/ADSCENE|ADCAP/.test(request.prompt||'')){request.animadexAbort='人物库还未加载，请稍后重试。';request.change='';}});
     events.on('generate-image-response',data=>app?.returned(data));

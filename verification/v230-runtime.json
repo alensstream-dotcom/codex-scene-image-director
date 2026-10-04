@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "checks": [
+    "v2.3.0 and complete migrated book are active",
+    "all pre-upgrade native worldbook files retain complete original data",
+    "automatic anchors contain only automatic test guidance",
+    "manual preview reads only manual test guidance",
+    "edited manual guidance appears once in actual outgoing API system prompt",
+    "real extraction follows edited summary and returns the target person",
+    "native editor changes reach the next manual rule selection",
+    "actual native scanner excludes manual entries while retaining automatic protocol",
+    "minimal plus foreign guidance is active in automatic and manual rules",
+    "foreign metadata and entry content persist in the real worldbook export",
+    "main chat API settings are unchanged",
+    "no browser errors"
+  ],
+  "pageErrors": [],
+  "real_tauri": true,
+  "physical_phone": false
+}

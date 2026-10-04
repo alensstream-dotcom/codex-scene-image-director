@@ -1,5 +1,5 @@
 /** Use the existing drawing API on every device. No dependency on a Windows process. */
-import {MANUAL_INSTRUCTION} from './manual-instruction.mjs';
+import {manualInstruction} from './manual-instruction.mjs';
 import {activeApiProfile,normalizeApiProfile,apiBase} from './api-profiles.mjs';
 export function manualConnection(ctx,settings={}){
     const native=ctx.extensionSettings?.['st-chatu8']||{},profiles=native.llm_profiles||{};
@@ -34,14 +34,15 @@ function requestFailure(status,value){
     if(code.startsWith('network.'))return '选段接口无法连接，请检查本插件的 API 地址、网络与代理。';
     return status===429?'选段接口繁忙，请稍后重新生成。':status===401||status===403?'选段接口认证失败，请检查本插件的 API 配置。':'选段整理失败（HTTP '+status+'），请重新生成。';
 }
-export function createManualTransport({getContext,setting=()=>({}),fetcher=fetch,onRequest,instruction=MANUAL_INSTRUCTION,maxTokens=3000}){
+export function createManualTransport({getContext,setting=()=>({}),fetcher=fetch,onRequest,instruction,beforeRules=async()=>{},maxTokens=3000}){
     return async(payload,{signal}={})=>{
-        const ctx=getContext(),connection=manualConnection(ctx,setting());
+        signal?.throwIfAborted();if(instruction===undefined)await beforeRules();signal?.throwIfAborted();
+        const rules=instruction??manualInstruction(setting(),payload),ctx=getContext(),connection=manualConnection(ctx,setting());
         let url,headers,body;
-        if(connection.kind==='helper'){url=connection.url+'/manual';headers={'Content-Type':'application/json'};body=payload;}
+        if(connection.kind==='helper'){url=connection.url+'/manual';headers={'Content-Type':'application/json'};body={...payload,system_instruction:rules};}
         else{
             const profile=connection.profile,base=apiBase(profile.api_url);
-            body={model:connection.model,messages:[{role:'system',content:instruction},{role:'user',content:JSON.stringify(payload)}],stream:false,max_tokens:maxTokens,temperature:.1,response_format:{type:'json_object'},tool_choice:'none'};
+            body={model:connection.model,messages:[{role:'system',content:rules},{role:'user',content:JSON.stringify(payload)}],stream:false,max_tokens:maxTokens,temperature:.1,response_format:{type:'json_object'},tool_choice:'none'};
             if(/deepseek/i.test(connection.model))body.thinking={type:'disabled'};
             const extras=customHeaders(profile);
             if(profile.bypass_proxy){url=base+'/chat/completions';headers={'Content-Type':'application/json',Authorization:'Bearer '+profile.api_key.trim(),...extras};}

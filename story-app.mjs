@@ -27,8 +27,8 @@ import {mountSceneButtons} from './scene-buttons.mjs';
 import {imageThumbnail} from './image-cache.mjs';
 const clone=structuredClone;
 const sameAppearance=(a,b)=>!!a&&!!b&&['prototype_id','age_description','face_description'].every(k=>(a[k]||'')===(b[k]||''))&&JSON.stringify(a.chosen_appearance_tags||[])===JSON.stringify(b.chosen_appearance_tags||[]);
-export function createStoryApp({getContext,getTools,persist,setting,notify,diagnostics,library=createLibrary(),fetcher=fetch,renderImage}){
-    const manualRequester=createManualTransport({getContext,setting,fetcher,onRequest:info=>diagnostics?.({event:'manual_request_started',...info})});
+export function createStoryApp({getContext,getTools,persist,setting,notify,diagnostics,library=createLibrary(),fetcher=fetch,renderImage,refreshRules=async()=>{}}){
+    const manualRequester=createManualTransport({getContext,setting,fetcher,beforeRules:refreshRules,onRequest:info=>diagnostics?.({event:'manual_request_started',...info})});
     const renderSettings=()=>setting().render_settings||renderImage?ensureRenderSettings(setting(),getContext().extensionSettings['st-chatu8']||{}):getContext().extensionSettings['st-chatu8']||{};
     const workflows=createWorkflowLibrary({native:renderSettings,save:()=>getContext().saveSettingsDebounced?.()});
     const apiProfiles=createApiProfileStore({setting,native:()=>getContext().extensionSettings['st-chatu8']||{},save:()=>getContext().saveSettingsDebounced?.()});

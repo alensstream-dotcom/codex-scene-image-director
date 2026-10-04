@@ -7,6 +7,7 @@ import {mountApiPanel} from './api-panel.mjs';
 import {mountCachePanel} from './cache-panel.mjs';
 import {mountComfyPanel} from './comfy-panel.mjs';
 import {mountWorldbookPanel} from './worldbook-panel.mjs';
+import {manualInstruction} from './manual-instruction.mjs';
 const e=(tag,text,attrs={})=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;};
 const split=value=>String(value||'').split(/[,，\n]/).map(x=>x.trim()).filter(Boolean);
 const field=(title,input)=>{const l=e('div',undefined,{class:'ad-library-field'});l.append(e('span',title),input);return l;};
@@ -35,7 +36,7 @@ export function mountLibraryPanel({app,setting,notify,configure,installBook,worl
     const generationUpdated=()=>renderTasks();window.addEventListener('animadex-tasks-updated',generationUpdated);renderTasks();
     const count=e('p','读取当前聊天的人物与衣装…',{class:'ad-library-count',role:'status'}),nav=e('nav',undefined,{class:'ad-library-tabs','aria-label':'剧情绘图管理'}),panes={},tabs={};
     for(const[id,label]of[['people','人物'],['catalog','角色库'],['outfits','衣装'],['artists','画风'],['workflows','工作流'],['api','API 配置'],['comfy','ComfyUI'],['cache','图片缓存'],['worldbooks','世界书']]){panes[id]=e('div',undefined,{class:'ad-library-pane',hidden:''});panes[id].dataset.pane=id;tabs[id]=button(label,async()=>{setTab(id);if(id==='workflows')await renderWorkflows();if(id==='catalog')await catalogUi.refresh();if(id==='artists')artistUi.refresh();if(id==='comfy')comfyUi.refresh();if(id==='cache')await cacheUi.refresh();if(id==='worldbooks')await worldbookUi.refresh();},{'aria-pressed':'false'});nav.append(tabs[id]);}
-    const worldbookUi=mountWorldbookPanel({host:panes.worldbooks,store:worldbooks,notify,preview:()=>app.anchors()});const apiUi=mountApiPanel({host:panes.api,app,setting,saveSettings});const comfyUi=mountComfyPanel({host:panes.comfy,app,notify}),cacheUi=mountCachePanel({host:panes.cache,app,notify});
+    const worldbookUi=mountWorldbookPanel({host:panes.worldbooks,store:worldbooks,notify,preview:scope=>scope==='manual'?manualInstruction(setting()):app.anchors()});const apiUi=mountApiPanel({host:panes.api,app,setting,saveSettings});const comfyUi=mountComfyPanel({host:panes.comfy,app,notify}),cacheUi=mountCachePanel({host:panes.cache,app,notify});
     function setTab(id){tabId=id;for(const key of Object.keys(panes)){panes[key].hidden=key!==id;tabs[key].setAttribute('aria-pressed',String(key===id));}}
     const file=e('input',undefined,{type:'file',accept:'.json,application/json',hidden:'','aria-label':'导入人物与衣装备份'});file.onchange=async()=>{try{if(!file.files[0])return;await app.importLibrary(JSON.parse(await file.files[0].text()));await render();notify('人物库备份已导入。');}catch(error){notify(error.message,'error');}finally{file.value='';}};
     const utilities=e('details',undefined,{class:'ad-library-utilities'}),utilitiesActions=e('div',undefined,{class:'ad-library-actions'});utilitiesActions.append(button('导出人物与衣装备份',async()=>download(await app.exportLibrary(),'剧情绘图人物库.json')),button('导入备份',()=>file.click()),button('管理生图世界书',async()=>{setTab('worldbooks');await worldbookUi.refresh();}),button('配置绘图工作流',async()=>{await configure();await renderWorkflows(true);}));utilities.append(e('summary','备份与世界书'),utilitiesActions,file);
