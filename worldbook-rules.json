@@ -1383,13 +1383,6 @@
           "kind": "guide"
         }
       }
-    },
-    "27": {
-      "addMemo": true,
-      "automationId": "",
-      "caseSensitive": null,
-      "characterFilter": {
-        "isExclude": false,
-        "names": [],
-        "tags": []
-      }
+    }
+  }
+}
